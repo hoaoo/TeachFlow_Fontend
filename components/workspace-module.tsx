@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, useRef } from 'react'
 import {
-  CalendarDays,
   CheckCircle2,
   ClipboardCheck,
   Download,
@@ -48,7 +47,6 @@ import { exportService } from '@/services/export-service'
 import { toast } from 'sonner'
 
 type View =
-  | 'Lịch dạy'
   | 'Phiếu học tập'
   | 'Đánh giá'
   | 'Chủ nhiệm'
@@ -58,7 +56,6 @@ type View =
 
 const iconFor = (view: View) =>
   ({
-    'Lịch dạy': CalendarDays,
     'Phiếu học tập': FileText,
     'Đánh giá': ClipboardCheck,
     'Chủ nhiệm': School,
@@ -68,7 +65,6 @@ const iconFor = (view: View) =>
   }[view])
 
 const descriptions: Record<View, string> = {
-  'Lịch dạy': 'Lập lịch, xem tiết dạy và chuẩn bị nội dung theo từng ngày.',
   'Phiếu học tập': 'Tạo, chỉnh sửa và chia sẻ phiếu học tập cho học sinh.',
   'Đánh giá': 'Theo dõi rubric, bài kiểm tra và tiến bộ theo năng lực.',
   'Chủ nhiệm': 'Quản lý công việc chủ nhiệm, trao đổi phụ huynh và kế hoạch lớp.',

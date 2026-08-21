@@ -16,6 +16,7 @@ import { AdminTeachersView } from '@/components/admin-teachers-view'
 import { HomeroomView } from '@/components/homeroom-view'
 import { ReportsView } from '@/components/reports-view'
 import { TeacherSettingsView } from '@/components/teacher-settings-view'
+import { ScheduleView } from '@/components/schedule-view'
 import { NotificationDropdown } from '@/components/notification-dropdown'
 import { getDashboardData, toggleTask as apiToggleTask, type DashboardData } from '@/services/dashboard-service'
 import { getClasses } from '@/services/classroom-service'
@@ -528,8 +529,9 @@ function GenericView({ view, onNavigate }: { view: View; onNavigate: (view: View
   if (view === 'Chủ nhiệm') return <HomeroomView onNavigate={onNavigate} />
   if (view === 'Báo cáo & Thống kê') return <ReportsView />
   if (view === 'Cài đặt') return <TeacherSettingsView />
-  if (['Lịch dạy', 'Phiếu học tập', 'Đánh giá', 'Điểm danh', 'Tài nguyên'].includes(view))
-    return <WorkspaceModule view={view as 'Lịch dạy' | 'Phiếu học tập' | 'Đánh giá' | 'Điểm danh' | 'Tài nguyên'} />
+  if (view === 'Lịch dạy') return <ScheduleView />
+  if (['Phiếu học tập', 'Đánh giá', 'Điểm danh', 'Tài nguyên'].includes(view))
+    return <WorkspaceModule view={view as 'Phiếu học tập' | 'Đánh giá' | 'Điểm danh' | 'Tài nguyên'} />
   return (
     <div className="flex flex-col gap-6">
       <PageTitle
