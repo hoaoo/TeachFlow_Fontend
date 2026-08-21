@@ -78,3 +78,36 @@ export async function resetTeacherPassword(
 ): Promise<{ success: boolean; message: string }> {
   return api.post(`/admin/teachers/${id}/reset-password`, { newPassword });
 }
+
+export interface AdminDashboardStats {
+  totalTeachers: number;
+  activeTeachers: number;
+  lockedTeachers: number;
+  totalAuditLogs: number;
+  recentAuditLogs: Array<{
+    id: string;
+    createdAt: string;
+    actorEmail: string | null;
+    action: string;
+    resourceType: string | null;
+    resourceId: string | null;
+    details: string | null;
+  }>;
+  timestamp: string;
+}
+
+export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
+  return api.get<AdminDashboardStats>('/admin/dashboard');
+}
+
+export interface HealthCheckResponse {
+  status: string;
+  database: string;
+  ai?: string;
+  timestamp: string;
+}
+
+export async function getSystemHealth(): Promise<HealthCheckResponse> {
+  return api.get<HealthCheckResponse>('/health');
+}
+

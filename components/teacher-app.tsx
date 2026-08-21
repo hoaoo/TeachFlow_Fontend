@@ -13,6 +13,9 @@ import { LessonView } from '@/components/lesson-editor'
 import { ClassroomManager } from '@/components/classroom-manager'
 import { WorkspaceModule } from '@/components/workspace-module'
 import { AdminTeachersView } from '@/components/admin-teachers-view'
+import { AdminDashboardView } from '@/components/admin-dashboard-view'
+import { AdminAuditView } from '@/components/admin-audit-view'
+import { AdminHealthView } from '@/components/admin-health-view'
 import { HomeroomView } from '@/components/homeroom-view'
 import { ReportsView } from '@/components/reports-view'
 import { TeacherSettingsView } from '@/components/teacher-settings-view'
@@ -43,15 +46,36 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
+import { Activity, History } from 'lucide-react'
 
 const iconMap = { LayoutDashboard, CalendarDays, BookOpen, Library, Users, GraduationCap, Files, ClipboardCheck, School, CheckCircle2, Settings, Sparkles, FileText }
 
-type View = 'Tổng quan' | 'Lịch dạy' | 'Giáo án' | 'Thư viện hoạt động' | 'Lớp học' | 'Học sinh' | 'Phiếu học tập' | 'Đánh giá' | 'Chủ nhiệm' | 'Điểm danh' | 'Báo cáo & Thống kê' | 'Tài nguyên' | 'Cài đặt' | 'Trợ lý AI' | 'Quản trị giáo viên'
+type View =
+  | 'Tổng quan'
+  | 'Lịch dạy'
+  | 'Giáo án'
+  | 'Thư viện hoạt động'
+  | 'Lớp học'
+  | 'Học sinh'
+  | 'Phiếu học tập'
+  | 'Đánh giá'
+  | 'Chủ nhiệm'
+  | 'Điểm danh'
+  | 'Báo cáo & Thống kê'
+  | 'Tài nguyên'
+  | 'Cài đặt'
+  | 'Trợ lý AI'
+  | 'Quản trị giáo viên'
+  | 'Tổng quan hệ thống'
+  | 'Quản lý giáo viên'
+  | 'Nhật ký hệ thống'
+  | 'Sức khỏe hệ thống'
 
 function Sidebar({ active, onSelect, open, onClose }: { active: View; onSelect: (view: View) => void; open: boolean; onClose: () => void }) {
   const { user, logout } = useAuth()
-  const teacherName = user?.teacher?.fullName || (user?.role === 'ADMIN' ? 'Quản trị viên' : 'Giáo viên')
-  const initials = teacherName.split(' ').map((p) => p[0]).slice(-2).join('').toUpperCase() || 'GV'
+  const isAdmin = user?.role === 'ADMIN'
+  const displayName = user?.teacher?.fullName || (isAdmin ? 'Quản trị viên' : 'Giáo viên')
+  const initials = displayName.split(' ').map((p) => p[0]).slice(-2).join('').toUpperCase() || (isAdmin ? 'AD' : 'GV')
 
   const [sidebarClasses, setSidebarClasses] = useState<Array<{ id: string; name: string; grade: string; studentCount: number }>>([])
   const [loadingClasses, setLoadingClasses] = useState(true)
@@ -59,7 +83,7 @@ function Sidebar({ active, onSelect, open, onClose }: { active: View; onSelect: 
   useEffect(() => {
     let isMounted = true
     const loadSidebarClasses = async () => {
-      if (!user) {
+      if (!user || isAdmin) {
         setSidebarClasses([])
         setLoadingClasses(false)
         return
@@ -96,95 +120,147 @@ function Sidebar({ active, onSelect, open, onClose }: { active: View; onSelect: 
       window.removeEventListener('teachflow:classes-changed', handleClassesChange)
       window.removeEventListener('teachflow:auth-state-changed', handleClassesChange)
     }
-  }, [user])
+  }, [user, isAdmin])
 
-  return <>
-    {open && <button aria-label="Đóng menu" className="fixed inset-0 z-30 bg-slate-950/20 lg:hidden" onClick={onClose} />}
-    <aside className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-slate-200 bg-white transition-transform lg:static lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
-      <div className="flex h-20 items-center gap-3 border-b border-slate-100 px-6">
-        <div className="grid size-10 place-items-center rounded-xl bg-teal-600 text-white shadow-sm"><School /></div>
-        <div><div className="font-semibold tracking-tight text-slate-900">TeachFlow</div><div className="text-xs text-slate-400">Trợ lý giáo viên</div></div>
-        <button className="ml-auto text-slate-400 lg:hidden" onClick={onClose}><X /></button>
-      </div>
-      <div className="flex-1 overflow-y-auto px-3 py-5">
-        <p className="px-3 pb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Workspace</p>
-        <nav className="flex flex-col gap-1">{navItems.map((item) => { const Icon = iconMap[item.icon as keyof typeof iconMap]; const selected = active === item.label; return <button key={item.label} onClick={() => { onSelect(item.label as View); onClose() }} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${selected ? 'bg-teal-50 text-teal-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}><Icon className="size-[18px]" />{item.label}{item.label === 'Trợ lý AI' && <span className="ml-auto rounded-full bg-orange-100 px-2 py-0.5 text-[10px] text-orange-700">Mới</span>}</button> })}</nav>
+  return (
+    <>
+      {open && <button aria-label="Đóng menu" className="fixed inset-0 z-30 bg-slate-950/20 lg:hidden" onClick={onClose} />}
+      <aside className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-slate-200 bg-white transition-transform lg:static lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex h-20 items-center gap-3 border-b border-slate-100 px-6">
+          <div className="grid size-10 place-items-center rounded-xl bg-teal-600 text-white shadow-sm">
+            {isAdmin ? <Shield className="size-5" /> : <School />}
+          </div>
+          <div>
+            <div className="font-semibold tracking-tight text-slate-900">TeachFlow</div>
+            <div className="text-xs text-slate-400">{isAdmin ? 'Quản trị hệ thống' : 'Trợ lý giáo viên'}</div>
+          </div>
+          <button className="ml-auto text-slate-400 lg:hidden" onClick={onClose}><X /></button>
+        </div>
 
-        {/* ADMIN Navigation Menu */}
-        {user?.role === 'ADMIN' && (
-          <>
-            <div className="my-4 border-t border-slate-100" />
-            <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-widest text-teal-600 flex items-center gap-1.5">
-              <Shield className="size-3.5" /> Quản trị
+        {/* Sidebar Content */}
+        {isAdmin ? (
+          <div className="flex-1 overflow-y-auto px-3 py-5">
+            <p className="px-3 pb-3 text-[11px] font-semibold uppercase tracking-widest text-teal-600 flex items-center gap-1.5">
+              <Shield className="size-3.5" /> Quản trị hệ thống
             </p>
             <nav className="flex flex-col gap-1">
               <button
-                onClick={() => { onSelect('Quản trị giáo viên'); onClose() }}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${active === 'Quản trị giáo viên' ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+                onClick={() => { onSelect('Tổng quan hệ thống'); onClose() }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${active === 'Tổng quan hệ thống' || active === 'Tổng quan' ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
               >
-                <Shield className="size-[18px] text-teal-600" />
-                Giáo viên
+                <LayoutDashboard className="size-[18px]" />
+                Tổng quan
+              </button>
+              <button
+                onClick={() => { onSelect('Quản lý giáo viên'); onClose() }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${active === 'Quản lý giáo viên' || active === 'Quản trị giáo viên' ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+              >
+                <Users className="size-[18px]" />
+                Tài khoản giáo viên
+              </button>
+              <button
+                onClick={() => { onSelect('Nhật ký hệ thống'); onClose() }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${active === 'Nhật ký hệ thống' ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+              >
+                <History className="size-[18px]" />
+                Nhật ký hệ thống
+              </button>
+              <button
+                onClick={() => { onSelect('Sức khỏe hệ thống'); onClose() }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${active === 'Sức khỏe hệ thống' ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+              >
+                <Activity className="size-[18px]" />
+                Sức khỏe hệ thống
               </button>
             </nav>
-          </>
-        )}
-
-        <div className="my-5 border-t border-slate-100" />
-        <p className="px-3 pb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Lớp của tôi</p>
-        {loadingClasses ? (
-          <div className="flex items-center gap-2 px-3 py-2 text-xs text-slate-400">
-            <Loader2 className="size-3.5 animate-spin text-teal-600" />
-            <span>Đang tải danh sách lớp...</span>
-          </div>
-        ) : sidebarClasses.length === 0 ? (
-          <div className="px-3 py-2 text-xs text-slate-400">
-            <p className="mb-2">Bạn chưa có lớp nào.</p>
-            <button
-              onClick={() => {
-                onSelect('Lớp học')
-                onClose()
-              }}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-teal-50 px-2.5 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-100 transition"
-            >
-              <Plus className="size-3.5" /> Tạo lớp đầu tiên
-            </button>
           </div>
         ) : (
-          sidebarClasses.map((cls, idx) => {
-            const bgColors = ['bg-blue-50 text-blue-700', 'bg-orange-50 text-orange-700', 'bg-teal-50 text-teal-700', 'bg-purple-50 text-purple-700']
-            const colorClass = bgColors[idx % bgColors.length]
-            const shortCode = cls.name.replace(/^lớp\s+/i, '')
-            return (
-              <button
-                key={cls.id}
-                onClick={() => {
-                  onSelect('Lớp học')
-                  onClose()
-                }}
-                className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50 transition"
-              >
-                <span className={`grid size-8 place-items-center rounded-lg text-xs font-semibold ${colorClass}`}>
-                  {shortCode}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <b className="block truncate font-medium text-slate-800">{cls.name}</b>
-                  <small className="text-xs text-slate-400">{cls.studentCount} học sinh</small>
-                </span>
-                <ChevronRight className="ml-auto size-4 text-slate-300" />
-              </button>
-            )
-          })
+          <div className="flex-1 overflow-y-auto px-3 py-5">
+            <p className="px-3 pb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Workspace</p>
+            <nav className="flex flex-col gap-1">
+              {navItems.map((item) => {
+                const Icon = iconMap[item.icon as keyof typeof iconMap]
+                const selected = active === item.label
+                return (
+                  <button
+                    key={item.label}
+                    onClick={() => { onSelect(item.label as View); onClose() }}
+                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${selected ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+                  >
+                    <Icon className="size-[18px]" />
+                    {item.label}
+                    {item.label === 'Trợ lý AI' && <span className="ml-auto rounded-full bg-orange-100 px-2 py-0.5 text-[10px] text-orange-700">Mới</span>}
+                  </button>
+                )
+              })}
+            </nav>
+
+            <div className="my-5 border-t border-slate-100" />
+            <p className="px-3 pb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Lớp của tôi</p>
+            {loadingClasses ? (
+              <div className="flex items-center gap-2 px-3 py-2 text-xs text-slate-400">
+                <Loader2 className="size-3.5 animate-spin text-teal-600" />
+                <span>Đang tải danh sách lớp...</span>
+              </div>
+            ) : sidebarClasses.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-slate-400">
+                <p className="mb-2">Bạn chưa có lớp nào.</p>
+                <button
+                  onClick={() => {
+                    onSelect('Lớp học')
+                    onClose()
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-teal-50 px-2.5 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-100 transition"
+                >
+                  <Plus className="size-3.5" /> Tạo lớp đầu tiên
+                </button>
+              </div>
+            ) : (
+              sidebarClasses.map((cls, idx) => {
+                const bgColors = ['bg-blue-50 text-blue-700', 'bg-orange-50 text-orange-700', 'bg-teal-50 text-teal-700', 'bg-purple-50 text-purple-700']
+                const colorClass = bgColors[idx % bgColors.length]
+                const shortCode = cls.name.replace(/^lớp\s+/i, '')
+                return (
+                  <button
+                    key={cls.id}
+                    onClick={() => {
+                      onSelect('Lớp học')
+                      onClose()
+                    }}
+                    className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50 transition"
+                  >
+                    <span className={`grid size-8 place-items-center rounded-lg text-xs font-semibold ${colorClass}`}>
+                      {shortCode}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <b className="block truncate font-medium text-slate-800">{cls.name}</b>
+                      <small className="text-xs text-slate-400">{cls.studentCount} học sinh</small>
+                    </span>
+                    <ChevronRight className="ml-auto size-4 text-slate-300" />
+                  </button>
+                )
+              })
+            )}
+          </div>
         )}
-      </div>
-      <div className="border-t border-slate-100 p-4">
-        <div className="flex w-full items-center gap-3 rounded-xl p-2 text-left">
-          <span className="grid size-9 place-items-center rounded-full bg-teal-100 font-semibold text-teal-700">{initials}</span>
-          <span className="min-w-0 flex-1"><b className="block truncate text-sm font-medium text-slate-800">{teacherName}</b><small className="text-xs text-slate-400">{user?.email || 'Giáo viên'}</small></span>
-          {user && <button onClick={logout} title="Đăng xuất" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><LogOut className="size-4" /></button>}
+
+        <div className="border-t border-slate-100 p-4">
+          <div className="flex w-full items-center gap-3 rounded-xl p-2 text-left">
+            <span className="grid size-9 place-items-center rounded-full bg-teal-100 font-semibold text-teal-700">{initials}</span>
+            <span className="min-w-0 flex-1">
+              <b className="block truncate text-sm font-medium text-slate-800">{displayName}</b>
+              <small className="text-xs text-slate-400">{user?.email || (isAdmin ? 'Quản trị viên' : 'Giáo viên')}</small>
+            </span>
+            {user && (
+              <button onClick={logout} title="Đăng xuất" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                <LogOut className="size-4" />
+              </button>
+            )}
+          </div>
         </div>
-      </div>
-    </aside>
-  </>
+      </aside>
+    </>
+  )
 }
 
 function Header({
@@ -510,20 +586,61 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
 
 function GenericView({ view, onNavigate }: { view: View; onNavigate: (view: View) => void }) {
   const { user } = useAuth()
-  if (view === 'Quản trị giáo viên') {
-    if (user?.role !== 'ADMIN') {
-      return (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-12 text-center text-rose-700">
-          <Shield className="mx-auto size-12 text-rose-500 mb-3" />
-          <h2 className="text-xl font-bold">Bạn không có quyền thực hiện chức năng này.</h2>
-          <p className="mt-2 text-sm text-rose-600">
-            Chức năng quản trị chỉ dành riêng cho tài khoản Quản trị viên (ADMIN).
-          </p>
-        </div>
-      )
+  const isAdmin = user?.role === 'ADMIN'
+
+  // If ADMIN user is accessing views
+  if (isAdmin) {
+    if (view === 'Tổng quan hệ thống' || view === 'Tổng quan') {
+      return <AdminDashboardView onNavigate={onNavigate} />
     }
-    return <AdminTeachersView />
+    if (view === 'Quản lý giáo viên' || view === 'Quản trị giáo viên') {
+      return <AdminTeachersView />
+    }
+    if (view === 'Nhật ký hệ thống') {
+      return <AdminAuditView />
+    }
+    if (view === 'Sức khỏe hệ thống') {
+      return <AdminHealthView />
+    }
+
+    // Direct access to teacher views by admin is restricted
+    return (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center">
+        <Shield className="mx-auto size-12 text-amber-600 mb-3" />
+        <h2 className="text-lg font-bold text-slate-900">Khu vực dành cho giáo viên</h2>
+        <p className="mt-2 text-sm text-slate-600 max-w-md mx-auto">
+          Tài khoản Quản trị viên (ADMIN) chỉ quản lý hạ tầng, tài khoản và an ninh hệ thống. Để sử dụng tính năng giảng dạy, vui lòng đăng nhập bằng tài khoản giáo viên.
+        </p>
+        <button
+          onClick={() => onNavigate('Tổng quan hệ thống')}
+          className="mt-5 inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700"
+        >
+          Quay lại Bảng điều khiển Quản trị
+        </button>
+      </div>
+    )
   }
+
+  // If TEACHER user tries to access Admin views
+  if (['Quản lý giáo viên', 'Quản trị giáo viên', 'Nhật ký hệ thống', 'Sức khỏe hệ thống', 'Tổng quan hệ thống'].includes(view)) {
+    return (
+      <div className="rounded-2xl border border-rose-200 bg-rose-50 p-8 text-center">
+        <Shield className="mx-auto size-12 text-rose-500 mb-3" />
+        <h2 className="text-lg font-bold text-slate-900">403 - Quyền truy cập bị từ chối</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          Chức năng quản trị chỉ dành riêng cho tài khoản Quản trị viên (ADMIN).
+        </p>
+        <button
+          onClick={() => onNavigate('Tổng quan')}
+          className="mt-5 inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700"
+        >
+          Quay lại Bảng điều khiển Giáo viên
+        </button>
+      </div>
+    )
+  }
+
+  // Teacher Workspace Views
   if (view === 'Trợ lý AI') return <AIView onNavigate={onNavigate} />
   if (view === 'Giáo án') return <LessonView onNavigate={onNavigate} />
   if (view === 'Lớp học') return <ClassroomManager initialSection="classes" />
@@ -1335,9 +1452,20 @@ function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
 }
 
 export function TeacherApp() {
-  const [active, setActive] = useState<View>('Tổng quan')
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'ADMIN'
+  const [active, setActive] = useState<View>(isAdmin ? 'Tổng quan hệ thống' : 'Tổng quan')
   const [menuOpen, setMenuOpen] = useState(false)
   const [authModalOpen, setAuthModalOpen] = useState(false)
+
+  // Switch default active view when user login state changes
+  useEffect(() => {
+    if (user?.role === 'ADMIN') {
+      setActive('Tổng quan hệ thống')
+    } else {
+      setActive('Tổng quan')
+    }
+  }, [user?.role])
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-900">
@@ -1346,7 +1474,13 @@ export function TeacherApp() {
         <Header onMenu={() => setMenuOpen(true)} onOpenLogin={() => setAuthModalOpen(true)} onNavigate={setActive} />
         <main className="flex-1 overflow-y-auto px-5 py-8 sm:px-8 lg:px-10">
           <div className="mx-auto max-w-7xl">
-            {active === 'Tổng quan' ? <Dashboard onNavigate={setActive} /> : <GenericView view={active} onNavigate={setActive} />}
+            {isAdmin ? (
+              <GenericView view={active} onNavigate={setActive} />
+            ) : active === 'Tổng quan' ? (
+              <Dashboard onNavigate={setActive} />
+            ) : (
+              <GenericView view={active} onNavigate={setActive} />
+            )}
           </div>
         </main>
       </div>
