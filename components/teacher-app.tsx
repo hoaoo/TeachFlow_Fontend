@@ -19,6 +19,7 @@ import { TeacherSettingsView } from '@/components/teacher-settings-view'
 import { ScheduleView } from '@/components/schedule-view'
 import { AssessmentManager } from '@/components/assessment-manager'
 import { AttendanceView } from '@/components/attendance-view'
+import { WorksheetManager } from '@/components/worksheet-manager'
 import { NotificationDropdown } from '@/components/notification-dropdown'
 import { getDashboardData, toggleTask as apiToggleTask, type DashboardData } from '@/services/dashboard-service'
 import { getClasses } from '@/services/classroom-service'
@@ -534,8 +535,8 @@ function GenericView({ view, onNavigate }: { view: View; onNavigate: (view: View
   if (view === 'Lịch dạy') return <ScheduleView />
   if (view === 'Đánh giá') return <AssessmentManager />
   if (view === 'Điểm danh') return <AttendanceView />
-  if (['Phiếu học tập', 'Tài nguyên'].includes(view))
-    return <WorkspaceModule view={view as 'Phiếu học tập' | 'Tài nguyên'} />
+  if (view === 'Phiếu học tập') return <WorksheetManager />
+  if (view === 'Tài nguyên') return <WorkspaceModule view="Tài nguyên" />
   return (
     <div className="flex flex-col gap-6">
       <PageTitle

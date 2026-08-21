@@ -45,21 +45,18 @@ import { exportService } from '@/services/export-service'
 import { toast } from 'sonner'
 
 type View =
-  | 'Phiếu học tập'
   | 'Chủ nhiệm'
   | 'Tài nguyên'
   | 'Cài đặt'
 
 const iconFor = (view: View) =>
   ({
-    'Phiếu học tập': FileText,
     'Chủ nhiệm': School,
     'Tài nguyên': Download,
     'Cài đặt': School,
   }[view])
 
 const descriptions: Record<View, string> = {
-  'Phiếu học tập': 'Tạo, chỉnh sửa và chia sẻ phiếu học tập cho học sinh.',
   'Chủ nhiệm': 'Quản lý công việc chủ nhiệm, trao đổi phụ huynh và kế hoạch lớp.',
   'Tài nguyên': 'Lưu trữ, tải lên và quản lý kho học liệu số dùng cho các tiết dạy.',
   'Cài đặt': 'Cá nhân hóa workspace, thông báo và thông tin giáo viên.',
