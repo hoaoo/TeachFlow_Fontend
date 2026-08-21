@@ -200,6 +200,183 @@ function AssessmentFormDialog({ open, onClose, editEntry, classes, onSaved }: {
   )
 }
 
+async function getAssessmentDetail(id: string): Promise<any> {
+  return api.get(`/assessments/${id}`)
+}
+
+async function saveAssessmentScores(id: string, data: {
+  assessments: Array<{ studentId: string; score?: number; level?: string; comment?: string }>
+}): Promise<any> {
+  return api.put(`/assessments/${id}/students`, data)
+}
+
+// ─── Student Grading Dialog ───────────────────────────────────────────────────
+function GradingDialog({
+  assessment,
+  onClose,
+  onSaved,
+}: {
+  assessment: Assessment | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [students, setStudents] = useState<Array<{
+    studentId: string
+    studentName: string
+    score: string
+    level: string
+    comment: string
+  }>>([])
+
+  useEffect(() => {
+    if (!assessment) return
+    let alive = true
+    setLoading(true)
+
+    Promise.all([
+      getAssessmentDetail(assessment.id),
+      api.get<any>(`/classes/${assessment.classroomId}/students`),
+    ]).then(([detail, classData]) => {
+      if (!alive) return
+      const rawStudents = Array.isArray(classData) ? classData : (classData?.students || [])
+      const existingResults = detail?.students || []
+
+      const mapped = rawStudents.map((s: any) => {
+        const res = existingResults.find((r: any) => r.studentId === s.id || r.id === s.id)
+        return {
+          studentId: s.id,
+          studentName: s.fullName || s.name || 'Học sinh',
+          score: res?.score !== undefined && res?.score !== null ? String(res.score) : '',
+          level: res?.level || 'COMPLETED',
+          comment: res?.comment || '',
+        }
+      })
+      setStudents(mapped)
+    }).catch(() => {
+      toast.error('Lỗi khi tải danh sách học sinh và kết quả')
+    }).finally(() => {
+      if (alive) setLoading(false)
+    })
+
+    return () => { alive = false }
+  }, [assessment])
+
+  const handleSave = async () => {
+    if (!assessment) return
+    setSaving(true)
+    try {
+      const payload = {
+        assessments: students.map((s) => ({
+          studentId: s.studentId,
+          score: s.score !== '' ? parseFloat(s.score) : undefined,
+          level: s.level,
+          comment: s.comment.trim() || undefined,
+        })),
+      }
+      await saveAssessmentScores(assessment.id, payload)
+      toast.success('Đã lưu bảng điểm và nhận xét đánh giá thành công')
+      onSaved()
+      onClose()
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi lưu kết quả đánh giá')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={!!assessment} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-[700px] max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center justify-between">
+            <span>Bảng kết quả đánh giá học sinh</span>
+            <span className="text-xs font-normal text-slate-500">{assessment?.classroom?.name} · {assessment?.title}</span>
+          </DialogTitle>
+          <DialogDescription>
+            Nhập điểm số (thang điểm 10), mức độ đạt và nhận xét chi tiết cho từng học sinh.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto py-2">
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="size-8 animate-spin text-teal-600" />
+            </div>
+          ) : students.length === 0 ? (
+            <div className="text-center py-8 text-sm text-slate-400">
+              Lớp học này chưa có học sinh nào.
+            </div>
+          ) : (
+            <div className="divide-y border rounded-xl overflow-hidden">
+              <div className="grid grid-cols-[1.5fr_1fr_1fr_2fr] gap-2 p-3 bg-slate-50 text-xs font-semibold text-slate-600">
+                <span>Học sinh</span>
+                <span>Điểm (0-10)</span>
+                <span>Mức đạt</span>
+                <span>Nhận xét sư phạm</span>
+              </div>
+              {students.map((s, idx) => (
+                <div key={s.studentId} className="grid grid-cols-[1.5fr_1fr_1fr_2fr] gap-2 p-3 items-center text-sm hover:bg-slate-50/60 transition">
+                  <span className="font-medium text-slate-800 truncate">{s.studentName}</span>
+                  <div>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="10"
+                      step="0.5"
+                      placeholder="Điểm"
+                      className="h-8 text-xs"
+                      value={s.score}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setStudents((prev) => prev.map((item, j) => j === idx ? { ...item, score: val } : item))
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <select
+                      className="h-8 w-full rounded-md border bg-background px-2 text-xs"
+                      value={s.level}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setStudents((prev) => prev.map((item, j) => j === idx ? { ...item, level: val } : item))
+                      }}
+                    >
+                      <option value="EXCELLENT">Tốt (HT Tốt)</option>
+                      <option value="COMPLETED">Đạt (Hoàn thành)</option>
+                      <option value="NEEDS_SUPPORT">Cần cố gắng</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Input
+                      placeholder="Ghi nhận xét..."
+                      className="h-8 text-xs"
+                      value={s.comment}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setStudents((prev) => prev.map((item, j) => j === idx ? { ...item, comment: val } : item))
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="mt-2 border-t pt-3">
+          <Button variant="outline" onClick={onClose} disabled={saving}>Hủy</Button>
+          <Button onClick={handleSave} disabled={saving || loading || students.length === 0} className="bg-teal-600 hover:bg-teal-700">
+            {saving ? <Loader2 className="size-4 animate-spin mr-1" /> : null}
+            Lưu kết quả đánh giá
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ─── Main AssessmentManager ───────────────────────────────────────────────────
 export function AssessmentManager() {
   const [assessments, setAssessments] = useState<Assessment[]>([])
@@ -211,6 +388,7 @@ export function AssessmentManager() {
   const [editEntry, setEditEntry] = useState<Assessment | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Assessment | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [gradingTarget, setGradingTarget] = useState<Assessment | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -313,26 +491,50 @@ export function AssessmentManager() {
       ) : (
         <div className="flex flex-col gap-3">
           {filtered.map((a) => (
-            <div key={a.id} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
+            <div
+              key={a.id}
+              className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => setGradingTarget(a)}
+            >
               <div className={`w-1 rounded-full shrink-0 self-stretch ${a.status === 'COMPLETED' ? 'bg-teal-500' : a.status === 'IN_PROGRESS' ? 'bg-orange-400' : 'bg-slate-300'}`} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <h3 className="font-semibold text-slate-800 text-sm">{a.title}</h3>
+                    <h3 className="font-semibold text-slate-800 text-sm hover:text-teal-600 transition">{a.title}</h3>
                     <p className="text-xs text-slate-500 mt-0.5">
                       {a.classroom?.name || '—'}{a.subject?.name ? ` · ${a.subject.name}` : ''}
                       {a.assessmentDate ? ` · ${new Date(a.assessmentDate).toLocaleDateString('vi-VN')}` : ''}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={() => { setEditEntry(a); setFormOpen(true) }} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"><Edit2 className="size-3.5" /></button>
-                    <button onClick={() => setDeleteTarget(a)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition"><Trash2 className="size-3.5" /></button>
+                  <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => setGradingTarget(a)}
+                      title="Nhập điểm & Đánh giá"
+                      className="rounded-lg p-1.5 text-teal-600 hover:bg-teal-50 transition text-xs font-semibold flex items-center gap-1"
+                    >
+                      <Users className="size-3.5" /> Chấm điểm
+                    </button>
+                    <button
+                      onClick={() => { setEditEntry(a); setFormOpen(true) }}
+                      title="Sửa thông tin"
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+                    >
+                      <Edit2 className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setDeleteTarget(a)}
+                      title="Xóa đánh giá"
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
                   </div>
                 </div>
-                <div className="mt-2">
+                <div className="mt-2 flex items-center gap-2">
                   <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[a.status] || 'bg-slate-100 text-slate-600'}`}>
                     {STATUS_LABELS[a.status] || a.status}
                   </span>
+                  <span className="text-xs text-slate-400">Nhấn để xem và nhập kết quả học sinh</span>
                 </div>
               </div>
             </div>
@@ -349,12 +551,21 @@ export function AssessmentManager() {
         onSaved={handleSaved}
       />
 
+      {/* Grading Dialog */}
+      <GradingDialog
+        assessment={gradingTarget}
+        onClose={() => setGradingTarget(null)}
+        onSaved={load}
+      />
+
       {/* Delete Dialog */}
       <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>Xóa đánh giá</DialogTitle>
-            <DialogDescription>Xóa đánh giá "{deleteTarget?.title}"? Hành động này không thể hoàn tác.</DialogDescription>
+            <DialogDescription>
+              Xóa đánh giá "{deleteTarget?.title}"? Bài đánh giá sẽ được lưu trữ an toàn để không làm mất kết quả trước đây của học sinh.
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Hủy</Button>

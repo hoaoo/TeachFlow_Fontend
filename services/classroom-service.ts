@@ -191,3 +191,18 @@ export async function withdrawStudent(
   return await api.post<StudentEnrollmentRecord>(`/student-enrollments/${enrollmentId}/withdraw`, data);
 }
 
+export async function updateStudent(
+  studentId: string,
+  data: {
+    fullName?: string;
+    gender?: string;
+    dob?: string;
+    parentName?: string;
+    parentPhone?: string;
+    note?: string;
+    status?: string;
+  },
+): Promise<StudentRecord> {
+  return await api.patch<StudentRecord>(`/students/${studentId}`, data);
+}
+

@@ -16,6 +16,8 @@ import {
   addStudentComment as apiAddStudentComment,
   getStudentEnrollments as apiGetStudentEnrollments,
   transferStudent as apiTransferStudent,
+  withdrawStudent as apiWithdrawStudent,
+  updateStudent as apiUpdateStudent,
   type SchoolYearOption,
   type GradeOption,
   type StudentEnrollmentRecord,
@@ -1184,6 +1186,84 @@ function StudentProfile({
   const [transferReason, setTransferReason] = useState<string>('')
   const [transferring, setTransferring] = useState(false)
 
+  // Edit Profile states
+  const [editProfileOpen, setEditProfileOpen] = useState(false)
+  const [editName, setEditName] = useState(student?.name || '')
+  const [editGender, setEditGender] = useState(student?.gender || 'Nam')
+  const [editDob, setEditDob] = useState(student?.dob || '')
+  const [editParentName, setEditParentName] = useState(student?.guardian || '')
+  const [editParentPhone, setEditParentPhone] = useState(student?.phone || '')
+  const [editNote, setEditNote] = useState(student?.note || '')
+  const [savingProfile, setSavingProfile] = useState(false)
+
+  // Withdraw states
+  const [withdrawOpen, setWithdrawOpen] = useState(false)
+  const [withdrawReason, setWithdrawReason] = useState('')
+  const [withdrawing, setWithdrawing] = useState(false)
+
+  const openEditProfile = () => {
+    setEditName(student.name || '')
+    setEditGender(student.gender || 'Nam')
+    setEditDob(student.dob || '')
+    setEditParentName(student.guardian || '')
+    setEditParentPhone(student.phone || '')
+    setEditNote(student.note || '')
+    setEditProfileOpen(true)
+  }
+
+  const handleSaveProfile = async () => {
+    if (!editName.trim()) {
+      toast.error('Vui lòng nhập họ tên học sinh')
+      return
+    }
+    setSavingProfile(true)
+    try {
+      await apiUpdateStudent(student.id, {
+        fullName: editName.trim(),
+        gender: editGender,
+        dob: editDob || undefined,
+        parentName: editParentName.trim() || undefined,
+        parentPhone: editParentPhone.trim() || undefined,
+        note: editNote.trim() || undefined,
+      })
+      toast.success(`Đã cập nhật hồ sơ học sinh ${editName}`)
+      setEditProfileOpen(false)
+      student.name = editName.trim()
+      student.gender = editGender as any
+      student.dob = editDob
+      student.guardian = editParentName.trim()
+      student.phone = editParentPhone.trim()
+      student.note = editNote.trim()
+      onTransferSuccess() // reloads class list
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi cập nhật hồ sơ học sinh')
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  const handleWithdraw = async () => {
+    if (!activeEnrollment) {
+      toast.error('Không tìm thấy bản ghi ghi danh để rút khỏi lớp')
+      return
+    }
+    setWithdrawing(true)
+    try {
+      await apiWithdrawStudent(activeEnrollment.id, {
+        reason: withdrawReason.trim() || undefined,
+        withdrawDate: new Date().toISOString(),
+      })
+      toast.success(`Đã rút học sinh ${student.name} khỏi lớp ${classItem.name}`)
+      setWithdrawOpen(false)
+      onTransferSuccess()
+      onBack()
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi rút học sinh khỏi lớp')
+    } finally {
+      setWithdrawing(false)
+    }
+  }
+
   useEffect(() => {
     if (student?.id) {
       apiGetStudentAttendance(student.id).then(setAttendanceList)
@@ -1281,14 +1361,17 @@ function StudentProfile({
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => window.print()}>
-              <Download data-icon="inline-start" />Xuất hồ sơ
+            <Button variant="outline" onClick={openEditProfile}>
+              <Edit2 data-icon="inline-start" className="size-4" />Sửa hồ sơ
             </Button>
             <Button variant="outline" onClick={onTransfer} className="border-teal-500 text-teal-700 hover:bg-teal-50">
-              <ArrowRightLeft data-icon="inline-start" />Chuyển lớp
+              <ArrowRightLeft data-icon="inline-start" className="size-4" />Chuyển lớp
+            </Button>
+            <Button variant="outline" onClick={() => setWithdrawOpen(true)} className="border-amber-400 text-amber-700 hover:bg-amber-50">
+              Rút khỏi lớp
             </Button>
             <Button onClick={onComment}>
-              <MessageSquare data-icon="inline-start" />Nhận xét
+              <MessageSquare data-icon="inline-start" className="size-4" />Nhận xét
             </Button>
           </div>
         </CardContent>
@@ -1553,6 +1636,119 @@ function StudentProfile({
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialog(null)}>Hủy</Button>
             <Button variant="destructive" onClick={onConfirmDelete}>Xóa học sinh</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Profile Dialog */}
+      <Dialog open={editProfileOpen} onOpenChange={setEditProfileOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Chỉnh sửa hồ sơ học sinh</DialogTitle>
+            <DialogDescription>Cập nhật thông tin lý lịch và liên hệ của {student.name}.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div>
+              <Label htmlFor="edit-student-name" className="text-xs font-semibold">Họ và tên *</Label>
+              <Input
+                id="edit-student-name"
+                className="mt-1"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Nguyễn Văn An"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="edit-student-gender" className="text-xs font-semibold">Giới tính</Label>
+                <select
+                  id="edit-student-gender"
+                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  value={editGender}
+                  onChange={(e) => setEditGender(e.target.value)}
+                >
+                  <option value="Nam">Nam</option>
+                  <option value="Nữ">Nữ</option>
+                  <option value="Khác">Khác</option>
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="edit-student-dob" className="text-xs font-semibold">Ngày sinh</Label>
+                <Input
+                  id="edit-student-dob"
+                  type="date"
+                  className="mt-1"
+                  value={editDob}
+                  onChange={(e) => setEditDob(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="edit-parent-name" className="text-xs font-semibold">Họ tên phụ huynh</Label>
+                <Input
+                  id="edit-parent-name"
+                  className="mt-1"
+                  value={editParentName}
+                  onChange={(e) => setEditParentName(e.target.value)}
+                  placeholder="Phụ huynh"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-parent-phone" className="text-xs font-semibold">SĐT phụ huynh</Label>
+                <Input
+                  id="edit-parent-phone"
+                  className="mt-1"
+                  value={editParentPhone}
+                  onChange={(e) => setEditParentPhone(e.target.value)}
+                  placeholder="0912345678"
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="edit-student-note" className="text-xs font-semibold">Ghi chú</Label>
+              <Input
+                id="edit-student-note"
+                className="mt-1"
+                value={editNote}
+                onChange={(e) => setEditNote(e.target.value)}
+                placeholder="Ghi chú về học sinh..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditProfileOpen(false)}>Hủy</Button>
+            <Button onClick={handleSaveProfile} disabled={savingProfile || !editName.trim()} className="bg-teal-600 hover:bg-teal-700">
+              {savingProfile ? 'Đang lưu...' : 'Lưu hồ sơ'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Withdraw Student Dialog */}
+      <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Xác nhận rút học sinh khỏi lớp</DialogTitle>
+            <DialogDescription>
+              Học sinh <strong>{student.name}</strong> sẽ được chuyển trạng thái sang ĐÃ RÚT (Withdrawn). Lịch sử chuyên cần và điểm số trước đây vẫn được bảo toàn.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Label htmlFor="withdraw-reason" className="text-xs font-semibold">Lý do rút học sinh</Label>
+            <Input
+              id="withdraw-reason"
+              className="mt-1"
+              value={withdrawReason}
+              onChange={(e) => setWithdrawReason(e.target.value)}
+              placeholder="VD: Chuyển trường, nghỉ học..."
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWithdrawOpen(false)}>Hủy</Button>
+            <Button variant="destructive" onClick={handleWithdraw} disabled={withdrawing}>
+              {withdrawing ? 'Đang xử lý...' : 'Xác nhận rút'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
