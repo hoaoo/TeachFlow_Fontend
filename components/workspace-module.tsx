@@ -186,7 +186,7 @@ export function WorkspaceModule({ view }: { view: View }) {
     const draft = await saveWorkspaceRecord(view, {
       id: '',
       title: `Nội dung ${view.toLowerCase()} mới`,
-      subtitle: 'Lớp 4A · Cô Nguyễn Hà',
+      subtitle: `${view} · Bản ghi mới`,
       status: 'Bản nháp',
       meta: 'Vừa tạo',
       tone: 'teal',
