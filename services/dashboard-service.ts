@@ -6,6 +6,14 @@ export type DashboardData = {
     title: string;
     description: string;
   };
+  currentSchoolYear?: {
+    id: string;
+    name: string;
+  } | null;
+  currentSemester?: {
+    id: string;
+    name: string;
+  } | null;
   stats: Array<{
     label: string;
     value: string;
@@ -26,6 +34,7 @@ export type DashboardData = {
     title: string;
     due: string;
     done: boolean;
+    priority?: string;
   }>;
   classProgress: {
     className: string;
@@ -33,15 +42,26 @@ export type DashboardData = {
     excellent: number;
     improving: number;
     needsSupport: number;
+    totalStudents?: number;
   };
   featuredStudents: Array<{
     id: string;
     name: string;
+    className?: string;
     initials: string;
     progress: number;
     status: string;
     color: string;
   }>;
+  attendanceRate?: number;
+  adminStats?: {
+    totalTeachers: number;
+    totalClassrooms: number;
+    totalStudents: number;
+    totalSubjects: number;
+    currentSchoolYear: string;
+    currentSemester: string;
+  } | null;
 };
 
 export async function getDashboardData(): Promise<DashboardData | null> {
