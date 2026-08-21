@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Bell, BookOpen, CalendarDays, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock3,
+  Bell, BookOpen, CalendarDays, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock3, Clock,
   FileText, Files, GraduationCap, Grid2X2, LayoutDashboard, Library, Menu, MoreHorizontal,
   Plus, Search, Settings, Sparkles, Users, X, ArrowUpRight, CircleHelp, School, Send,
   SlidersHorizontal, Flame, UserRound, ChevronRight, BookMarked, LogIn, LogOut, KeyRound,
-  Loader2, Copy, BookmarkPlus, HelpCircle, Gamepad2, FileQuestion, MessageSquarePlus, Shield
+  Loader2, Copy, BookmarkPlus, HelpCircle, Gamepad2, FileQuestion, MessageSquarePlus, Shield,
+  Edit2, Trash2
 } from 'lucide-react'
 import { navItems } from '@/lib/mock-data'
 import { LessonView } from '@/components/lesson-editor'
@@ -24,7 +25,16 @@ import { AssessmentManager } from '@/components/assessment-manager'
 import { AttendanceView } from '@/components/attendance-view'
 import { WorksheetManager } from '@/components/worksheet-manager'
 import { NotificationDropdown } from '@/components/notification-dropdown'
-import { getDashboardData, toggleTask as apiToggleTask, type DashboardData } from '@/services/dashboard-service'
+import {
+  getDashboardData,
+  toggleTask as apiToggleTask,
+  createTask as apiCreateTask,
+  deleteTask as apiDeleteTask,
+  updateScheduleStatus as apiUpdateScheduleStatus,
+  type DashboardData,
+  type DashboardLesson,
+  type DashboardTask,
+} from '@/services/dashboard-service'
 import { getClasses } from '@/services/classroom-service'
 import { getLibraryActivities, type LibraryActivity } from '@/services/activity-service'
 import {
@@ -45,6 +55,7 @@ import { useAuth } from '@/context/auth-context'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { Activity, History } from 'lucide-react'
 
@@ -321,19 +332,74 @@ function Header({
 
 function PageTitle({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description?: string; action?: React.ReactNode }) { return <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div>{eyebrow && <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-teal-600">{eyebrow}</p>}<h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">{title}</h1>{description && <p className="mt-2 text-sm text-slate-500">{description}</p>}</div>{action}</div> }
 
+function computeScheduleStatus(
+  lesson: DashboardLesson,
+  currentHHMMSS: string,
+): { label: string; tone: 'teal' | 'blue' | 'slate' | 'red'; code: string } {
+  if (lesson.isManualStatus) {
+    if (lesson.status === 'CANCELLED') return { label: 'Đã hủy', tone: 'red', code: 'CANCELLED' }
+    if (lesson.status === 'TAUGHT' || lesson.status === 'COMPLETED') return { label: 'Đã hoàn thành', tone: 'blue', code: 'TAUGHT' }
+    if (lesson.status === 'IN_PROGRESS') return { label: 'Đang diễn ra', tone: 'teal', code: 'IN_PROGRESS' }
+    if (lesson.status === 'PLANNED' || lesson.status === 'NOT_STARTED') return { label: 'Chưa bắt đầu', tone: 'slate', code: 'PLANNED' }
+  }
+
+  const currentHHMM = currentHHMMSS.slice(0, 5)
+  const start = lesson.startTime || '07:00'
+  const end = lesson.endTime || '07:45'
+
+  if (lesson.status === 'CANCELLED') {
+    return { label: 'Đã hủy', tone: 'red', code: 'CANCELLED' }
+  }
+  if (currentHHMM < start) {
+    return { label: 'Chưa bắt đầu', tone: 'slate', code: 'PLANNED' }
+  } else if (currentHHMM >= start && currentHHMM <= end) {
+    return { label: 'Đang diễn ra', tone: 'teal', code: 'IN_PROGRESS' }
+  } else {
+    return { label: 'Đã hoàn thành', tone: 'blue', code: 'TAUGHT' }
+  }
+}
+
 function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   const [data, setData] = useState<DashboardData | null>(null)
-  const [tasksList, setTasksList] = useState<Array<{ id: string; title: string; due: string; done: boolean }>>([])
+  const [tasksList, setTasksList] = useState<DashboardTask[]>([])
+  const [lessonsList, setLessonsList] = useState<DashboardLesson[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Real-time clock (HH:mm:ss in local time)
+  const [currentTimeStr, setCurrentTimeStr] = useState<string>(() => {
+    return new Date().toLocaleTimeString('vi-VN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  })
+
+  // Task creation modal
+  const [taskModalOpen, setTaskModalOpen] = useState(false)
+  const [newTaskTitle, setNewTaskTitle] = useState('')
+  const [newTaskDue, setNewTaskDue] = useState('Hôm nay')
+  const [creatingTask, setCreatingTask] = useState(false)
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
+
+  // Schedule status update modal
+  const [statusModalOpen, setStatusModalOpen] = useState(false)
+  const [selectedLesson, setSelectedLesson] = useState<DashboardLesson | null>(null)
+  const [selectedLessonIndex, setSelectedLessonIndex] = useState<number | null>(null)
+  const [editStatus, setEditStatus] = useState('PLANNED')
+  const [editStartTime, setEditStartTime] = useState('07:00')
+  const [editEndTime, setEditEndTime] = useState('07:45')
+  const [savingStatus, setSavingStatus] = useState(false)
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTimeStr(new Date().toLocaleTimeString('vi-VN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     let alive = true
     getDashboardData().then((res) => {
       if (alive && res) {
         setData(res)
-        if (res.tasks) {
-          setTasksList(res.tasks)
-        }
+        if (res.tasks) setTasksList(res.tasks)
+        if (res.lessons) setLessonsList(res.lessons)
       }
       if (alive) setLoading(false)
     }).catch(() => {
@@ -348,12 +414,116 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
     const nextDone = !target.done
     setTasksList(prev => prev.map((t, j) => j === index ? { ...t, done: nextDone } : t))
     if (target.id && !target.id.startsWith('task-')) {
-      await apiToggleTask(target.id, nextDone)
+      try {
+        await apiToggleTask(target.id, nextDone)
+      } catch {
+        setTasksList(prev => prev.map((t, j) => j === index ? { ...t, done: !nextDone } : t))
+        toast.error('Lỗi khi cập nhật trạng thái việc cần làm')
+      }
     }
   }
 
-  const stats = data?.stats || []
-  const lessons = data?.lessons || []
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newTaskTitle.trim()) {
+      toast.error('Vui lòng nhập nội dung công việc')
+      return
+    }
+    setCreatingTask(true)
+    try {
+      const created = await apiCreateTask({
+        title: newTaskTitle.trim(),
+        due: newTaskDue.trim() || 'Hôm nay',
+        done: false,
+      })
+      setTasksList(prev => [created, ...prev])
+      setNewTaskTitle('')
+      setNewTaskDue('Hôm nay')
+      setTaskModalOpen(false)
+      toast.success('Đã thêm việc cần làm mới')
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi thêm việc cần làm')
+    } finally {
+      setCreatingTask(false)
+    }
+  }
+
+  const handleDeleteTask = async (taskId: string, index: number) => {
+    setDeletingTaskId(taskId)
+    try {
+      await apiDeleteTask(taskId)
+      setTasksList(prev => prev.filter((_, i) => i !== index))
+      toast.success('Đã xóa việc cần làm')
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi xóa việc cần làm')
+    } finally {
+      setDeletingTaskId(null)
+    }
+  }
+
+  const openStatusModal = (lesson: DashboardLesson, index: number) => {
+    setSelectedLesson(lesson)
+    setSelectedLessonIndex(index)
+    const statusInfo = computeScheduleStatus(lesson, currentTimeStr)
+    setEditStatus(lesson.isManualStatus && lesson.status ? lesson.status : statusInfo.code)
+    setEditStartTime(lesson.startTime || '07:00')
+    setEditEndTime(lesson.endTime || '07:45')
+    setStatusModalOpen(true)
+  }
+
+  const handleSaveStatus = async () => {
+    if (!selectedLesson) return
+    if (editStartTime && editEndTime && editStartTime >= editEndTime) {
+      toast.error('Giờ bắt đầu phải nhỏ hơn giờ kết thúc')
+      return
+    }
+    setSavingStatus(true)
+    try {
+      if (selectedLesson.id) {
+        await apiUpdateScheduleStatus(selectedLesson.id, {
+          status: editStatus,
+          startTime: editStartTime || undefined,
+          endTime: editEndTime || undefined,
+          isManualStatus: true,
+        })
+      }
+      setLessonsList(prev => prev.map((item, idx) => {
+        if (idx === selectedLessonIndex) {
+          return {
+            ...item,
+            status: editStatus,
+            startTime: editStartTime,
+            endTime: editEndTime,
+            time: `${editStartTime} - ${editEndTime}`,
+            isManualStatus: true,
+          }
+        }
+        return item
+      }))
+      toast.success('Đã cập nhật trạng thái lịch dạy thành công')
+      setStatusModalOpen(false)
+    } catch (err: any) {
+      toast.error(err?.message || 'Không thể cập nhật trạng thái lúc này')
+    } finally {
+      setSavingStatus(false)
+    }
+  }
+
+  const completedTasksCount = tasksList.filter((t) => t.done).length
+  const totalTasksCount = tasksList.length
+  const taskPercent = totalTasksCount > 0 ? Math.round((completedTasksCount / totalTasksCount) * 100) : 0
+
+  const stats = (data?.stats || []).map((s) => {
+    if (s.label === 'Nhiệm vụ tuần này' || s.label === 'Nhiệm vụ hôm nay') {
+      return {
+        ...s,
+        value: `${completedTasksCount}/${totalTasksCount}`,
+        note: `${taskPercent}% hoàn thành`,
+      }
+    }
+    return s
+  })
+
   const students = data?.featuredStudents || []
 
   if (loading && !data) {
@@ -423,40 +593,88 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
       )}
 
       <section className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+        {/* Kế hoạch & Lịch dạy Card */}
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-100">
           <div className="flex items-center justify-between border-b border-slate-100 p-5">
             <div>
-              <h2 className="font-semibold text-slate-900">Kế hoạch & Lịch dạy</h2>
+              <div className="flex items-center gap-3">
+                <h2 className="font-semibold text-slate-900 text-base">Kế hoạch & Lịch dạy</h2>
+                {/* Live Digital Clock */}
+                <div className="flex items-center gap-1.5 rounded-lg bg-teal-50 px-2.5 py-1 text-xs font-mono font-semibold text-teal-700 border border-teal-200 shadow-sm">
+                  <Clock className="size-3.5 animate-pulse text-teal-600" />
+                  <span>{currentTimeStr}</span>
+                </div>
+              </div>
               <p className="mt-1 text-xs text-slate-400">{data?.greeting?.date || "Hôm nay"}</p>
             </div>
-            <button onClick={() => onNavigate('Lịch dạy')} className="text-sm font-medium text-teal-600 hover:text-teal-700">
+            <button onClick={() => onNavigate('Lịch dạy')} className="text-sm font-medium text-teal-600 hover:text-teal-700 inline-flex items-center">
               Xem lịch <ArrowUpRight className="ml-1 inline size-4" />
             </button>
           </div>
           <div className="flex flex-col">
-            {lessons.length > 0 ? (
-              lessons.map((lesson, i) => (
-                <div key={lesson.title + i} className="flex items-center gap-4 border-b border-slate-100 p-5 last:border-0">
-                  <div className="w-14 text-center">
-                    <p className="text-sm font-semibold text-slate-900">{lesson.time}</p>
-                    <p className="mt-1 text-[11px] text-slate-400">{i === 0 ? 'Tiết 1' : `Tiết ${i + 1}`}</p>
-                  </div>
-                  <div
-                    className={`h-12 w-1 rounded-full ${
-                      lesson.color === 'teal' ? 'bg-teal-500' : lesson.color === 'orange' ? 'bg-orange-400' : 'bg-blue-500'
-                    }`}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-medium text-slate-800">{lesson.title}</h3>
-                      <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">{lesson.subject}</span>
+            {lessonsList.length > 0 ? (
+              lessonsList.map((lesson, i) => {
+                const statusInfo = computeScheduleStatus(lesson, currentTimeStr);
+                return (
+                  <div key={lesson.title + i} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 p-4 last:border-0 hover:bg-slate-50/60 transition">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="w-24 shrink-0 text-center bg-slate-50 py-1.5 px-2 rounded-xl border border-slate-100">
+                        <p className="text-xs font-bold text-slate-800 tracking-tight">
+                          {lesson.startTime || '07:00'} - {lesson.endTime || '07:45'}
+                        </p>
+                        <p className="mt-0.5 text-[10px] font-medium text-slate-400">Tiết {i + 1}</p>
+                      </div>
+
+                      <div
+                        className={`h-10 w-1 rounded-full shrink-0 ${
+                          statusInfo.tone === 'teal'
+                            ? 'bg-teal-500'
+                            : statusInfo.tone === 'blue'
+                              ? 'bg-blue-500'
+                              : statusInfo.tone === 'red'
+                                ? 'bg-red-400'
+                                : 'bg-slate-300'
+                        }`}
+                      />
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-semibold text-sm text-slate-900 truncate">{lesson.title}</h3>
+                          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">{lesson.subject}</span>
+                        </div>
+                        <p className="mt-0.5 text-xs text-slate-500 truncate">
+                          {lesson.className}{lesson.gradeName ? ` (${lesson.gradeName})` : ''} · {lesson.room}
+                        </p>
+                      </div>
                     </div>
-                    <p className="mt-1 text-xs text-slate-400">
-                      {lesson.className} · {lesson.room}
-                    </p>
+
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold border ${
+                          statusInfo.tone === 'teal'
+                            ? 'bg-teal-50 text-teal-700 border-teal-200'
+                            : statusInfo.tone === 'blue'
+                              ? 'bg-blue-50 text-blue-700 border-blue-200'
+                              : statusInfo.tone === 'red'
+                                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                : 'bg-slate-100 text-slate-600 border-slate-200'
+                        }`}
+                      >
+                        {statusInfo.tone === 'teal' && <span className="size-1.5 rounded-full bg-teal-500 animate-ping" />}
+                        {statusInfo.label}
+                      </span>
+
+                      <button
+                        onClick={() => openStatusModal(lesson, i)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-teal-700 transition shadow-2xs"
+                        title="Cập nhật trạng thái hoặc thời gian"
+                      >
+                        <Edit2 className="size-3" /> Cập nhật trạng thái
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="p-8 text-center text-sm text-slate-400">
                 Chưa có lịch dạy nào. Nhấn "Xem lịch" để lên lịch giảng dạy.
@@ -465,45 +683,181 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
           </div>
         </div>
 
+        {/* Việc cần làm Card */}
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-100">
           <div className="flex items-center justify-between border-b border-slate-100 p-5">
             <div>
-              <h2 className="font-semibold text-slate-900">Việc cần làm</h2>
+              <h2 className="font-semibold text-slate-900 text-base">Việc cần làm</h2>
               <p className="mt-1 text-xs text-slate-400">
-                {tasksList.filter((t) => t.done).length} trên {tasksList.length} đã hoàn thành
+                {completedTasksCount} trên {totalTasksCount} đã hoàn thành ({taskPercent}%)
               </p>
             </div>
-            <button onClick={() => onNavigate('Cài đặt')} className="rounded-lg p-2 text-slate-400 hover:bg-slate-50">
-              <SlidersHorizontal className="size-4" />
+            <button
+              onClick={() => {
+                setNewTaskTitle('')
+                setNewTaskDue('Hôm nay')
+                setTaskModalOpen(true)
+              }}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-100 transition shadow-2xs"
+            >
+              <Plus className="size-3.5" /> Thêm việc
             </button>
           </div>
           <div className="flex flex-col gap-1 p-4">
             {tasksList.length > 0 ? (
               tasksList.map((task, i) => (
-                <label key={task.title + i} className="flex cursor-pointer items-start gap-3 rounded-xl p-3 hover:bg-slate-50">
-                  <button
-                    aria-label={task.done ? 'Bỏ hoàn thành' : 'Đánh dấu hoàn thành'}
-                    onClick={() => toggle(i)}
-                    className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-md border ${
-                      task.done ? 'border-teal-600 bg-teal-600 text-white' : 'border-slate-300 bg-white'
-                    }`}
-                  >
-                    {task.done && <Check className="size-3.5" />}
-                  </button>
-                  <span className="min-w-0 flex-1">
-                    <span className={`block text-sm ${task.done ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
-                      {task.title}
+                <div
+                  key={task.id || task.title + i}
+                  className="group flex items-start justify-between gap-3 rounded-xl p-3 hover:bg-slate-50 transition"
+                >
+                  <label className="flex cursor-pointer items-start gap-3 min-w-0 flex-1">
+                    <button
+                      type="button"
+                      aria-label={task.done ? 'Bỏ hoàn thành' : 'Đánh dấu hoàn thành'}
+                      onClick={() => toggle(i)}
+                      className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-md border transition ${
+                        task.done ? 'border-teal-600 bg-teal-600 text-white' : 'border-slate-300 bg-white hover:border-teal-500'
+                      }`}
+                    >
+                      {task.done && <Check className="size-3.5" />}
+                    </button>
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className={`block text-sm font-medium transition ${
+                          task.done ? 'text-slate-400 line-through opacity-60' : 'text-slate-800'
+                        }`}
+                      >
+                        {task.title}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-slate-400">{task.due}</span>
                     </span>
-                    <span className="mt-1 block text-xs text-slate-400">{task.due}</span>
-                  </span>
-                </label>
+                  </label>
+
+                  {task.id && !task.id.startsWith('task-') && (
+                    <button
+                      onClick={() => handleDeleteTask(task.id, i)}
+                      disabled={deletingTaskId === task.id}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-600 transition"
+                      title="Xóa công việc"
+                    >
+                      {deletingTaskId === task.id ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="size-3.5" />
+                      )}
+                    </button>
+                  )}
+                </div>
               ))
             ) : (
-              <div className="p-8 text-center text-sm text-slate-400">Chưa có nhiệm vụ nào cần xử lý.</div>
+              <div className="p-8 text-center text-sm text-slate-400">
+                Chưa có việc cần làm nào hôm nay. Nhấn "+ Thêm việc" để ghi chú.
+              </div>
             )}
           </div>
         </div>
       </section>
+
+      {/* Add Task Modal */}
+      <Dialog open={taskModalOpen} onOpenChange={setTaskModalOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Thêm việc cần làm hôm nay</DialogTitle>
+            <DialogDescription>
+              Ghi chú công việc cần hoàn thành. Nhiệm vụ sẽ tự động được làm mới mỗi ngày.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateTask} className="grid gap-3 py-2">
+            <div>
+              <Label htmlFor="new-task-title" className="text-xs font-semibold">Nội dung công việc *</Label>
+              <Input
+                id="new-task-title"
+                className="mt-1"
+                placeholder="VD: Soạn giáo án Toán, Nhắc nhở HS chuẩn bị bài..."
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                autoFocus
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="new-task-due" className="text-xs font-semibold">Thời hạn / Thời gian</Label>
+              <Input
+                id="new-task-due"
+                className="mt-1"
+                placeholder="Hôm nay, Trước 15:00..."
+                value={newTaskDue}
+                onChange={(e) => setNewTaskDue(e.target.value)}
+              />
+            </div>
+            <DialogFooter className="mt-2">
+              <Button type="button" variant="outline" onClick={() => setTaskModalOpen(false)} disabled={creatingTask}>Hủy</Button>
+              <Button type="submit" disabled={creatingTask || !newTaskTitle.trim()} className="bg-teal-600 hover:bg-teal-700">
+                {creatingTask ? <Loader2 className="size-4 animate-spin mr-1" /> : null}
+                Thêm công việc
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Update Schedule Status & Time Modal */}
+      <Dialog open={statusModalOpen} onOpenChange={setStatusModalOpen}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>Cập nhật trạng thái tiết dạy</DialogTitle>
+            <DialogDescription>
+              {selectedLesson?.title} ({selectedLesson?.subject} · {selectedLesson?.className})
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3.5 py-2">
+            <div>
+              <Label htmlFor="sch-status-select" className="text-xs font-semibold">Trạng thái tiết dạy *</Label>
+              <select
+                id="sch-status-select"
+                className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+                value={editStatus}
+                onChange={(e) => setEditStatus(e.target.value)}
+              >
+                <option value="PLANNED">Chưa bắt đầu (PLANNED)</option>
+                <option value="IN_PROGRESS">Đang diễn ra (IN_PROGRESS)</option>
+                <option value="TAUGHT">Đã hoàn thành (TAUGHT)</option>
+                <option value="CANCELLED">Đã hủy (CANCELLED)</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="sch-start-time" className="text-xs font-semibold">Giờ bắt đầu</Label>
+                <Input
+                  id="sch-start-time"
+                  type="time"
+                  className="mt-1"
+                  value={editStartTime}
+                  onChange={(e) => setEditStartTime(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="sch-end-time" className="text-xs font-semibold">Giờ kết thúc</Label>
+                <Input
+                  id="sch-end-time"
+                  type="time"
+                  className="mt-1"
+                  value={editEndTime}
+                  onChange={(e) => setEditEndTime(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStatusModalOpen(false)} disabled={savingStatus}>Hủy</Button>
+            <Button onClick={handleSaveStatus} disabled={savingStatus} className="bg-teal-600 hover:bg-teal-700">
+              {savingStatus ? <Loader2 className="size-4 animate-spin mr-1" /> : null}
+              Lưu thay đổi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <section className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-100">
