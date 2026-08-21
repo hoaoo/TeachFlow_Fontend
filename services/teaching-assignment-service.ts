@@ -55,6 +55,10 @@ export async function getSubjects(): Promise<SubjectOption[]> {
   }
 }
 
+/**
+ * Get teaching contexts for the currently authenticated teacher.
+ * teacherId is always resolved from the JWT token on the server — never passed from the client.
+ */
 export async function getMyTeachingAssignments(
   schoolYearId?: string,
 ): Promise<TeachingAssignmentRecord[]> {
@@ -67,9 +71,13 @@ export async function getMyTeachingAssignments(
   }
 }
 
-export async function getTeachingAssignments(params?: {
+/**
+ * Get teaching contexts scoped to the currently authenticated teacher.
+ * NOTE: teacherId param is intentionally removed — the server derives it from JWT.
+ * This prevents any attempt to query another teacher's teaching contexts from the client.
+ */
+export async function getMyTeachingContexts(params?: {
   schoolYearId?: string;
-  teacherId?: string;
   classroomId?: string;
   subjectId?: string;
   isActive?: boolean;
@@ -78,7 +86,6 @@ export async function getTeachingAssignments(params?: {
   try {
     const query = new URLSearchParams();
     if (params?.schoolYearId) query.set('schoolYearId', params.schoolYearId);
-    if (params?.teacherId) query.set('teacherId', params.teacherId);
     if (params?.classroomId) query.set('classroomId', params.classroomId);
     if (params?.subjectId) query.set('subjectId', params.subjectId);
     if (params?.isActive !== undefined) query.set('isActive', String(params.isActive));
@@ -92,8 +99,11 @@ export async function getTeachingAssignments(params?: {
   }
 }
 
-export async function createTeachingAssignment(data: {
-  teacherId: string;
+/**
+ * Teacher self-declares a teaching context (lớp/môn đang dạy).
+ * teacherId is NOT sent — server derives it from JWT.
+ */
+export async function declareTeachingContext(data: {
   classroomId: string;
   subjectId: string;
   schoolYearId?: string;
@@ -101,20 +111,38 @@ export async function createTeachingAssignment(data: {
   return api.post<TeachingAssignmentRecord>('/teaching-assignments', data);
 }
 
-export async function updateTeachingAssignment(
+/**
+ * Teacher updates their own teaching context.
+ * teacherId is NOT updatable — ownership is immutable.
+ */
+export async function updateTeachingContext(
   id: string,
   data: {
     isActive?: boolean;
     subjectId?: string;
     classroomId?: string;
-    teacherId?: string;
   },
 ): Promise<TeachingAssignmentRecord> {
   return api.patch<TeachingAssignmentRecord>(`/teaching-assignments/${id}`, data);
 }
 
-export async function deactivateTeachingAssignment(
+/**
+ * Teacher deactivates their own teaching context.
+ */
+export async function deactivateTeachingContext(
   id: string,
 ): Promise<TeachingAssignmentRecord> {
   return api.delete<TeachingAssignmentRecord>(`/teaching-assignments/${id}`);
 }
+
+// ---------------------------------------------------------------------------
+// Legacy aliases kept for backward compatibility — prefer the new names above
+// ---------------------------------------------------------------------------
+/** @deprecated Use declareTeachingContext instead */
+export const createTeachingAssignment = declareTeachingContext;
+/** @deprecated Use updateTeachingContext instead */
+export const updateTeachingAssignment = updateTeachingContext;
+/** @deprecated Use deactivateTeachingContext instead */
+export const deactivateTeachingAssignment = deactivateTeachingContext;
+/** @deprecated Use getMyTeachingContexts instead */
+export const getTeachingAssignments = getMyTeachingContexts;
