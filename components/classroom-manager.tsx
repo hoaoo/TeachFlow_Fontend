@@ -38,7 +38,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { ArrowLeft, BarChart3, CalendarCheck2, ChevronRight, Download, Eye, Filter, GraduationCap, Heart, LayoutGrid, MessageSquare, Plus, Search, Trash2, UserPlus, Users, Sparkles, Loader2, ArrowRightLeft, History } from 'lucide-react'
+import { ArrowLeft, BarChart3, CalendarCheck2, ChevronRight, Download, Eye, Filter, GraduationCap, Heart, LayoutGrid, MessageSquare, Plus, Search, Trash2, UserPlus, Users, Sparkles, Loader2, ArrowRightLeft, History, Edit2, BookOpen } from 'lucide-react'
 import { generateStudentComment } from '@/services/ai-service'
 
 type ViewState = { page: 'classes' | 'class' | 'student'; classId?: string; studentId?: string }
@@ -63,7 +63,9 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
   const [formCode, setFormCode] = useState('')
   const [formSchoolYearId, setFormSchoolYearId] = useState('')
   const [formGradeId, setFormGradeId] = useState('')
-  const [formRoom, setFormRoom] = useState('Phòng 204')
+  const [formRoom, setFormRoom] = useState('')
+  const [deleteClassOpen, setDeleteClassOpen] = useState(false)
+  const [deletingClass, setDeletingClass] = useState(false)
 
   // Form states - Edit Class
   const [editClassName, setEditClassName] = useState('')
@@ -177,7 +179,7 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
         code: formCode.trim() || undefined,
         schoolYearId: formSchoolYearId,
         gradeId: formGradeId,
-        room: formRoom.trim() || 'Phòng mới',
+        room: formRoom.trim() || undefined,
         schedule: 'Sáng · Thứ 2 - Thứ 6',
       })
       setClasses((items) => [...items, created])
@@ -250,6 +252,25 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
     notify('Đã lưu nhận xét học sinh')
   }
 
+  const deleteClass = async () => {
+    if (!currentClass?.id) return
+    setDeletingClass(true)
+    try {
+      await apiDeleteClass(currentClass.id)
+      setClasses((items) => items.filter((item) => item.id !== currentClass.id))
+      setDeleteClassOpen(false)
+      setView({ page: 'classes' })
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
+      }
+      notify(`Đã lưu trữ và ngừng sử dụng lớp ${currentClass.name}`)
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi xóa lớp học')
+    } finally {
+      setDeletingClass(false)
+    }
+  }
+
   if (view.page === 'student' && currentStudent) return (
     <StudentProfile
       student={currentStudent}
@@ -273,42 +294,62 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
   )
   if (view.page === 'class')
     return (
-      <ClassDetail
-        classItem={currentClass}
-        query={query}
-        setQuery={setQuery}
-        onBack={() => setView({ page: 'classes' })}
-        onOpenStudent={(student) => openStudent(student)}
-        dialog={dialog}
-        setDialog={setDialog}
-        studentName={studentName}
-        setStudentName={setStudentName}
-        studentGender={studentGender}
-        setStudentGender={setStudentGender}
-        studentDob={studentDob}
-        setStudentDob={setStudentDob}
-        studentParentName={studentParentName}
-        setStudentParentName={setStudentParentName}
-        studentParentPhone={studentParentPhone}
-        setStudentParentPhone={setStudentParentPhone}
-        studentNote={studentNote}
-        setStudentNote={setStudentNote}
-        addStudent={addStudent}
-        selected={selected}
-        setSelected={setSelected}
-        deleteStudent={deleteStudent}
-        submitting={submitting}
-        onOpenEditClass={() => openEditClass(currentClass)}
-        editClassName={editClassName}
-        setEditClassName={setEditClassName}
-        editClassCode={editClassCode}
-        setEditClassCode={setEditClassCode}
-        editClassRoom={editClassRoom}
-        setEditClassRoom={setEditClassRoom}
-        editClassSchedule={editClassSchedule}
-        setEditClassSchedule={setEditClassSchedule}
-        updateClassDetails={updateClassDetails}
-      />
+      <>
+        <ClassDetail
+          classItem={currentClass}
+          query={query}
+          setQuery={setQuery}
+          onBack={() => setView({ page: 'classes' })}
+          onOpenStudent={(student) => openStudent(student)}
+          dialog={dialog}
+          setDialog={setDialog}
+          studentName={studentName}
+          setStudentName={setStudentName}
+          studentGender={studentGender}
+          setStudentGender={setStudentGender}
+          studentDob={studentDob}
+          setStudentDob={setStudentDob}
+          studentParentName={studentParentName}
+          setStudentParentName={setStudentParentName}
+          studentParentPhone={studentParentPhone}
+          setStudentParentPhone={setStudentParentPhone}
+          studentNote={studentNote}
+          setStudentNote={setStudentNote}
+          addStudent={addStudent}
+          selected={selected}
+          setSelected={setSelected}
+          deleteStudent={deleteStudent}
+          submitting={submitting}
+          onOpenEditClass={() => openEditClass(currentClass)}
+          onOpenDeleteClass={() => setDeleteClassOpen(true)}
+          editClassName={editClassName}
+          setEditClassName={setEditClassName}
+          editClassCode={editClassCode}
+          setEditClassCode={setEditClassCode}
+          editClassRoom={editClassRoom}
+          setEditClassRoom={setEditClassRoom}
+          editClassSchedule={editClassSchedule}
+          setEditClassSchedule={setEditClassSchedule}
+          updateClassDetails={updateClassDetails}
+        />
+        {/* Delete Class Confirmation Dialog */}
+        <Dialog open={deleteClassOpen} onOpenChange={setDeleteClassOpen}>
+          <DialogContent className="sm:max-w-[440px]">
+            <DialogHeader>
+              <DialogTitle>Xác nhận ngừng sử dụng lớp</DialogTitle>
+              <DialogDescription>
+                Bạn có chắc chắn muốn xóa / lưu trữ lớp <strong>{currentClass.name}</strong>? Lớp sẽ được lưu trữ an toàn và dữ liệu điểm danh, đánh giá trước đây sẽ được bảo toàn.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteClassOpen(false)}>Hủy</Button>
+              <Button variant="destructive" onClick={deleteClass} disabled={deletingClass}>
+                {deletingClass ? 'Đang lưu trữ...' : 'Xác nhận xóa'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
     )
   if (initialSection === 'students') return <StudentDirectory students={filteredStudents} classes={classes} query={query} setQuery={setQuery} filter={filter} setFilter={setFilter} onOpenStudent={(student) => openStudent(student, allStudents.find((item) => item.id === student.id)?.classId)} />
   return (
@@ -586,6 +627,7 @@ function ClassDetail({
   deleteStudent,
   submitting,
   onOpenEditClass,
+  onOpenDeleteClass,
   editClassName,
   setEditClassName,
   editClassCode,
@@ -621,6 +663,7 @@ function ClassDetail({
   deleteStudent: () => void;
   submitting: boolean;
   onOpenEditClass: () => void;
+  onOpenDeleteClass: () => void;
   editClassName: string;
   setEditClassName: (v: string) => void;
   editClassCode: string;
@@ -709,7 +752,10 @@ function ClassDetail({
         action={
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="outline" onClick={onOpenEditClass}>
-              <Edit2 className="size-4" /> Sửa thông tin lớp
+              <Edit2 className="size-4" /> Sửa thông tin
+            </Button>
+            <Button variant="outline" onClick={onOpenDeleteClass} className="text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700">
+              <Trash2 className="size-4" /> Xóa lớp
             </Button>
             <Button onClick={() => setDialog('add-student')}>
               <UserPlus data-icon="inline-start" />Thêm học sinh
