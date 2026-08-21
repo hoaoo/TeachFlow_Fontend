@@ -35,6 +35,14 @@ export async function createLibraryActivity(data: {
   return await api.post<LibraryActivity>('/activities', data);
 }
 
-export async function addActivityToLessonPlan(activityId: string, lessonPlanId: string) {
-  return await api.post(`/activities/${activityId}/add-to-lesson-plan`, { lessonPlanId });
+export async function updateLibraryActivity(
+  id: string,
+  data: Partial<{ title: string; subject: string; grade: string; type: string; description: string }>,
+): Promise<LibraryActivity> {
+  return await api.patch<LibraryActivity>(`/activities/${id}`, data);
 }
+
+export async function deleteLibraryActivity(id: string): Promise<void> {
+  await api.delete(`/activities/${id}`);
+}
+

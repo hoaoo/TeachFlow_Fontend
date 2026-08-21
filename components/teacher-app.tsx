@@ -565,22 +565,208 @@ function LibraryView() {
   const [activities, setActivities] = useState<LibraryActivity[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedSubject, setSelectedSubject] = useState('Tất cả')
+  const [query, setQuery] = useState('')
+  const [formOpen, setFormOpen] = useState(false)
+  const [editTarget, setEditTarget] = useState<LibraryActivity | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<LibraryActivity | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  // Form state
+  const [formTitle, setFormTitle] = useState('')
+  const [formDesc, setFormDesc] = useState('')
+  const [formType, setFormType] = useState('Khởi động')
+  const [formSubject, setFormSubject] = useState('')
+  const [formGrade, setFormGrade] = useState('Lớp 4')
 
-  useEffect(() => {
-    let alive = true
+  const reload = useCallback(async () => {
     setLoading(true)
-    getLibraryActivities(selectedSubject).then((data) => {
-      if (alive) {
-        setActivities(data || [])
-        setLoading(false)
-      }
-    }).catch(() => {
-      if (alive) setLoading(false)
-    })
-    return () => { alive = false }
+    try {
+      const data = await getLibraryActivities(selectedSubject !== 'Tất cả' ? selectedSubject : undefined)
+      setActivities(Array.isArray(data) ? data : [])
+    } catch { setActivities([]) }
+    finally { setLoading(false) }
   }, [selectedSubject])
 
-  return <div className="flex flex-col gap-6"><PageTitle eyebrow="Kho tài nguyên" title="Thư viện hoạt động" description="Khám phá các hoạt động học tập được cộng đồng giáo viên chia sẻ." action={<button className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700"><Plus className="size-4" /> Tạo hoạt động</button>} /><div className="flex gap-2 overflow-x-auto pb-1"><button onClick={() => setSelectedSubject('Tất cả')} className={`rounded-xl px-4 py-2 text-sm font-medium ${selectedSubject === 'Tất cả' ? 'bg-teal-600 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-teal-300'}`}>Tất cả</button>{['Toán','Tiếng Việt','Khoa học','Trò chơi'].map(x=><button key={x} onClick={() => setSelectedSubject(x)} className={`rounded-xl border px-4 py-2 text-sm font-medium ${selectedSubject === x ? 'bg-teal-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300'}`}>{x}</button>)}</div>{loading ? <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-2"><Loader2 className="size-6 animate-spin text-teal-600" /><span className="text-xs">Đang tải hoạt động...</span></div> : activities.length > 0 ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{activities.map((a, i)=><div key={a.title + i} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-100"><div className="flex items-start justify-between"><span className="grid size-12 place-items-center rounded-xl bg-orange-50 text-orange-600"><Grid2X2 /></span><button className="text-slate-400"><MoreHorizontal /></button></div><h3 className="mt-5 font-semibold text-slate-900">{a.title}</h3><p className="mt-2 text-sm text-slate-500">{a.subject} · {a.grade}</p><div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4 text-xs text-slate-400"><span className="rounded-md bg-slate-100 px-2 py-1">{a.type}</span><span>{a.uses} lượt sử dụng</span></div></div>)}</div> : <div className="rounded-2xl border border-dashed p-12 text-center text-sm text-slate-400">Chưa có hoạt động nào trong chủ đề này.</div>}</div>
+  useEffect(() => { reload() }, [reload])
+
+  // Unique subjects from data
+  const subjectOptions = useMemo(() => {
+    const seen = new Set<string>()
+    activities.forEach((a) => { if (a.subject) seen.add(a.subject) })
+    return Array.from(seen)
+  }, [activities])
+
+  const filtered = useMemo(() => {
+    if (!query) return activities
+    const q = query.toLowerCase()
+    return activities.filter((a) => `${a.title} ${a.subject || ''} ${a.type || ''}`.toLowerCase().includes(q))
+  }, [activities, query])
+
+  const openCreate = () => {
+    setEditTarget(null)
+    setFormTitle(''); setFormDesc(''); setFormType('Khởi động'); setFormSubject(''); setFormGrade('Lớp 4')
+    setFormOpen(true)
+  }
+
+  const openEdit = (a: LibraryActivity) => {
+    setEditTarget(a)
+    setFormTitle(a.title); setFormDesc(a.description || ''); setFormType(a.type || 'Khởi động')
+    setFormSubject(a.subject || ''); setFormGrade(a.grade || 'Lớp 4')
+    setFormOpen(true)
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!formTitle.trim()) { toast.error('Vui lòng nhập tên hoạt động'); return }
+    setSubmitting(true)
+    try {
+      if (editTarget) {
+        const updated = await updateLibraryActivity(editTarget.id, {
+          title: formTitle.trim(), description: formDesc.trim() || undefined,
+          type: formType, subject: formSubject || undefined, grade: formGrade || undefined,
+        })
+        setActivities((prev) => prev.map((a) => a.id === editTarget.id ? updated : a))
+        toast.success('Đã cập nhật hoạt động')
+      } else {
+        const created = await createLibraryActivity({
+          title: formTitle.trim(), description: formDesc.trim() || undefined,
+          type: formType, subject: formSubject || undefined, grade: formGrade || undefined,
+        })
+        setActivities((prev) => [created, ...prev])
+        toast.success('Đã tạo hoạt động mới')
+      }
+      setFormOpen(false)
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi lưu hoạt động')
+    } finally { setSubmitting(false) }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await deleteLibraryActivity(deleteTarget.id)
+      setActivities((prev) => prev.filter((a) => a.id !== deleteTarget.id))
+      toast.success('Đã xóa hoạt động')
+      setDeleteTarget(null)
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi xóa hoạt động')
+    } finally { setDeleting(false) }
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageTitle
+        eyebrow="Kho tài nguyên"
+        title="Thư viện hoạt động"
+        description="Tạo và quản lý các hoạt động học tập tái sử dụng cho tiết dạy."
+        action={<button onClick={openCreate} className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700"><Plus className="size-4" /> Tạo hoạt động</button>}
+      />
+
+      {/* Search + Subject filter */}
+      <div className="flex flex-wrap gap-3">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Tìm hoạt động..." className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none focus:border-teal-400" />
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => setSelectedSubject('Tất cả')} className={`rounded-xl px-4 py-2 text-sm font-medium transition ${selectedSubject === 'Tất cả' ? 'bg-teal-600 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-teal-300'}`}>Tất cả</button>
+          {(['Toán', 'Tiếng Việt', 'Khoa học', 'Trò chơi', ...subjectOptions.filter((s) => !['Toán', 'Tiếng Việt', 'Khoa học', 'Trò chơi'].includes(s))]).map((x) => (
+            <button key={x} onClick={() => setSelectedSubject(x)} className={`rounded-xl border px-4 py-2 text-sm font-medium transition ${selectedSubject === x ? 'bg-teal-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300'}`}>{x}</button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-2"><Loader2 className="size-6 animate-spin text-teal-600" /><span className="text-xs">Đang tải hoạt động...</span></div>
+      ) : filtered.length > 0 ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((a) => (
+            <div key={a.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition">
+              <div className="flex items-start justify-between">
+                <span className="grid size-12 place-items-center rounded-xl bg-orange-50 text-orange-600"><Grid2X2 /></span>
+                <div className="flex gap-1">
+                  <button onClick={() => openEdit(a)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"><Edit2 className="size-3.5" /></button>
+                  <button onClick={() => setDeleteTarget(a)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition"><Trash2 className="size-3.5" /></button>
+                </div>
+              </div>
+              <h3 className="mt-4 font-semibold text-slate-900 leading-snug">{a.title}</h3>
+              {a.description && <p className="mt-1.5 text-xs text-slate-500 line-clamp-2">{a.description}</p>}
+              <p className="mt-2 text-sm text-slate-500">{[a.subject, a.grade].filter(Boolean).join(' · ')}</p>
+              <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4 text-xs text-slate-400">
+                <span className="rounded-md bg-slate-100 px-2 py-1">{a.type}</span>
+                <span>{a.uses ?? 0} lượt sử dụng</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed p-12 gap-3 text-center text-sm text-slate-400">
+          <Grid2X2 className="size-10 text-slate-300" />
+          <p>Chưa có hoạt động nào. Nhấn <strong>"Tạo hoạt động"</strong> để bắt đầu.</p>
+        </div>
+      )}
+
+      {/* Create/Edit Dialog */}
+      <Dialog open={formOpen} onOpenChange={(o) => !o && setFormOpen(false)}>
+        <DialogContent className="sm:max-w-[460px]">
+          <DialogHeader>
+            <DialogTitle>{editTarget ? 'Sửa hoạt động' : 'Tạo hoạt động mới'}</DialogTitle>
+            <DialogDescription>{editTarget ? 'Cập nhật thông tin hoạt động.' : 'Thêm hoạt động học tập vào thư viện của bạn.'}</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="grid gap-4 py-2">
+            <div>
+              <Label htmlFor="act-title" className="text-xs font-semibold">Tên hoạt động *</Label>
+              <Input id="act-title" className="mt-1" placeholder="VD: Bingo phân số" value={formTitle} onChange={(e) => setFormTitle(e.target.value)} required />
+            </div>
+            <div>
+              <Label htmlFor="act-desc" className="text-xs font-semibold">Mô tả</Label>
+              <textarea id="act-desc" rows={2} className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:border-teal-400" placeholder="Hướng dẫn thực hiện hoạt động..." value={formDesc} onChange={(e) => setFormDesc(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="act-type" className="text-xs font-semibold">Loại hoạt động</Label>
+                <select id="act-type" className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={formType} onChange={(e) => setFormType(e.target.value)}>
+                  {['Khởi động', 'Khám phá', 'Luyện tập', 'Vận dụng', 'Trò chơi', 'Khác'].map((t) => <option key={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="act-subject" className="text-xs font-semibold">Môn học</Label>
+                <Input id="act-subject" className="mt-1" placeholder="VD: Toán" value={formSubject} onChange={(e) => setFormSubject(e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="act-grade" className="text-xs font-semibold">Khối lớp</Label>
+              <Input id="act-grade" className="mt-1" placeholder="VD: Lớp 4" value={formGrade} onChange={(e) => setFormGrade(e.target.value)} />
+            </div>
+          </form>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFormOpen(false)} disabled={submitting}>Hủy</Button>
+            <Button onClick={handleSubmit as any} disabled={submitting}>
+              {submitting && <Loader2 className="size-4 animate-spin" />}
+              {editTarget ? 'Lưu thay đổi' : 'Tạo hoạt động'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Xóa hoạt động</DialogTitle>
+            <DialogDescription>Xóa hoạt động "{deleteTarget?.title}"? Hành động này không thể hoàn tác.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Hủy</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting && <Loader2 className="size-4 animate-spin" />} Xóa hoạt động
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
 }
 
 type AIMessage = {
