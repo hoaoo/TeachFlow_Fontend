@@ -75,7 +75,7 @@ export async function getSchedules(params?: {
     if (params?.dateTo) query.set('dateTo', params.dateTo);
     if (params?.status) query.set('status', params.status);
     const qs = query.toString() ? `?${query.toString()}` : '';
-    const res = await api.get<ScheduleEntry[]>(`/teaching-plans${qs}`);
+    const res = await api.get<ScheduleEntry[]>(`/schedules${qs}`);
     return Array.isArray(res) ? res : [];
   } catch {
     return [];
@@ -83,19 +83,19 @@ export async function getSchedules(params?: {
 }
 
 export async function getSchedule(id: string): Promise<ScheduleEntry> {
-  return api.get<ScheduleEntry>(`/teaching-plans/${id}`);
+  return api.get<ScheduleEntry>(`/schedules/${id}`);
 }
 
 export async function createSchedule(data: CreateScheduleData): Promise<ScheduleEntry> {
-  return api.post<ScheduleEntry>('/teaching-plans', data);
+  return api.post<ScheduleEntry>('/schedules', data);
 }
 
 export async function updateSchedule(id: string, data: UpdateScheduleData): Promise<ScheduleEntry> {
-  return api.patch<ScheduleEntry>(`/teaching-plans/${id}`, data);
+  return api.patch<ScheduleEntry>(`/schedules/${id}`, data);
 }
 
 export async function deleteSchedule(id: string): Promise<void> {
-  await api.delete(`/teaching-plans/${id}`);
+  await api.delete(`/schedules/${id}`);
 }
 
 // Helpers for Vietnamese date formatting
