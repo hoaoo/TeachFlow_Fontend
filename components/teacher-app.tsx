@@ -15,6 +15,7 @@ import { WorkspaceModule } from '@/components/workspace-module'
 import { AdminTeachersView } from '@/components/admin-teachers-view'
 import { HomeroomView } from '@/components/homeroom-view'
 import { ReportsView } from '@/components/reports-view'
+import { NotificationDropdown } from '@/components/notification-dropdown'
 import { getDashboardData, toggleTask as apiToggleTask, type DashboardData } from '@/services/dashboard-service'
 import { getLibraryActivities, type LibraryActivity } from '@/services/activity-service'
 import {
@@ -93,12 +94,60 @@ function Sidebar({ active, onSelect, open, onClose }: { active: View; onSelect: 
   </>
 }
 
-function Header({ onMenu, onOpenLogin }: { onMenu: () => void; onOpenLogin: () => void }) {
+function Header({
+  onMenu,
+  onOpenLogin,
+  onNavigate,
+}: {
+  onMenu: () => void;
+  onOpenLogin: () => void;
+  onNavigate?: (view: View) => void;
+}) {
   const { user } = useAuth()
-  const teacherName = user?.teacher?.fullName || 'Nguyễn Thị Mai'
+  const teacherName = user?.teacher?.fullName || (user?.role === 'ADMIN' ? 'Quản trị viên' : 'Nguyễn Thị Mai')
   const initials = teacherName.split(' ').map((p) => p[0]).slice(-2).join('').toUpperCase() || 'NM'
 
-  return <header className="flex h-20 items-center justify-between border-b border-slate-200 bg-white px-5 sm:px-8"><div className="flex items-center gap-3"><button className="text-slate-500 lg:hidden" onClick={onMenu}><Menu /></button><div className="relative hidden w-72 sm:block"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><input className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm outline-none placeholder:text-slate-400 focus:border-teal-400" placeholder="Tìm kiếm nhanh..." /></div></div><div className="flex items-center gap-2 sm:gap-4"><button className="grid size-10 place-items-center rounded-xl text-slate-500 hover:bg-slate-50"><CircleHelp className="size-[18px]" /></button><button className="relative grid size-10 place-items-center rounded-xl text-slate-500 hover:bg-slate-50"><Bell className="size-[18px]" /><span className="absolute right-2 top-2 size-1.5 rounded-full bg-orange-500" /></button><div className="hidden h-7 w-px bg-slate-200 sm:block" />{user ? <button onClick={onOpenLogin} className="flex items-center gap-2"><span className="grid size-9 place-items-center rounded-full bg-teal-100 text-sm font-semibold text-teal-700">{initials}</span><span className="hidden text-sm font-medium text-slate-700 sm:inline">{teacherName}</span><ChevronDown className="size-4 text-slate-400" /></button> : <button onClick={onOpenLogin} className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-teal-700"><LogIn className="size-3.5" /> Đăng nhập</button>}</div></header>
+  return (
+    <header className="flex h-20 items-center justify-between border-b border-slate-200 bg-white px-5 sm:px-8">
+      <div className="flex items-center gap-3">
+        <button className="text-slate-500 lg:hidden" onClick={onMenu}>
+          <Menu />
+        </button>
+        <div className="relative hidden w-72 sm:block">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <input
+            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm outline-none placeholder:text-slate-400 focus:border-teal-400"
+            placeholder="Tìm kiếm nhanh..."
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-2 sm:gap-4">
+        <button className="grid size-10 place-items-center rounded-xl text-slate-500 hover:bg-slate-50">
+          <CircleHelp className="size-[18px]" />
+        </button>
+        <NotificationDropdown onNavigate={(v) => onNavigate?.(v as View)} />
+        <div className="hidden h-7 w-px bg-slate-200 sm:block" />
+        {user ? (
+          <button onClick={onOpenLogin} className="flex items-center gap-2">
+            <span className="grid size-9 place-items-center rounded-full bg-teal-100 text-sm font-semibold text-teal-700">
+              {initials}
+            </span>
+            <span className="hidden text-sm font-medium text-slate-700 sm:inline">
+              {teacherName}
+            </span>
+            <ChevronDown className="size-4 text-slate-400" />
+          </button>
+        ) : (
+          <button
+            onClick={onOpenLogin}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-teal-700"
+          >
+            <LogIn className="size-3.5" /> Đăng nhập
+          </button>
+        )}
+      </div>
+    </header>
+  )
 }
 
 function PageTitle({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description?: string; action?: React.ReactNode }) { return <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div>{eyebrow && <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-teal-600">{eyebrow}</p>}<h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">{title}</h1>{description && <p className="mt-2 text-sm text-slate-500">{description}</p>}</div>{action}</div> }
@@ -1023,7 +1072,7 @@ export function TeacherApp() {
     <div className="flex min-h-screen bg-slate-50 text-slate-900">
       <Sidebar active={active} onSelect={setActive} open={menuOpen} onClose={() => setMenuOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Header onMenu={() => setMenuOpen(true)} onOpenLogin={() => setAuthModalOpen(true)} />
+        <Header onMenu={() => setMenuOpen(true)} onOpenLogin={() => setAuthModalOpen(true)} onNavigate={setActive} />
         <main className="flex-1 overflow-y-auto px-5 py-8 sm:px-8 lg:px-10">
           <div className="mx-auto max-w-7xl">
             {active === 'Tổng quan' ? <Dashboard onNavigate={setActive} /> : <GenericView view={active} onNavigate={setActive} />}
