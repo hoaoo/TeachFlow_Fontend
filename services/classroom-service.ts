@@ -55,23 +55,14 @@ export async function getClasses(query?: { schoolYearId?: string; gradeId?: stri
     if (qs) url += `?${qs}`;
 
     const data = await api.get<ClassRecord[]>(url);
-    if (Array.isArray(data) && data.length > 0) {
-      return data;
-    }
-    return classroomClasses;
+    return Array.isArray(data) ? data : [];
   } catch {
-    return classroomClasses;
+    return [];
   }
 }
 
 export async function getClassById(id: string): Promise<ClassRecord> {
-  try {
-    return await api.get<ClassRecord>(`/classes/${id}`);
-  } catch {
-    const found = classroomClasses.find((c) => c.id === id);
-    if (!found) throw new Error('Không tìm thấy lớp học');
-    return found;
-  }
+  return await api.get<ClassRecord>(`/classes/${id}`);
 }
 
 export async function createClass(data: {

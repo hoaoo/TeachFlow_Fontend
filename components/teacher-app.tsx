@@ -15,8 +15,10 @@ import { WorkspaceModule } from '@/components/workspace-module'
 import { AdminTeachersView } from '@/components/admin-teachers-view'
 import { HomeroomView } from '@/components/homeroom-view'
 import { ReportsView } from '@/components/reports-view'
+import { TeacherSettingsView } from '@/components/teacher-settings-view'
 import { NotificationDropdown } from '@/components/notification-dropdown'
 import { getDashboardData, toggleTask as apiToggleTask, type DashboardData } from '@/services/dashboard-service'
+import { getClasses } from '@/services/classroom-service'
 import { getLibraryActivities, type LibraryActivity } from '@/services/activity-service'
 import {
   generateLessonPlan,
@@ -44,8 +46,53 @@ type View = 'Tổng quan' | 'Lịch dạy' | 'Giáo án' | 'Thư viện hoạt �
 
 function Sidebar({ active, onSelect, open, onClose }: { active: View; onSelect: (view: View) => void; open: boolean; onClose: () => void }) {
   const { user, logout } = useAuth()
-  const teacherName = user?.teacher?.fullName || (user?.role === 'ADMIN' ? 'Quản trị viên' : 'Nguyễn Thị Mai')
-  const initials = teacherName.split(' ').map((p) => p[0]).slice(-2).join('').toUpperCase() || 'AD'
+  const teacherName = user?.teacher?.fullName || (user?.role === 'ADMIN' ? 'Quản trị viên' : 'Giáo viên')
+  const initials = teacherName.split(' ').map((p) => p[0]).slice(-2).join('').toUpperCase() || 'GV'
+
+  const [sidebarClasses, setSidebarClasses] = useState<Array<{ id: string; name: string; grade: string; studentCount: number }>>([])
+  const [loadingClasses, setLoadingClasses] = useState(true)
+
+  useEffect(() => {
+    let isMounted = true
+    const loadSidebarClasses = async () => {
+      if (!user) {
+        setSidebarClasses([])
+        setLoadingClasses(false)
+        return
+      }
+      try {
+        const cls = await getClasses()
+        if (isMounted) {
+          setSidebarClasses(
+            cls.map((c) => ({
+              id: c.id,
+              name: c.name,
+              grade: c.grade || 'Khối',
+              studentCount: c.studentCount ?? c.students?.length ?? 0,
+            }))
+          )
+        }
+      } catch {
+        if (isMounted) setSidebarClasses([])
+      } finally {
+        if (isMounted) setLoadingClasses(false)
+      }
+    }
+
+    loadSidebarClasses()
+
+    const handleClassesChange = () => {
+      loadSidebarClasses()
+    }
+
+    window.addEventListener('teachflow:classes-changed', handleClassesChange)
+    window.addEventListener('teachflow:auth-state-changed', handleClassesChange)
+    return () => {
+      isMounted = false
+      window.removeEventListener('teachflow:classes-changed', handleClassesChange)
+      window.removeEventListener('teachflow:auth-state-changed', handleClassesChange)
+    }
+  }, [user])
 
   return <>
     {open && <button aria-label="Đóng menu" className="fixed inset-0 z-30 bg-slate-950/20 lg:hidden" onClick={onClose} />}
@@ -80,13 +127,55 @@ function Sidebar({ active, onSelect, open, onClose }: { active: View; onSelect: 
 
         <div className="my-5 border-t border-slate-100" />
         <p className="px-3 pb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Lớp của tôi</p>
-        <button onClick={() => onSelect('Lớp học')} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50"><span className="grid size-8 place-items-center rounded-lg bg-blue-50 text-xs font-semibold text-blue-700">4A</span><span><b className="block font-medium text-slate-800">Lớp 4A</b><small className="text-xs text-slate-400">32 học sinh</small></span><ChevronRight className="ml-auto size-4 text-slate-300" /></button>
-        <button onClick={() => onSelect('Lớp học')} className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50"><span className="grid size-8 place-items-center rounded-lg bg-orange-50 text-xs font-semibold text-orange-700">4B</span><span><b className="block font-medium text-slate-800">Lớp 4B</b><small className="text-xs text-slate-400">30 học sinh</small></span><ChevronRight className="ml-auto size-4 text-slate-300" /></button>
+        {loadingClasses ? (
+          <div className="flex items-center gap-2 px-3 py-2 text-xs text-slate-400">
+            <Loader2 className="size-3.5 animate-spin text-teal-600" />
+            <span>Đang tải danh sách lớp...</span>
+          </div>
+        ) : sidebarClasses.length === 0 ? (
+          <div className="px-3 py-2 text-xs text-slate-400">
+            <p className="mb-2">Bạn chưa có lớp nào.</p>
+            <button
+              onClick={() => {
+                onSelect('Lớp học')
+                onClose()
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-teal-50 px-2.5 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-100 transition"
+            >
+              <Plus className="size-3.5" /> Tạo lớp đầu tiên
+            </button>
+          </div>
+        ) : (
+          sidebarClasses.map((cls, idx) => {
+            const bgColors = ['bg-blue-50 text-blue-700', 'bg-orange-50 text-orange-700', 'bg-teal-50 text-teal-700', 'bg-purple-50 text-purple-700']
+            const colorClass = bgColors[idx % bgColors.length]
+            const shortCode = cls.name.replace(/^lớp\s+/i, '')
+            return (
+              <button
+                key={cls.id}
+                onClick={() => {
+                  onSelect('Lớp học')
+                  onClose()
+                }}
+                className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50 transition"
+              >
+                <span className={`grid size-8 place-items-center rounded-lg text-xs font-semibold ${colorClass}`}>
+                  {shortCode}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <b className="block truncate font-medium text-slate-800">{cls.name}</b>
+                  <small className="text-xs text-slate-400">{cls.studentCount} học sinh</small>
+                </span>
+                <ChevronRight className="ml-auto size-4 text-slate-300" />
+              </button>
+            )
+          })
+        )}
       </div>
       <div className="border-t border-slate-100 p-4">
         <div className="flex w-full items-center gap-3 rounded-xl p-2 text-left">
           <span className="grid size-9 place-items-center rounded-full bg-teal-100 font-semibold text-teal-700">{initials}</span>
-          <span className="min-w-0 flex-1"><b className="block truncate text-sm font-medium text-slate-800">{teacherName}</b><small className="text-xs text-slate-400">{user?.email || 'Giáo viên chủ nhiệm'}</small></span>
+          <span className="min-w-0 flex-1"><b className="block truncate text-sm font-medium text-slate-800">{teacherName}</b><small className="text-xs text-slate-400">{user?.email || 'Giáo viên'}</small></span>
           {user && <button onClick={logout} title="Đăng xuất" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><LogOut className="size-4" /></button>}
         </div>
       </div>
@@ -438,8 +527,32 @@ function GenericView({ view, onNavigate }: { view: View; onNavigate: (view: View
   if (view === 'Thư viện hoạt động') return <LibraryView />
   if (view === 'Chủ nhiệm') return <HomeroomView onNavigate={onNavigate} />
   if (view === 'Báo cáo & Thống kê') return <ReportsView />
-  if (['Lịch dạy', 'Phiếu học tập', 'Đánh giá', 'Điểm danh', 'Tài nguyên', 'Cài đặt'].includes(view)) return <WorkspaceModule view={view as 'Lịch dạy' | 'Phiếu học tập' | 'Đánh giá' | 'Điểm danh' | 'Tài nguyên' | 'Cài đặt'} />
-  return <div className="flex flex-col gap-6"><PageTitle eyebrow="TeachFlow workspace" title={view} description="Quản lý và theo dõi công việc giảng dạy của bạn." action={<button className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700"><Plus className="size-4" /> Tạo mới</button>} /><div className="grid gap-4 sm:grid-cols-3"><div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">Tổng số</p><p className="mt-2 text-3xl font-semibold text-slate-900">0</p></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">Đang hoạt động</p><p className="mt-2 text-3xl font-semibold text-teal-700">0</p></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">Cập nhật gần đây</p><p className="mt-2 text-3xl font-semibold text-slate-900">Chưa có</p></div></div><div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center"><div className="mx-auto grid size-14 place-items-center rounded-2xl bg-teal-50 text-teal-600"><FileText /></div><h2 className="mt-4 font-semibold text-slate-900">Không gian {view.toLowerCase()}</h2><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">Các dữ liệu và công cụ dành cho {view.toLowerCase()} sẽ hiển thị tại đây. Bắt đầu bằng cách tạo nội dung mới.</p></div></div>
+  if (view === 'Cài đặt') return <TeacherSettingsView />
+  if (['Lịch dạy', 'Phiếu học tập', 'Đánh giá', 'Điểm danh', 'Tài nguyên'].includes(view))
+    return <WorkspaceModule view={view as 'Lịch dạy' | 'Phiếu học tập' | 'Đánh giá' | 'Điểm danh' | 'Tài nguyên'} />
+  return (
+    <div className="flex flex-col gap-6">
+      <PageTitle
+        eyebrow="TeachFlow workspace"
+        title={view}
+        description="Quản lý và theo dõi công việc giảng dạy của bạn."
+        action={
+          <button className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700">
+            <Plus className="size-4" /> Tạo mới
+          </button>
+        }
+      />
+      <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
+        <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-teal-50 text-teal-600">
+          <FileText />
+        </div>
+        <h2 className="mt-4 font-semibold text-slate-900">Không gian {view.toLowerCase()}</h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+          Các dữ liệu và công cụ dành cho {view.toLowerCase()} sẽ hiển thị tại đây. Bắt đầu bằng cách tạo nội dung mới.
+        </p>
+      </div>
+    </div>
+  )
 }
 
 function LibraryView() {
@@ -474,10 +587,12 @@ type AIMessage = {
 };
 
 function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
+  const { user } = useAuth()
+  const teacherName = user?.teacher?.fullName || 'thầy cô'
   const [messages, setMessages] = useState<AIMessage[]>([
     {
       from: 'ai',
-      text: 'Chào cô Mai! Tôi là Trợ lý AI sư phạm TeachFlow. Tôi có thể hỗ trợ cô soạn giáo án, thiết kế trò chơi khởi động, tạo phiếu học tập, biên soạn câu hỏi hoặc gợi ý nhận xét học sinh. Cô muốn bắt đầu với việc gì?',
+      text: `Chào ${teacherName}! Tôi là Trợ lý AI sư phạm TeachFlow. Tôi có thể hỗ trợ thầy/cô soạn giáo án, thiết kế hoạt động, tạo phiếu học tập, biên soạn câu hỏi hoặc gợi ý nhận xét học sinh. Thầy/cô muốn bắt đầu với nội dung gì?`,
     },
   ]);
   const [input, setInput] = useState('');
