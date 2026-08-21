@@ -459,7 +459,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
               ))
             ) : (
               <div className="p-8 text-center text-sm text-slate-400">
-                Chưa có lịch dạy được phân công. Nhấn "Xem lịch" để kiểm tra kế hoạch.
+                Chưa có lịch dạy nào. Nhấn "Xem lịch" để lên lịch giảng dạy.
               </div>
             )}
           </div>

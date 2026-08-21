@@ -161,7 +161,7 @@ export function ReportsView() {
           <p className="text-xs font-semibold uppercase tracking-wider text-teal-600">Trung tâm Thống kê</p>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Báo cáo & Thống kê giáo dục</h1>
           <p className="text-sm text-slate-500">
-            Dữ liệu tổng hợp chuyên cần, đánh giá, phân công giảng dạy và hồ sơ lớp học
+            Dữ liệu tổng hợp chuyên cần, đánh giá, ngữ cảnh giảng dạy và hồ sơ lớp học
           </p>
         </div>
 
@@ -225,7 +225,7 @@ export function ReportsView() {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <BookOpen className="size-4" /> Phân công chuyên môn
+          <BookOpen className="size-4" /> Môn & Lớp phụ trách
         </button>
         <button
           onClick={() => setActiveTab('enrollment')}
@@ -235,7 +235,7 @@ export function ReportsView() {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <GraduationCap className="size-4" /> Tuyển sinh & Sĩ số
+          <GraduationCap className="size-4" /> Theo dõi sĩ số & Ghi danh
         </button>
       </div>
 
@@ -550,25 +550,25 @@ export function ReportsView() {
         </div>
       )}
 
-      {/* Tab 4: Teaching Assignments */}
+      {/* Tab 4: Teaching Assignments / Contexts */}
       {activeTab === 'assignments' && (
         <div className="flex flex-col gap-6">
-          <h2 className="text-lg font-semibold text-slate-900">Báo cáo phân công chuyên môn giáo viên</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Báo cáo ngữ cảnh giảng dạy và lớp phụ trách</h2>
 
           {loadingAssignments ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-400">
               <Loader2 className="size-8 animate-spin text-teal-600" />
-              <span className="text-sm font-medium">Đang tải phân công chuyên môn...</span>
+              <span className="text-sm font-medium">Đang tải ngữ cảnh giảng dạy...</span>
             </div>
           ) : assignmentsData ? (
             <>
               <div className="grid grid-cols-2 gap-4">
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-xs text-slate-500 font-medium">Tổng số giáo viên được phân công</p>
+                  <p className="text-xs text-slate-500 font-medium">Tổng số giáo viên phụ trách</p>
                   <p className="mt-2 text-3xl font-bold text-slate-900">{assignmentsData.totalTeachers}</p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-xs text-slate-500 font-medium">Tổng lượt phân công giảng dạy</p>
+                  <p className="text-xs text-slate-500 font-medium">Tổng số môn & lớp phụ trách</p>
                   <p className="mt-2 text-3xl font-bold text-teal-700">{assignmentsData.totalAssignments}</p>
                 </div>
               </div>
@@ -601,7 +601,7 @@ export function ReportsView() {
             </>
           ) : (
             <div className="p-12 text-center text-sm text-slate-400 rounded-2xl border border-dashed">
-              Chưa có dữ liệu phân công giảng dạy.
+              Chưa có dữ liệu ngữ cảnh giảng dạy.
             </div>
           )}
         </div>
@@ -610,12 +610,12 @@ export function ReportsView() {
       {/* Tab 5: Enrollment */}
       {activeTab === 'enrollment' && (
         <div className="flex flex-col gap-6">
-          <h2 className="text-lg font-semibold text-slate-900">Báo cáo số liệu tuyển sinh & sĩ số</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Báo cáo theo dõi sĩ số & ghi danh học sinh</h2>
 
           {loadingEnrollment ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-400">
               <Loader2 className="size-8 animate-spin text-teal-600" />
-              <span className="text-sm font-medium">Đang tổng hợp số liệu tuyển sinh...</span>
+              <span className="text-sm font-medium">Đang tổng hợp số liệu sĩ số học sinh...</span>
             </div>
           ) : enrollmentData ? (
             <>

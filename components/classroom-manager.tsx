@@ -180,7 +180,6 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
         schoolYearId: formSchoolYearId,
         gradeId: formGradeId,
         room: formRoom.trim() || undefined,
-        schedule: 'Sáng · Thứ 2 - Thứ 6',
       })
       setClasses((items) => [...items, created])
       setFormName('')
@@ -1028,16 +1027,6 @@ function ClassDetail({
                 value={editClassRoom}
                 onChange={(e) => setEditClassRoom(e.target.value)}
                 placeholder="Phòng 204"
-              />
-            </div>
-            <div>
-              <Label htmlFor="edit-class-schedule" className="text-xs font-semibold">Lịch học</Label>
-              <Input
-                id="edit-class-schedule"
-                className="mt-1"
-                value={editClassSchedule}
-                onChange={(e) => setEditClassSchedule(e.target.value)}
-                placeholder="Sáng · Thứ 2 - Thứ 6"
               />
             </div>
           </div>

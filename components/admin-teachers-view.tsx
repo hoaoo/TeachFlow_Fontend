@@ -1050,7 +1050,7 @@ export function AdminTeachersView() {
                 <option value="AUTH_">Xác thực / Đăng nhập</option>
                 <option value="TEACHER_">Quản lý giáo viên</option>
                 <option value="STUDENT_">Học sinh & Ghi danh</option>
-                <option value="TEACHING_ASSIGNMENT_">Phân công giảng dạy</option>
+                <option value="TEACHING_ASSIGNMENT_">Ngữ cảnh giảng dạy</option>
                 <option value="ATTENDANCE_">Điểm danh</option>
                 <option value="ASSESSMENT_">Đánh giá</option>
               </select>
