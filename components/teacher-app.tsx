@@ -214,43 +214,6 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
         }
       />
 
-      {data?.adminStats && (
-        <section className="rounded-2xl border border-teal-100 bg-gradient-to-r from-teal-50 to-emerald-50 p-6 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <div>
-              <h2 className="text-base font-bold text-teal-900">Tổng quan toàn trường (Quản trị viên)</h2>
-              <p className="text-xs text-teal-700 mt-0.5">
-                Năm học: <b>{data.adminStats.currentSchoolYear}</b> {data.adminStats.currentSemester !== 'N/A' && `— ${data.adminStats.currentSemester}`}
-              </p>
-            </div>
-            <button
-              onClick={() => onNavigate('Quản trị giáo viên')}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-700 shadow-sm"
-            >
-              Quản lý nhân sự <ArrowUpRight className="size-3.5" />
-            </button>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="rounded-xl bg-white/80 p-3.5 border border-teal-100/60">
-              <p className="text-xs text-slate-500 font-medium">Tổng giáo viên</p>
-              <p className="text-2xl font-bold text-teal-900 mt-1">{data.adminStats.totalTeachers}</p>
-            </div>
-            <div className="rounded-xl bg-white/80 p-3.5 border border-teal-100/60">
-              <p className="text-xs text-slate-500 font-medium">Tổng lớp học</p>
-              <p className="text-2xl font-bold text-teal-900 mt-1">{data.adminStats.totalClassrooms}</p>
-            </div>
-            <div className="rounded-xl bg-white/80 p-3.5 border border-teal-100/60">
-              <p className="text-xs text-slate-500 font-medium">Học sinh đang học</p>
-              <p className="text-2xl font-bold text-teal-900 mt-1">{data.adminStats.totalStudents}</p>
-            </div>
-            <div className="rounded-xl bg-white/80 p-3.5 border border-teal-100/60">
-              <p className="text-xs text-slate-500 font-medium">Tổng môn học</p>
-              <p className="text-2xl font-bold text-teal-900 mt-1">{data.adminStats.totalSubjects}</p>
-            </div>
-          </div>
-        </section>
-      )}
-
       {stats.length > 0 && (
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {stats.map(({ label, value, note, tone, icon }) => {

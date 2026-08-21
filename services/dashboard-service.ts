@@ -54,14 +54,6 @@ export type DashboardData = {
     color: string;
   }>;
   attendanceRate?: number;
-  adminStats?: {
-    totalTeachers: number;
-    totalClassrooms: number;
-    totalStudents: number;
-    totalSubjects: number;
-    currentSchoolYear: string;
-    currentSemester: string;
-  } | null;
 };
 
 export async function getDashboardData(): Promise<DashboardData | null> {
