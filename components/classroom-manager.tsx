@@ -37,12 +37,13 @@ const statusVariant = (status: StudentRecord['status']) => status === 'Tốt' ? 
 
 export function ClassroomManager({ initialSection = 'classes' }: { initialSection?: 'classes' | 'students' }) {
   const [view, setView] = useState<ViewState>({ page: initialSection === 'students' ? 'classes' : 'classes' })
-  const [classes, setClasses] = useState<ClassRecord[]>(classroomClasses)
+  const [classes, setClasses] = useState<ClassRecord[]>([])
   const [schoolYears, setSchoolYears] = useState<SchoolYearOption[]>([])
   const [grades, setGrades] = useState<GradeOption[]>([])
   const [selectedSchoolYearId, setSelectedSchoolYearId] = useState<string>('')
   const [selectedGradeId, setSelectedGradeId] = useState<string>('ALL')
   const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('Tất cả')
   const [dialog, setDialog] = useState<'add-class' | 'add-student' | 'comment' | 'delete' | 'transfer' | null>(null)
@@ -91,7 +92,7 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
   }
 
   const currentClass = classes.find((item) => item.id === view.classId) ?? classes[0] ?? {
-    id: '4a', code: '4A', name: 'Lớp 4A', grade: 'Khối 4', room: 'Phòng 204', schedule: 'Sáng · Thứ 2 - Thứ 6', studentCount: 0, average: 8.4, attendance: 96, teacher: 'Cô Nguyễn Thị Mai', accent: 'teal', students: []
+    id: '', code: '', name: 'Lớp học', grade: 'Khối', room: 'Phòng học', schedule: 'Thứ 2 - Thứ 6', studentCount: 0, average: 0, attendance: 100, teacher: 'Giáo viên', accent: 'teal', students: []
   }
   const currentStudent = currentClass.students?.find((item) => item.id === view.studentId) ?? selected ?? currentClass.students?.[0]
   const allStudents = useMemo(() => classes.flatMap((item) => (item.students || []).map((student) => ({ ...student, className: item.name, classId: item.id }))), [classes])
@@ -113,6 +114,7 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
       return
     }
 
+    setSubmitting(true)
     try {
       const created = await apiCreateClass({
         name: formName.trim(),
@@ -126,22 +128,33 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
       setFormName('')
       setFormCode('')
       setDialog(null)
-      notify(`Đã tạo lớp ${created.name} (${created.code}) thành công`)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
+      }
+      notify(`Đã tạo lớp ${created.name} (${created.code || ''}) thành công`)
     } catch (err: any) {
       toast.error(err?.message || 'Lỗi khi tạo lớp học')
+    } finally {
+      setSubmitting(false)
     }
   }
 
   const addStudent = async () => {
     if (!studentName.trim()) return
+    setSubmitting(true)
     try {
-      const updatedClass = await apiAddStudent(currentClass.id, { fullName: studentName })
+      const updatedClass = await apiAddStudent(currentClass.id, { fullName: studentName.trim() })
       setClasses((items) => items.map((item) => item.id === currentClass.id ? updatedClass : item))
       setStudentName('')
       setDialog(null)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
+      }
       notify('Đã thêm học sinh thành công')
     } catch (err: any) {
       toast.error(err?.message || 'Lỗi khi thêm học sinh')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -191,8 +204,26 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
       }}
     />
   )
-  if (view.page === 'class') return <ClassDetail classItem={currentClass} query={query} setQuery={setQuery} onBack={() => setView({ page: 'classes' })} onOpenStudent={(student) => openStudent(student)} onAddStudent={() => setDialog('add-student')} onDelete={(student) => { setSelected(student); setDialog('delete') }} />
-  if (initialSection === 'students') return <StudentDirectory students={filteredStudents} query={query} setQuery={setQuery} filter={filter} setFilter={setFilter} onOpenStudent={(student) => openStudent(student, allStudents.find((item) => item.id === student.id)?.classId)} />
+  if (view.page === 'class')
+    return (
+      <ClassDetail
+        classItem={currentClass}
+        query={query}
+        setQuery={setQuery}
+        onBack={() => setView({ page: 'classes' })}
+        onOpenStudent={(student) => openStudent(student)}
+        dialog={dialog}
+        setDialog={setDialog}
+        studentName={studentName}
+        setStudentName={setStudentName}
+        addStudent={addStudent}
+        selected={selected}
+        setSelected={setSelected}
+        deleteStudent={deleteStudent}
+        submitting={submitting}
+      />
+    )
+  if (initialSection === 'students') return <StudentDirectory students={filteredStudents} classes={classes} query={query} setQuery={setQuery} filter={filter} setFilter={setFilter} onOpenStudent={(student) => openStudent(student, allStudents.find((item) => item.id === student.id)?.classId)} />
   return (
     <ClassDirectory
       classes={classes}
@@ -442,9 +473,243 @@ function ClassDirectory({
   );
 }
 
-function ClassDetail({ classItem, query, setQuery, onBack, onOpenStudent, onAddStudent, onDelete }: { classItem: ClassRecord; query: string; setQuery: (value: string) => void; onBack: () => void; onOpenStudent: (student: StudentRecord) => void; onAddStudent: () => void; onDelete: (student: StudentRecord) => void }) { const students = (classItem.students || []).filter((student) => student.name.toLowerCase().includes(query.toLowerCase())); return <div className="mx-auto max-w-7xl"><Button variant="ghost" className="mb-4 -ml-3" onClick={onBack}><ArrowLeft data-icon="inline-start" />Quay lại danh sách lớp</Button><Header title={`${classItem.name} ${classItem.code ? `(${classItem.code})` : ''} · ${classItem.room}`} description={`${classItem.teacher} · ${classItem.schedule}`} action={<Button onClick={onAddStudent}><UserPlus data-icon="inline-start" />Thêm học sinh</Button>} /><div className="mb-6 grid gap-4 sm:grid-cols-4"><Stat label="Sĩ số" value={String(classItem.studentCount || students.length)} helper="Học sinh" icon={<Users />} /><Stat label="Điểm trung bình" value={String(classItem.average || 8.4)} helper="Học kỳ này" icon={<BarChart3 />} /><Stat label="Chuyên cần" value={`${classItem.attendance || 96}%`} helper="Tháng 8/2026" icon={<CalendarCheck2 />} /><Stat label="Cần quan tâm" value={String(students.filter((student) => student.status === 'Cần cố gắng').length)} helper="Cần hỗ trợ thêm" icon={<Heart />} /></div><Card><CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle>Danh sách học sinh</CardTitle><CardDescription>Nhấn vào một học sinh để xem hồ sơ học tập.</CardDescription></div><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm học sinh..." className="w-full sm:w-72" /></CardHeader><CardContent className="overflow-x-auto"><table className="w-full min-w-[680px] text-sm"><thead><tr className="border-b text-left text-xs uppercase text-muted-foreground"><th className="pb-3">Học sinh</th><th className="pb-3">Tiến độ</th><th className="pb-3">Chuyên cần</th><th className="pb-3">Trạng thái</th><th className="pb-3 text-right">Thao tác</th></tr></thead><tbody>{students.map((student) => <tr key={student.id} className="border-b last:border-0"><td className="py-3"><button className="flex items-center gap-3 text-left" onClick={() => onOpenStudent(student)}><Avatar className="size-9"><AvatarFallback className={student.color}>{student.initials}</AvatarFallback></Avatar><span><span className="block font-medium">{student.name}</span><span className="text-xs text-muted-foreground">{student.gender} · {student.dob}</span></span></button></td><td className="py-3"><div className="flex items-center gap-2"><div className="h-2 w-24 rounded-full bg-muted"><div className="h-2 rounded-full bg-primary" style={{ width: `${student.progress}%` }} /></div>{student.progress}%</div></td><td className="py-3">{student.attendance || 96}%</td><td className="py-3"><Badge variant={statusVariant(student.status)}>{student.status}</Badge></td><td className="py-3 text-right"><Button size="icon" variant="ghost" onClick={() => onOpenStudent(student)} aria-label={`Xem ${student.name}`}><Eye /></Button><Button size="icon" variant="ghost" onClick={() => onDelete(student)} aria-label={`Xóa ${student.name}`}><Trash2 /></Button></td></tr>)}</tbody></table>{!students.length && <Empty title="Chưa có học sinh phù hợp" />}</CardContent></Card></div> }
+function ClassDetail({
+  classItem,
+  query,
+  setQuery,
+  onBack,
+  onOpenStudent,
+  dialog,
+  setDialog,
+  studentName,
+  setStudentName,
+  addStudent,
+  selected,
+  setSelected,
+  deleteStudent,
+  submitting,
+}: {
+  classItem: ClassRecord;
+  query: string;
+  setQuery: (value: string) => void;
+  onBack: () => void;
+  onOpenStudent: (student: StudentRecord) => void;
+  dialog: string | null;
+  setDialog: (d: 'add-student' | 'delete' | null) => void;
+  studentName: string;
+  setStudentName: (v: string) => void;
+  addStudent: () => void;
+  selected: StudentRecord | null;
+  setSelected: (s: StudentRecord | null) => void;
+  deleteStudent: () => void;
+  submitting: boolean;
+}) {
+  const students = (classItem.students || []).filter((student) =>
+    student.name.toLowerCase().includes(query.toLowerCase()),
+  );
 
-function StudentDirectory({ students, query, setQuery, filter, setFilter, onOpenStudent }: { students: Array<StudentRecord & { className: string; classId: string }>; query: string; setQuery: (value: string) => void; filter: string; setFilter: (value: string) => void; onOpenStudent: (student: StudentRecord) => void }) { return <div className="mx-auto max-w-7xl"><Header title="Tất cả học sinh" description="Tìm kiếm nhanh và mở hồ sơ học tập của từng học sinh." action={<Button variant="outline" onClick={() => window.print()}><Download data-icon="inline-start" />Xuất danh sách</Button>} /><div className="mb-6 flex gap-3"><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm tên học sinh hoặc lớp..." /><select aria-label="Lọc theo lớp" className="h-9 rounded-md border bg-background px-3 text-sm" value={filter} onChange={(event) => setFilter(event.target.value)}><option>Tất cả</option><option>Lớp 4A</option><option>Lớp 4B</option><option>Lớp 3A</option></select></div><Card><CardContent className="divide-y p-0">{students.map((student) => <button key={`${student.classId}-${student.id}`} className="flex w-full items-center gap-3 p-4 text-left hover:bg-muted/40" onClick={() => onOpenStudent(student)}><Avatar><AvatarFallback className={student.color}>{student.initials}</AvatarFallback></Avatar><span className="min-w-0 flex-1"><span className="block truncate font-medium">{student.name}</span><span className="text-xs text-muted-foreground">{student.className} · {student.guardian}</span></span><Badge variant={statusVariant(student.status)}>{student.status}</Badge><ChevronRight className="size-4 text-muted-foreground" /></button>)}{!students.length && <Empty title="Chưa tìm thấy học sinh" />}</CardContent></Card></div> }
+  return (
+    <div className="mx-auto max-w-7xl">
+      <Button variant="ghost" className="mb-4 -ml-3" onClick={onBack}>
+        <ArrowLeft data-icon="inline-start" />Quay lại danh sách lớp
+      </Button>
+      <Header
+        title={`${classItem.name} ${classItem.code ? `(${classItem.code})` : ''} · ${classItem.room}`}
+        description={`${classItem.teacher} · ${classItem.schedule}`}
+        action={
+          <Button onClick={() => setDialog('add-student')}>
+            <UserPlus data-icon="inline-start" />Thêm học sinh
+          </Button>
+        }
+      />
+      <div className="mb-6 grid gap-4 sm:grid-cols-4">
+        <Stat label="Sĩ số" value={String(classItem.studentCount || students.length)} helper="Học sinh" icon={<Users />} />
+        <Stat label="Điểm trung bình" value={String(classItem.average || 8.4)} helper="Học kỳ này" icon={<BarChart3 />} />
+        <Stat label="Chuyên cần" value={`${classItem.attendance || 96}%`} helper="Tháng 8/2026" icon={<CalendarCheck2 />} />
+        <Stat
+          label="Cần quan tâm"
+          value={String(students.filter((student) => student.status === 'Cần cố gắng').length)}
+          helper="Cần hỗ trợ thêm"
+          icon={<Heart />}
+        />
+      </div>
+      <Card>
+        <CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle>Danh sách học sinh</CardTitle>
+            <CardDescription>Nhấn vào một học sinh để xem hồ sơ học tập.</CardDescription>
+          </div>
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Tìm học sinh..."
+            className="w-full sm:w-72"
+          />
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <table className="w-full min-w-[680px] text-sm">
+            <thead>
+              <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                <th className="pb-3">Học sinh</th>
+                <th className="pb-3">Tiến độ</th>
+                <th className="pb-3">Chuyên cần</th>
+                <th className="pb-3">Trạng thái</th>
+                <th className="pb-3 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {students.map((student) => (
+                <tr key={student.id} className="border-b last:border-0">
+                  <td className="py-3">
+                    <button className="flex items-center gap-3 text-left" onClick={() => onOpenStudent(student)}>
+                      <Avatar className="size-9">
+                        <AvatarFallback className={student.color}>{student.initials}</AvatarFallback>
+                      </Avatar>
+                      <span>
+                        <span className="block font-medium">{student.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {student.gender} · {student.dob}
+                        </span>
+                      </span>
+                    </button>
+                  </td>
+                  <td className="py-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-24 rounded-full bg-muted">
+                        <div className="h-2 rounded-full bg-primary" style={{ width: `${student.progress}%` }} />
+                      </div>
+                      {student.progress}%
+                    </div>
+                  </td>
+                  <td className="py-3">{student.attendance || 96}%</td>
+                  <td className="py-3">
+                    <Badge variant={statusVariant(student.status)}>{student.status}</Badge>
+                  </td>
+                  <td className="py-3 text-right">
+                    <Button size="icon" variant="ghost" onClick={() => onOpenStudent(student)} aria-label={`Xem ${student.name}`}>
+                      <Eye />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        setSelected(student)
+                        setDialog('delete')
+                      }}
+                      aria-label={`Xóa ${student.name}`}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!students.length && <Empty title="Chưa có học sinh phù hợp" />}
+        </CardContent>
+      </Card>
+
+      {/* Add Student Dialog */}
+      <Dialog open={dialog === 'add-student'} onOpenChange={(open) => !open && setDialog(null)}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Thêm học sinh mới</DialogTitle>
+            <DialogDescription>Thêm học sinh vào danh sách lớp {classItem.name}.</DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Label htmlFor="student-name-input" className="text-xs font-semibold">
+              Họ và tên học sinh *
+            </Label>
+            <Input
+              id="student-name-input"
+              className="mt-1"
+              value={studentName}
+              onChange={(e) => setStudentName(e.target.value)}
+              placeholder="Ví dụ: Nguyễn Văn An"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialog(null)}>
+              Hủy
+            </Button>
+            <Button onClick={addStudent} disabled={submitting || !studentName.trim()} className="bg-teal-600 hover:bg-teal-700">
+              {submitting ? 'Đang thêm...' : 'Thêm học sinh'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Student Dialog */}
+      <Dialog open={dialog === 'delete'} onOpenChange={(open) => !open && setDialog(null)}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Xóa học sinh</DialogTitle>
+            <DialogDescription>
+              Bạn có chắc chắn muốn xóa học sinh <strong>{selected?.name}</strong> khỏi {classItem.name}?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialog(null)}>
+              Hủy
+            </Button>
+            <Button variant="destructive" onClick={deleteStudent} disabled={submitting}>
+              {submitting ? 'Đang xóa...' : 'Xóa học sinh'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function StudentDirectory({ students, classes, query, setQuery, filter, setFilter, onOpenStudent }: { students: Array<StudentRecord & { className: string; classId: string }>; classes: ClassRecord[]; query: string; setQuery: (value: string) => void; filter: string; setFilter: (value: string) => void; onOpenStudent: (student: StudentRecord) => void }) {
+  return (
+    <div className="mx-auto max-w-7xl">
+      <Header
+        title="Tất cả học sinh"
+        description="Tìm kiếm nhanh và mở hồ sơ học tập của từng học sinh."
+        action={<Button variant="outline" onClick={() => window.print()}><Download data-icon="inline-start" />Xuất danh sách</Button>}
+      />
+      <div className="mb-6 flex gap-3">
+        <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm tên học sinh hoặc lớp..." />
+        <select
+          aria-label="Lọc theo lớp"
+          className="h-9 rounded-md border bg-background px-3 text-sm font-medium"
+          value={filter}
+          onChange={(event) => setFilter(event.target.value)}
+        >
+          <option value="Tất cả">Tất cả các lớp</option>
+          {classes.map((c) => (
+            <option key={c.id} value={c.name}>
+              {c.name} {c.code ? `(${c.code})` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+      <Card>
+        <CardContent className="divide-y p-0">
+          {students.map((student) => (
+            <button
+              key={`${student.classId}-${student.id}`}
+              className="flex w-full items-center gap-3 p-4 text-left hover:bg-muted/40 transition"
+              onClick={() => onOpenStudent(student)}
+            >
+              <Avatar><AvatarFallback className={student.color}>{student.initials}</AvatarFallback></Avatar>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{student.name}</span>
+                <span className="text-xs text-muted-foreground">{student.className} · {student.guardian}</span>
+              </span>
+              <Badge variant={statusVariant(student.status)}>{student.status}</Badge>
+              <ChevronRight className="size-4 text-muted-foreground" />
+            </button>
+          ))}
+          {!students.length && <Empty title="Chưa tìm thấy học sinh" />}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
 
 function StudentProfile({
   student,
@@ -850,8 +1115,10 @@ function StudentProfile({
       <Dialog open={dialog === 'delete'} onOpenChange={(open) => !open && setDialog(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Xóa học sinh?</DialogTitle>
-            <DialogDescription>Học sinh sẽ được xóa khỏi danh sách lớp.</DialogDescription>
+            <DialogTitle>Xóa học sinh</DialogTitle>
+            <DialogDescription>
+              Bạn có chắc chắn muốn xóa học sinh <strong>{student.name}</strong> khỏi {classItem.name}?
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialog(null)}>Hủy</Button>
