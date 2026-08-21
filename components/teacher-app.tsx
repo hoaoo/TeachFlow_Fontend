@@ -14,6 +14,7 @@ import { ClassroomManager } from '@/components/classroom-manager'
 import { WorkspaceModule } from '@/components/workspace-module'
 import { AdminTeachersView } from '@/components/admin-teachers-view'
 import { HomeroomView } from '@/components/homeroom-view'
+import { ReportsView } from '@/components/reports-view'
 import { getDashboardData, toggleTask as apiToggleTask, type DashboardData } from '@/services/dashboard-service'
 import { getLibraryActivities, type LibraryActivity } from '@/services/activity-service'
 import {
@@ -36,9 +37,9 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 
-const iconMap = { LayoutDashboard, CalendarDays, BookOpen, Library, Users, GraduationCap, Files, ClipboardCheck, School, CheckCircle2, Settings, Sparkles }
+const iconMap = { LayoutDashboard, CalendarDays, BookOpen, Library, Users, GraduationCap, Files, ClipboardCheck, School, CheckCircle2, Settings, Sparkles, FileText }
 
-type View = 'Tổng quan' | 'Lịch dạy' | 'Giáo án' | 'Thư viện hoạt động' | 'Lớp học' | 'Học sinh' | 'Phiếu học tập' | 'Đánh giá' | 'Chủ nhiệm' | 'Điểm danh' | 'Tài nguyên' | 'Cài đặt' | 'Trợ lý AI' | 'Quản trị giáo viên'
+type View = 'Tổng quan' | 'Lịch dạy' | 'Giáo án' | 'Thư viện hoạt động' | 'Lớp học' | 'Học sinh' | 'Phiếu học tập' | 'Đánh giá' | 'Chủ nhiệm' | 'Điểm danh' | 'Báo cáo & Thống kê' | 'Tài nguyên' | 'Cài đặt' | 'Trợ lý AI' | 'Quản trị giáo viên'
 
 function Sidebar({ active, onSelect, open, onClose }: { active: View; onSelect: (view: View) => void; open: boolean; onClose: () => void }) {
   const { user, logout } = useAuth()
@@ -424,6 +425,7 @@ function GenericView({ view, onNavigate }: { view: View; onNavigate: (view: View
   if (view === 'Học sinh') return <ClassroomManager initialSection="students" />
   if (view === 'Thư viện hoạt động') return <LibraryView />
   if (view === 'Chủ nhiệm') return <HomeroomView onNavigate={onNavigate} />
+  if (view === 'Báo cáo & Thống kê') return <ReportsView />
   if (['Lịch dạy', 'Phiếu học tập', 'Đánh giá', 'Điểm danh', 'Tài nguyên', 'Cài đặt'].includes(view)) return <WorkspaceModule view={view as 'Lịch dạy' | 'Phiếu học tập' | 'Đánh giá' | 'Điểm danh' | 'Tài nguyên' | 'Cài đặt'} />
   return <div className="flex flex-col gap-6"><PageTitle eyebrow="TeachFlow workspace" title={view} description="Quản lý và theo dõi công việc giảng dạy của bạn." action={<button className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700"><Plus className="size-4" /> Tạo mới</button>} /><div className="grid gap-4 sm:grid-cols-3"><div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">Tổng số</p><p className="mt-2 text-3xl font-semibold text-slate-900">0</p></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">Đang hoạt động</p><p className="mt-2 text-3xl font-semibold text-teal-700">0</p></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">Cập nhật gần đây</p><p className="mt-2 text-3xl font-semibold text-slate-900">Chưa có</p></div></div><div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center"><div className="mx-auto grid size-14 place-items-center rounded-2xl bg-teal-50 text-teal-600"><FileText /></div><h2 className="mt-4 font-semibold text-slate-900">Không gian {view.toLowerCase()}</h2><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">Các dữ liệu và công cụ dành cho {view.toLowerCase()} sẽ hiển thị tại đây. Bắt đầu bằng cách tạo nội dung mới.</p></div></div>
 }
