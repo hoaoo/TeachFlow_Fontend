@@ -26,6 +26,8 @@ import {
   GraduationCap,
   BookOpen,
   Trash2,
+  History,
+  ScrollText,
 } from 'lucide-react'
 import {
   getTeachers,
@@ -35,6 +37,7 @@ import {
   resetTeacherPassword,
   type TeacherAccount,
 } from '@/services/admin-teacher-service'
+import { getAuditLogs, type AuditLogRecord } from '@/services/audit-service'
 import {
   getTeachingAssignments,
   createTeachingAssignment,
@@ -108,6 +111,37 @@ export function AdminTeachersView() {
   const [selectedAsgClass, setSelectedAsgClass] = useState('')
   const [selectedAsgSubject, setSelectedAsgSubject] = useState('')
   const [addingAssignment, setAddingAssignment] = useState(false)
+
+  // Audit Logs State
+  const [auditDialogOpen, setAuditDialogOpen] = useState(false)
+  const [auditLogs, setAuditLogs] = useState<AuditLogRecord[]>([])
+  const [auditLoading, setAuditLoading] = useState(false)
+  const [auditKeyword, setAuditKeyword] = useState('')
+  const [auditActionFilter, setAuditActionFilter] = useState('')
+  const [auditPage, setAuditPage] = useState(1)
+  const [auditTotalPages, setAuditTotalPages] = useState(1)
+  const [auditTotal, setAuditTotal] = useState(0)
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null)
+
+  const fetchAuditLogs = async (p = 1) => {
+    try {
+      setAuditLoading(true)
+      const res = await getAuditLogs({
+        page: p,
+        pageSize: 20,
+        keyword: auditKeyword.trim() || undefined,
+        action: auditActionFilter || undefined,
+      })
+      setAuditLogs(res.items || [])
+      setAuditTotal(res.totalItems || 0)
+      setAuditTotalPages(res.totalPages || 1)
+      setAuditPage(res.page || 1)
+    } catch (err: any) {
+      toast.error('Lỗi khi tải nhật ký hoạt động: ' + (err.message || 'Vui lòng thử lại'))
+    } finally {
+      setAuditLoading(false)
+    }
+  }
 
   const fetchTeachers = async () => {
     try {
@@ -364,15 +398,26 @@ export function AdminTeachersView() {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setCreateError('')
-            setCreateDialogOpen(true)
-          }}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 transition"
-        >
-          <Plus className="size-4" /> Tạo tài khoản
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              setAuditDialogOpen(true)
+              fetchAuditLogs(1)
+            }}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition"
+          >
+            <History className="size-4 text-slate-500" /> Nhật ký hệ thống
+          </button>
+          <button
+            onClick={() => {
+              setCreateError('')
+              setCreateDialogOpen(true)
+            }}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 transition"
+          >
+            <Plus className="size-4" /> Tạo tài khoản
+          </button>
+        </div>
       </div>
 
       {/* Stats Overview */}
@@ -1221,6 +1266,187 @@ export function AdminTeachersView() {
               >
                 Đóng
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Audit Logs Dialog */}
+      {auditDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="grid size-9 place-items-center rounded-xl bg-teal-50 text-teal-600">
+                  <History className="size-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">
+                    Nhật ký hoạt động hệ thống (Audit Trail)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Theo dõi các thao tác quản trị, xác thực, phân công và dữ liệu học sinh ({auditTotal} bản ghi)
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAuditDialogOpen(false)}
+                className="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            {/* Filter bar */}
+            <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 bg-white p-4">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm theo email, nội dung, ID..."
+                  value={auditKeyword}
+                  onChange={(e) => setAuditKeyword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') fetchAuditLogs(1)
+                  }}
+                  className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-xs focus:border-teal-500 focus:outline-none"
+                />
+              </div>
+
+              <select
+                value={auditActionFilter}
+                onChange={(e) => {
+                  setAuditActionFilter(e.target.value)
+                  // auto refresh
+                  setTimeout(() => fetchAuditLogs(1), 0)
+                }}
+                className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 bg-white focus:border-teal-500 focus:outline-none"
+              >
+                <option value="">Tất cả hành động</option>
+                <option value="AUTH_">Xác thực / Đăng nhập</option>
+                <option value="TEACHER_">Quản lý giáo viên</option>
+                <option value="STUDENT_">Học sinh & Ghi danh</option>
+                <option value="TEACHING_ASSIGNMENT_">Phân công giảng dạy</option>
+                <option value="ATTENDANCE_">Điểm danh</option>
+                <option value="ASSESSMENT_">Đánh giá</option>
+              </select>
+
+              <button
+                onClick={() => fetchAuditLogs(1)}
+                className="rounded-xl bg-teal-600 px-4 py-2 text-xs font-semibold text-white hover:bg-teal-700 transition"
+              >
+                Lọc
+              </button>
+            </div>
+
+            {/* Log list table */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {auditLoading ? (
+                <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                  <Loader2 className="size-8 animate-spin text-teal-600" />
+                  <p className="mt-3 text-xs">Đang tải nhật ký...</p>
+                </div>
+              ) : auditLogs.length === 0 ? (
+                <div className="py-16 text-center text-slate-400">
+                  <ScrollText className="mx-auto size-12 text-slate-300" />
+                  <p className="mt-2 text-sm font-medium text-slate-600">Chưa có bản ghi nhật ký phù hợp</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden">
+                  {auditLogs.map((log) => {
+                    const isExpanded = expandedLogId === log.id
+                    const isSuccess = log.status === 'SUCCESS'
+                    return (
+                      <div key={log.id} className="p-3.5 hover:bg-slate-50/50 transition">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-start gap-3">
+                            <span
+                              className={`mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                isSuccess
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-rose-50 text-rose-700 border border-rose-200'
+                              }`}
+                            >
+                              {log.status || 'SUCCESS'}
+                            </span>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-xs font-semibold text-slate-800">
+                                  {log.action}
+                                </span>
+                                {log.resourceType && (
+                                  <span className="rounded bg-teal-50 px-1.5 py-0.2 text-[10px] font-medium text-teal-700">
+                                    {log.resourceType}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="mt-0.5 text-xs text-slate-500">
+                                Thực hiện bởi:{' '}
+                                <strong className="text-slate-700">
+                                  {log.actorEmail || log.actorUserId}
+                                </strong>
+                                {log.ipAddress && ` · IP: ${log.ipAddress}`}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <span className="text-[11px] text-slate-400 whitespace-nowrap font-mono">
+                              {new Date(log.createdAt).toLocaleString('vi-VN')}
+                            </span>
+                            {log.details && (
+                              <button
+                                onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                                className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
+                              >
+                                {isExpanded ? 'Ẩn chi tiết' : 'Chi tiết'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Collapsible details */}
+                        {isExpanded && log.details && (
+                          <div className="mt-3 rounded-lg bg-slate-900 p-3 font-mono text-[11px] text-slate-200 overflow-x-auto">
+                            {(() => {
+                              try {
+                                const parsed = JSON.parse(log.details)
+                                return <pre>{JSON.stringify(parsed, null, 2)}</pre>
+                              } catch {
+                                return <div>{log.details}</div>
+                              }
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Pagination Footer */}
+            <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/50 px-6 py-3">
+              <span className="text-xs text-slate-500">
+                Trang {auditPage} / {auditTotalPages} ({auditTotal} bản ghi)
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => fetchAuditLogs(Math.max(1, auditPage - 1))}
+                  disabled={auditPage <= 1 || auditLoading}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50 hover:bg-slate-50"
+                >
+                  Trang trước
+                </button>
+                <button
+                  onClick={() => fetchAuditLogs(Math.min(auditTotalPages, auditPage + 1))}
+                  disabled={auditPage >= auditTotalPages || auditLoading}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50 hover:bg-slate-50"
+                >
+                  Trang sau
+                </button>
+              </div>
             </div>
           </div>
         </div>
