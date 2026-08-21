@@ -7,6 +7,7 @@ import {
   getSchoolYears,
   getGrades,
   createClass as apiCreateClass,
+  updateClass as apiUpdateClass,
   deleteClass as apiDeleteClass,
   addStudentToClass as apiAddStudent,
   removeStudentFromClass as apiRemoveStudent,
@@ -19,6 +20,14 @@ import {
   type GradeOption,
   type StudentEnrollmentRecord,
 } from '@/services/classroom-service'
+import {
+  getMyTeachingContexts,
+  declareTeachingContext,
+  deactivateTeachingContext,
+  getSubjects,
+  type TeachingAssignmentRecord,
+  type SubjectOption,
+} from '@/services/teaching-assignment-service'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -46,7 +55,7 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
   const [submitting, setSubmitting] = useState(false)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('Tất cả')
-  const [dialog, setDialog] = useState<'add-class' | 'add-student' | 'comment' | 'delete' | 'transfer' | null>(null)
+  const [dialog, setDialog] = useState<'add-class' | 'edit-class' | 'add-student' | 'comment' | 'delete' | 'transfer' | null>(null)
   const [selected, setSelected] = useState<StudentRecord | null>(null)
 
   // Form states - Create Class
@@ -55,7 +64,20 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
   const [formSchoolYearId, setFormSchoolYearId] = useState('')
   const [formGradeId, setFormGradeId] = useState('')
   const [formRoom, setFormRoom] = useState('Phòng 204')
+
+  // Form states - Edit Class
+  const [editClassName, setEditClassName] = useState('')
+  const [editClassCode, setEditClassCode] = useState('')
+  const [editClassRoom, setEditClassRoom] = useState('')
+  const [editClassSchedule, setEditClassSchedule] = useState('')
+
+  // Form states - Add Student (Full demographic & contact)
   const [studentName, setStudentName] = useState('')
+  const [studentGender, setStudentGender] = useState('Nam')
+  const [studentDob, setStudentDob] = useState('')
+  const [studentParentName, setStudentParentName] = useState('')
+  const [studentParentPhone, setStudentParentPhone] = useState('')
+  const [studentNote, setStudentNote] = useState('')
   const [comment, setComment] = useState('')
 
   useEffect(() => {
@@ -100,6 +122,40 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
   const notify = (message: string) => toast.success(message)
   const openStudent = (student: StudentRecord, classId = currentClass.id) => { setSelected(student); setView({ page: 'student', classId, studentId: student.id }) }
 
+  const openEditClass = (item: ClassRecord) => {
+    setEditClassName(item.name || '')
+    setEditClassCode(item.code || '')
+    setEditClassRoom(item.room || '')
+    setEditClassSchedule(item.schedule || '')
+    setDialog('edit-class')
+  }
+
+  const updateClassDetails = async () => {
+    if (!editClassName.trim()) {
+      toast.error('Vui lòng nhập tên lớp học')
+      return
+    }
+    setSubmitting(true)
+    try {
+      const updated = await apiUpdateClass(currentClass.id, {
+        name: editClassName.trim(),
+        code: editClassCode.trim() || undefined,
+        room: editClassRoom.trim() || undefined,
+        schedule: editClassSchedule.trim() || undefined,
+      })
+      setClasses((items) => items.map((item) => (item.id === currentClass.id ? { ...item, ...updated } : item)))
+      setDialog(null)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
+      }
+      notify(`Đã cập nhật thông tin lớp ${updated.name}`)
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi cập nhật lớp học')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const addClass = async () => {
     if (!formName.trim()) {
       toast.error('Vui lòng nhập tên lớp học')
@@ -143,9 +199,20 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
     if (!studentName.trim()) return
     setSubmitting(true)
     try {
-      const updatedClass = await apiAddStudent(currentClass.id, { fullName: studentName.trim() })
+      const updatedClass = await apiAddStudent(currentClass.id, {
+        fullName: studentName.trim(),
+        gender: studentGender,
+        dob: studentDob || undefined,
+        parentName: studentParentName.trim() || undefined,
+        parentPhone: studentParentPhone.trim() || undefined,
+        note: studentNote.trim() || undefined,
+      })
       setClasses((items) => items.map((item) => item.id === currentClass.id ? updatedClass : item))
       setStudentName('')
+      setStudentDob('')
+      setStudentParentName('')
+      setStudentParentPhone('')
+      setStudentNote('')
       setDialog(null)
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
@@ -216,11 +283,31 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
         setDialog={setDialog}
         studentName={studentName}
         setStudentName={setStudentName}
+        studentGender={studentGender}
+        setStudentGender={setStudentGender}
+        studentDob={studentDob}
+        setStudentDob={setStudentDob}
+        studentParentName={studentParentName}
+        setStudentParentName={setStudentParentName}
+        studentParentPhone={studentParentPhone}
+        setStudentParentPhone={setStudentParentPhone}
+        studentNote={studentNote}
+        setStudentNote={setStudentNote}
         addStudent={addStudent}
         selected={selected}
         setSelected={setSelected}
         deleteStudent={deleteStudent}
         submitting={submitting}
+        onOpenEditClass={() => openEditClass(currentClass)}
+        editClassName={editClassName}
+        setEditClassName={setEditClassName}
+        editClassCode={editClassCode}
+        setEditClassCode={setEditClassCode}
+        editClassRoom={editClassRoom}
+        setEditClassRoom={setEditClassRoom}
+        editClassSchedule={editClassSchedule}
+        setEditClassSchedule={setEditClassSchedule}
+        updateClassDetails={updateClassDetails}
       />
     )
   if (initialSection === 'students') return <StudentDirectory students={filteredStudents} classes={classes} query={query} setQuery={setQuery} filter={filter} setFilter={setFilter} onOpenStudent={(student) => openStudent(student, allStudents.find((item) => item.id === student.id)?.classId)} />
@@ -483,11 +570,31 @@ function ClassDetail({
   setDialog,
   studentName,
   setStudentName,
+  studentGender,
+  setStudentGender,
+  studentDob,
+  setStudentDob,
+  studentParentName,
+  setStudentParentName,
+  studentParentPhone,
+  setStudentParentPhone,
+  studentNote,
+  setStudentNote,
   addStudent,
   selected,
   setSelected,
   deleteStudent,
   submitting,
+  onOpenEditClass,
+  editClassName,
+  setEditClassName,
+  editClassCode,
+  setEditClassCode,
+  editClassRoom,
+  setEditClassRoom,
+  editClassSchedule,
+  setEditClassSchedule,
+  updateClassDetails,
 }: {
   classItem: ClassRecord;
   query: string;
@@ -495,18 +602,101 @@ function ClassDetail({
   onBack: () => void;
   onOpenStudent: (student: StudentRecord) => void;
   dialog: string | null;
-  setDialog: (d: 'add-student' | 'delete' | null) => void;
+  setDialog: (d: 'add-student' | 'edit-class' | 'delete' | null) => void;
   studentName: string;
   setStudentName: (v: string) => void;
+  studentGender: string;
+  setStudentGender: (v: string) => void;
+  studentDob: string;
+  setStudentDob: (v: string) => void;
+  studentParentName: string;
+  setStudentParentName: (v: string) => void;
+  studentParentPhone: string;
+  setStudentParentPhone: (v: string) => void;
+  studentNote: string;
+  setStudentNote: (v: string) => void;
   addStudent: () => void;
   selected: StudentRecord | null;
   setSelected: (s: StudentRecord | null) => void;
   deleteStudent: () => void;
   submitting: boolean;
+  onOpenEditClass: () => void;
+  editClassName: string;
+  setEditClassName: (v: string) => void;
+  editClassCode: string;
+  setEditClassCode: (v: string) => void;
+  editClassRoom: string;
+  setEditClassRoom: (v: string) => void;
+  editClassSchedule: string;
+  setEditClassSchedule: (v: string) => void;
+  updateClassDetails: () => void;
 }) {
   const students = (classItem.students || []).filter((student) =>
     student.name.toLowerCase().includes(query.toLowerCase()),
   );
+
+  // Teaching contexts state for this classroom
+  const [teachingContexts, setTeachingContexts] = useState<TeachingAssignmentRecord[]>([]);
+  const [loadingContexts, setLoadingContexts] = useState(true);
+  const [subjectsList, setSubjectsList] = useState<SubjectOption[]>([]);
+  const [declareOpen, setDeclareOpen] = useState(false);
+  const [selectedSubjectId, setSelectedSubjectId] = useState('');
+  const [declaring, setDeclaring] = useState(false);
+
+  const loadTeachingContexts = useCallback(async () => {
+    if (!classItem.id) return;
+    setLoadingContexts(true);
+    try {
+      const [ctxs, subs] = await Promise.all([
+        getMyTeachingContexts({ classroomId: classItem.id }),
+        getSubjects(),
+      ]);
+      setTeachingContexts(ctxs.filter((c) => c.isActive !== false));
+      setSubjectsList(subs.filter((s) => s.isActive !== false));
+      if (subs.length > 0) {
+        setSelectedSubjectId(subs[0].id);
+      }
+    } catch {
+      setTeachingContexts([]);
+    } finally {
+      setLoadingContexts(false);
+    }
+  }, [classItem.id]);
+
+  useEffect(() => {
+    loadTeachingContexts();
+  }, [loadTeachingContexts]);
+
+  const handleDeclareSubject = async () => {
+    if (!selectedSubjectId) {
+      toast.error('Vui lòng chọn môn học');
+      return;
+    }
+    setDeclaring(true);
+    try {
+      const declared = await declareTeachingContext({
+        classroomId: classItem.id,
+        subjectId: selectedSubjectId,
+      });
+      setTeachingContexts((prev) => [...prev, declared]);
+      setDeclareOpen(false);
+      toast.success('Đã khai báo môn giảng dạy thành công');
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi khai báo môn học');
+    } finally {
+      setDeclaring(false);
+    }
+  };
+
+  const handleDeactivateSubject = async (ctxId: string, subjectName: string) => {
+    try {
+      await deactivateTeachingContext(ctxId);
+      setTeachingContexts((prev) => prev.filter((c) => c.id !== ctxId));
+      toast.success(`Đã ngừng phụ trách môn ${subjectName}`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi hủy phụ trách môn');
+    }
+  };
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -517,9 +707,14 @@ function ClassDetail({
         title={`${classItem.name} ${classItem.code ? `(${classItem.code})` : ''} · ${classItem.room}`}
         description={`${classItem.teacher} · ${classItem.schedule}`}
         action={
-          <Button onClick={() => setDialog('add-student')}>
-            <UserPlus data-icon="inline-start" />Thêm học sinh
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" onClick={onOpenEditClass}>
+              <Edit2 className="size-4" /> Sửa thông tin lớp
+            </Button>
+            <Button onClick={() => setDialog('add-student')}>
+              <UserPlus data-icon="inline-start" />Thêm học sinh
+            </Button>
+          </div>
         }
       />
       <div className="mb-6 grid gap-4 sm:grid-cols-4">
@@ -533,6 +728,53 @@ function ClassDetail({
           icon={<Heart />}
         />
       </div>
+
+      {/* Teaching Context Section (Môn học phụ trách trong lớp) */}
+      <Card className="mb-6">
+        <CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <BookOpen className="size-4 text-teal-600" /> Môn học phụ trách tại lớp này
+            </CardTitle>
+            <CardDescription>
+              Ngữ cảnh giảng dạy do giáo viên tự khai báo để sử dụng trong Lịch dạy, Đánh giá, và Giáo án.
+            </CardDescription>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setDeclareOpen(true)} className="gap-1.5 text-xs">
+            <Plus className="size-3.5" /> Khai báo môn dạy
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {loadingContexts ? (
+            <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" /> Đang tải danh sách môn học...
+            </div>
+          ) : teachingContexts.length === 0 ? (
+            <div className="rounded-xl border border-dashed p-4 text-center text-xs text-muted-foreground">
+              Chưa khai báo môn dạy nào cho lớp này. Nhấn <strong>"Khai báo môn dạy"</strong> để bắt đầu.
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {teachingContexts.map((ctx) => (
+                <div
+                  key={ctx.id}
+                  className="flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50/50 px-3 py-1.5 text-sm"
+                >
+                  <span className="font-medium text-teal-900">{ctx.subject?.name || 'Môn học'}</span>
+                  <button
+                    onClick={() => handleDeactivateSubject(ctx.id, ctx.subject?.name || '')}
+                    className="text-slate-400 hover:text-red-600 transition"
+                    title="Ngừng phụ trách môn này"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -609,25 +851,89 @@ function ClassDetail({
         </CardContent>
       </Card>
 
-      {/* Add Student Dialog */}
+      {/* Add Student Dialog (Full Form) */}
       <Dialog open={dialog === 'add-student'} onOpenChange={(open) => !open && setDialog(null)}>
-        <DialogContent className="sm:max-w-[420px]">
+        <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle>Thêm học sinh mới</DialogTitle>
-            <DialogDescription>Thêm học sinh vào danh sách lớp {classItem.name}.</DialogDescription>
+            <DialogDescription>Nhập thông tin chi tiết học sinh vào lớp {classItem.name}.</DialogDescription>
           </DialogHeader>
-          <div className="py-2">
-            <Label htmlFor="student-name-input" className="text-xs font-semibold">
-              Họ và tên học sinh *
-            </Label>
-            <Input
-              id="student-name-input"
-              className="mt-1"
-              value={studentName}
-              onChange={(e) => setStudentName(e.target.value)}
-              placeholder="Ví dụ: Nguyễn Văn An"
-              autoFocus
-            />
+          <div className="grid gap-3 py-2">
+            <div>
+              <Label htmlFor="student-name-input" className="text-xs font-semibold">
+                Họ và tên học sinh *
+              </Label>
+              <Input
+                id="student-name-input"
+                className="mt-1"
+                value={studentName}
+                onChange={(e) => setStudentName(e.target.value)}
+                placeholder="Ví dụ: Nguyễn Văn An"
+                autoFocus
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="student-gender-input" className="text-xs font-semibold">Giới tính</Label>
+                <select
+                  id="student-gender-input"
+                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  value={studentGender}
+                  onChange={(e) => setStudentGender(e.target.value)}
+                >
+                  <option value="Nam">Nam</option>
+                  <option value="Nữ">Nữ</option>
+                  <option value="Khác">Khác</option>
+                </select>
+              </div>
+
+              <div>
+                <Label htmlFor="student-dob-input" className="text-xs font-semibold">Ngày sinh</Label>
+                <Input
+                  id="student-dob-input"
+                  type="date"
+                  className="mt-1"
+                  value={studentDob}
+                  onChange={(e) => setStudentDob(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="student-parent-name" className="text-xs font-semibold">Họ tên phụ huynh</Label>
+                <Input
+                  id="student-parent-name"
+                  className="mt-1"
+                  value={studentParentName}
+                  onChange={(e) => setStudentParentName(e.target.value)}
+                  placeholder="Nguyễn Văn Ba"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="student-parent-phone" className="text-xs font-semibold">SĐT phụ huynh</Label>
+                <Input
+                  id="student-parent-phone"
+                  className="mt-1"
+                  value={studentParentPhone}
+                  onChange={(e) => setStudentParentPhone(e.target.value)}
+                  placeholder="0912345678"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="student-note-input" className="text-xs font-semibold">Ghi chú ban đầu</Label>
+              <Input
+                id="student-note-input"
+                className="mt-1"
+                value={studentNote}
+                onChange={(e) => setStudentNote(e.target.value)}
+                placeholder="VD: Cần hỗ trợ môn Toán, ngồi bàn đầu..."
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialog(null)}>
@@ -635,6 +941,95 @@ function ClassDetail({
             </Button>
             <Button onClick={addStudent} disabled={submitting || !studentName.trim()} className="bg-teal-600 hover:bg-teal-700">
               {submitting ? 'Đang thêm...' : 'Thêm học sinh'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Class Dialog */}
+      <Dialog open={dialog === 'edit-class'} onOpenChange={(open) => !open && setDialog(null)}>
+        <DialogContent className="sm:max-w-[460px]">
+          <DialogHeader>
+            <DialogTitle>Sửa thông tin lớp học</DialogTitle>
+            <DialogDescription>Cập nhật tên lớp, mã lớp, phòng học và thời khóa biểu.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div>
+              <Label htmlFor="edit-class-name" className="text-xs font-semibold">Tên lớp *</Label>
+              <Input
+                id="edit-class-name"
+                className="mt-1"
+                value={editClassName}
+                onChange={(e) => setEditClassName(e.target.value)}
+                placeholder="Lớp 4A1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-class-code" className="text-xs font-semibold">Mã lớp</Label>
+              <Input
+                id="edit-class-code"
+                className="mt-1"
+                value={editClassCode}
+                onChange={(e) => setEditClassCode(e.target.value)}
+                placeholder="4A1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-class-room" className="text-xs font-semibold">Phòng học</Label>
+              <Input
+                id="edit-class-room"
+                className="mt-1"
+                value={editClassRoom}
+                onChange={(e) => setEditClassRoom(e.target.value)}
+                placeholder="Phòng 204"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-class-schedule" className="text-xs font-semibold">Lịch học</Label>
+              <Input
+                id="edit-class-schedule"
+                className="mt-1"
+                value={editClassSchedule}
+                onChange={(e) => setEditClassSchedule(e.target.value)}
+                placeholder="Sáng · Thứ 2 - Thứ 6"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialog(null)}>Hủy</Button>
+            <Button onClick={updateClassDetails} disabled={submitting || !editClassName.trim()}>
+              {submitting ? 'Đang lưu...' : 'Lưu thay đổi'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Declare Subject Dialog */}
+      <Dialog open={declareOpen} onOpenChange={(open) => !open && setDeclareOpen(false)}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Khai báo môn giảng dạy</DialogTitle>
+            <DialogDescription>
+              Chọn môn học bạn trực tiếp giảng dạy tại lớp {classItem.name}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Label htmlFor="declare-subject-select" className="text-xs font-semibold">Môn học *</Label>
+            <select
+              id="declare-subject-select"
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={selectedSubjectId}
+              onChange={(e) => setSelectedSubjectId(e.target.value)}
+            >
+              {subjectsList.map((s) => (
+                <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+              ))}
+            </select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeclareOpen(false)} disabled={declaring}>Hủy</Button>
+            <Button onClick={handleDeclareSubject} disabled={declaring || !selectedSubjectId}>
+              {declaring ? <Loader2 className="size-4 animate-spin" /> : 'Xác nhận khai báo'}
             </Button>
           </DialogFooter>
         </DialogContent>
