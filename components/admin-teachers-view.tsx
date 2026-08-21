@@ -23,6 +23,9 @@ import {
   Phone,
   Mail,
   UserCheck,
+  GraduationCap,
+  BookOpen,
+  Trash2,
 } from 'lucide-react'
 import {
   getTeachers,
@@ -32,6 +35,20 @@ import {
   resetTeacherPassword,
   type TeacherAccount,
 } from '@/services/admin-teacher-service'
+import {
+  getTeachingAssignments,
+  createTeachingAssignment,
+  deactivateTeachingAssignment,
+  getSubjects,
+  type TeachingAssignmentRecord,
+  type SubjectOption,
+} from '@/services/teaching-assignment-service'
+import {
+  getSchoolYears,
+  getClasses,
+  type SchoolYearOption,
+  type ClassRecord,
+} from '@/services/classroom-service'
 import { toast } from 'sonner'
 
 export function AdminTeachersView() {
@@ -79,6 +96,18 @@ export function AdminTeachersView() {
   const [showResetPassConfirm, setShowResetPassConfirm] = useState(false)
   const [resetLoading, setResetLoading] = useState(false)
   const [resetError, setResetError] = useState('')
+
+  // Form states - Teaching Assignment
+  const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false)
+  const [assignmentsList, setAssignmentsList] = useState<TeachingAssignmentRecord[]>([])
+  const [assignmentsLoading, setAssignmentsLoading] = useState(false)
+  const [schoolYearsList, setSchoolYearsList] = useState<SchoolYearOption[]>([])
+  const [classesList, setClassesList] = useState<ClassRecord[]>([])
+  const [subjectsList, setSubjectsList] = useState<SubjectOption[]>([])
+  const [selectedAsgSchoolYear, setSelectedAsgSchoolYear] = useState('')
+  const [selectedAsgClass, setSelectedAsgClass] = useState('')
+  const [selectedAsgSubject, setSelectedAsgSubject] = useState('')
+  const [addingAssignment, setAddingAssignment] = useState(false)
 
   const fetchTeachers = async () => {
     try {
@@ -254,6 +283,68 @@ export function AdminTeachersView() {
       setResetError(err.message || 'Không thể đặt lại mật khẩu.')
     } finally {
       setResetLoading(false)
+    }
+  }
+
+  // Assignment Handlers
+  const openAssignmentDialog = async (teacher: TeacherAccount) => {
+    setSelectedTeacher(teacher)
+    setAssignmentDialogOpen(true)
+    setAssignmentsLoading(true)
+    try {
+      const [asgs, years, cls, subs] = await Promise.all([
+        getTeachingAssignments({ teacherId: teacher.id }),
+        getSchoolYears(),
+        getClasses(),
+        getSubjects(),
+      ])
+      setAssignmentsList(asgs)
+      setSchoolYearsList(years)
+      setClassesList(cls)
+      setSubjectsList(subs)
+
+      const curYear = years.find((y) => y.isCurrent) || years[0]
+      if (curYear) setSelectedAsgSchoolYear(curYear.id)
+      if (cls.length > 0) setSelectedAsgClass(cls[0].id)
+      if (subs.length > 0) setSelectedAsgSubject(subs[0].id)
+    } catch (err: any) {
+      toast.error('Lỗi khi tải dữ liệu phân công: ' + (err.message || 'Vui lòng thử lại'))
+    } finally {
+      setAssignmentsLoading(false)
+    }
+  }
+
+  const handleCreateAssignment = async () => {
+    if (!selectedTeacher || !selectedAsgClass || !selectedAsgSubject) {
+      toast.error('Vui lòng chọn đầy đủ lớp học và môn học')
+      return
+    }
+    setAddingAssignment(true)
+    try {
+      const created = await createTeachingAssignment({
+        teacherId: selectedTeacher.id,
+        classroomId: selectedAsgClass,
+        subjectId: selectedAsgSubject,
+        schoolYearId: selectedAsgSchoolYear || undefined,
+      })
+      toast.success(`Đã phân công môn ${created.subject?.name} - ${created.classroom?.name}`)
+      setAssignmentsList((prev) => [...prev, created])
+    } catch (err: any) {
+      toast.error(err.message || 'Không thể tạo phân công giảng dạy')
+    } finally {
+      setAddingAssignment(false)
+    }
+  }
+
+  const handleDeactivateAssignment = async (asgId: string) => {
+    try {
+      await deactivateTeachingAssignment(asgId)
+      toast.success('Đã hủy phân công giảng dạy')
+      setAssignmentsList((prev) =>
+        prev.map((a) => (a.id === asgId ? { ...a, isActive: false } : a)),
+      )
+    } catch (err: any) {
+      toast.error(err.message || 'Không thể hủy phân công')
     }
   }
 
@@ -463,6 +554,14 @@ export function AdminTeachersView() {
 
                     <td className="px-5 py-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => openAssignmentDialog(teacher)}
+                          title="Phân công giảng dạy"
+                          className="grid size-8 place-items-center rounded-lg border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100"
+                        >
+                          <GraduationCap className="size-3.5" />
+                        </button>
+
                         <button
                           onClick={() => openEditDialog(teacher)}
                           title="Chỉnh sửa thông tin"
@@ -942,6 +1041,187 @@ export function AdminTeachersView() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Teaching Assignment Dialog */}
+      {assignmentDialogOpen && selectedTeacher && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-xl animate-in fade-in zoom-in-95 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <span className="grid size-10 place-items-center rounded-xl bg-teal-50 text-teal-600">
+                  <GraduationCap className="size-5" />
+                </span>
+                <div>
+                  <h2 className="text-base font-semibold text-slate-900">
+                    Phân công giảng dạy: {selectedTeacher.fullName}
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Quản lý các môn học và lớp được phân công trong từng năm học.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAssignmentDialogOpen(false)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-4 space-y-6">
+              {/* Form Add Assignment */}
+              <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-3 flex items-center gap-1.5">
+                  <Plus className="size-3.5 text-teal-600" /> Thêm phân công mới
+                </h3>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-700">
+                      Năm học *
+                    </label>
+                    <select
+                      className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 outline-none focus:border-teal-500"
+                      value={selectedAsgSchoolYear}
+                      onChange={(e) => setSelectedAsgSchoolYear(e.target.value)}
+                    >
+                      {schoolYearsList.map((sy) => (
+                        <option key={sy.id} value={sy.id}>
+                          {sy.name} {sy.isCurrent ? '(Hiện tại)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-700">
+                      Lớp học *
+                    </label>
+                    <select
+                      className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 outline-none focus:border-teal-500"
+                      value={selectedAsgClass}
+                      onChange={(e) => setSelectedAsgClass(e.target.value)}
+                    >
+                      {classesList
+                        .filter(
+                          (c) =>
+                            !selectedAsgSchoolYear ||
+                            c.schoolYearId === selectedAsgSchoolYear ||
+                            !c.schoolYearId,
+                        )
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} {c.code ? `(${c.code})` : ''} - {c.grade}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-700">
+                      Môn học *
+                    </label>
+                    <select
+                      className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 outline-none focus:border-teal-500"
+                      value={selectedAsgSubject}
+                      onChange={(e) => setSelectedAsgSubject(e.target.value)}
+                    >
+                      {subjectsList.map((sub) => (
+                        <option key={sub.id} value={sub.id}>
+                          {sub.name} ({sub.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    disabled={addingAssignment}
+                    onClick={handleCreateAssignment}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+                  >
+                    {addingAssignment && <Loader2 className="size-3 animate-spin" />}
+                    <span>{addingAssignment ? 'Đang thêm...' : 'Phân công môn học'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Current Assignments List */}
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-3 flex items-center gap-1.5">
+                  <BookOpen className="size-3.5 text-teal-600" /> Danh sách môn đang được phân công (
+                  {assignmentsList.length})
+                </h3>
+
+                {assignmentsLoading ? (
+                  <div className="py-8 text-center text-xs text-slate-400">
+                    <Loader2 className="mx-auto size-5 animate-spin text-teal-600 mb-2" />
+                    Đang tải danh sách phân công...
+                  </div>
+                ) : assignmentsList.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400">
+                    Chưa có phân công giảng dạy nào cho giáo viên này.
+                  </p>
+                ) : (
+                  <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 overflow-hidden">
+                    {assignmentsList.map((asg) => (
+                      <div
+                        key={asg.id}
+                        className="flex items-center justify-between p-3 text-xs hover:bg-slate-50"
+                      >
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-900">
+                              {asg.subject?.name || 'Môn học'}
+                            </span>
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">
+                              {asg.subject?.code}
+                            </span>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                asg.isActive
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-slate-100 text-slate-500'
+                              }`}
+                            >
+                              {asg.isActive ? 'Đang dạy' : 'Đã hủy'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500">
+                            {asg.classroom?.name} ({asg.classroom?.gradeName || 'Khối 4'}) ·{' '}
+                            {asg.schoolYear?.name || '2026 - 2027'}
+                          </p>
+                        </div>
+
+                        {asg.isActive && (
+                          <button
+                            onClick={() => handleDeactivateAssignment(asg.id)}
+                            title="Hủy phân công"
+                            className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 pt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setAssignmentDialogOpen(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
       )}
