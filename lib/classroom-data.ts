@@ -1,16 +1,22 @@
 export type StudentRecord = {
   id: string
   name: string
+  fullName?: string
+  studentCode?: string
   initials: string
-  gender: 'Nam' | 'Nữ'
+  gender: string
   dob: string
   guardian: string
+  parentName?: string
   phone: string
+  parentPhone?: string
   progress: number
-  status: 'Tốt' | 'Khá' | 'Cần cố gắng'
+  status: 'Tốt' | 'Khá' | 'Cần cố gắng' | string
   attendance: number
   note: string
   color: string
+  enrollmentId?: string
+  enrolledAt?: string | Date
 }
 
 export type ClassRecord = {

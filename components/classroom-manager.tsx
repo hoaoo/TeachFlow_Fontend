@@ -1,25 +1,37 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { classroomClasses, commentSuggestions, type ClassRecord, type StudentRecord } from '@/lib/classroom-data'
+import { type ClassRecord, type StudentRecord } from '@/lib/classroom-data'
 import {
-  getClasses,
+  getClassesWithSummary,
   getSchoolYears,
   getGrades,
   createClass as apiCreateClass,
   updateClass as apiUpdateClass,
   deleteClass as apiDeleteClass,
+  completeClass as apiCompleteClass,
+  cloneClass as apiCloneClass,
+  getClassDashboard,
+  getClassStudents,
   addStudentToClass as apiAddStudent,
+  importStudentsToClass as apiImportStudents,
+  transferStudent as apiTransferStudent,
   removeStudentFromClass as apiRemoveStudent,
+  getClassSchedules,
+  getClassAttendance,
+  getClassAssessments,
+  getClassLessonPlans,
   getStudentAttendance as apiGetStudentAttendance,
   getStudentComments as apiGetStudentComments,
   addStudentComment as apiAddStudentComment,
   getStudentEnrollments as apiGetStudentEnrollments,
-  transferStudent as apiTransferStudent,
-  withdrawStudent as apiWithdrawStudent,
   updateStudent as apiUpdateStudent,
   type SchoolYearOption,
   type GradeOption,
+  type ClassDashboardData,
+  type ClassAttendanceData,
+  type ClassAssessmentData,
+  type ClassLessonPlanRecord,
   type StudentEnrollmentRecord,
 } from '@/services/classroom-service'
 import {
@@ -39,129 +51,169 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
-import { ArrowLeft, BarChart3, CalendarCheck2, ChevronRight, Download, Eye, Filter, GraduationCap, Heart, LayoutGrid, MessageSquare, Plus, Search, Trash2, UserPlus, Users, Sparkles, Loader2, ArrowRightLeft, History, Edit2, BookOpen, X } from 'lucide-react'
+import {
+  ArrowLeft, BarChart3, CalendarCheck2, ChevronRight, Download, Eye, Filter, GraduationCap,
+  Heart, LayoutGrid, MessageSquare, Plus, Search, Trash2, UserPlus, Users, Sparkles, Loader2,
+  ArrowRightLeft, History, Edit2, BookOpen, X, Check, Copy, CheckCircle2, Clock, CalendarDays,
+  FileSpreadsheet, FileText, UploadCloud, AlertCircle, RefreshCw, MoreVertical, ShieldCheck,
+  TrendingUp, Award, Phone, Mail, User, School, ArrowUpRight
+} from 'lucide-react'
+import { ScheduleAttendanceDialog } from '@/components/schedule-attendance-dialog'
 import { generateStudentComment } from '@/services/ai-service'
-import { getStudentAttendanceSummary, type StudentAttendanceSummary } from '@/services/attendance-service'
 
-type ViewState = { page: 'classes' | 'class' | 'student'; classId?: string; studentId?: string }
-const statusVariant = (status: StudentRecord['status']) => status === 'Tốt' ? 'default' : status === 'Khá' ? 'secondary' : 'destructive'
+type ViewState = {
+  page: 'classes' | 'class' | 'student'
+  classId?: string
+  studentId?: string
+  initialTab?: string
+}
+
+const statusVariant = (status: StudentRecord['status']) =>
+  status === 'Tốt' ? 'default' : status === 'Khá' ? 'secondary' : 'destructive'
 
 export function ClassroomManager({ initialSection = 'classes' }: { initialSection?: 'classes' | 'students' }) {
   const [view, setView] = useState<ViewState>({ page: initialSection === 'students' ? 'classes' : 'classes' })
   const [classes, setClasses] = useState<ClassRecord[]>([])
+  const [summaryStats, setSummaryStats] = useState({ totalClasses: 0, totalStudents: 0, avgAttendanceRate: 96 })
   const [schoolYears, setSchoolYears] = useState<SchoolYearOption[]>([])
   const [grades, setGrades] = useState<GradeOption[]>([])
-  const [selectedSchoolYearId, setSelectedSchoolYearId] = useState<string>('')
+  const [selectedSchoolYearId, setSelectedSchoolYearId] = useState<string>('ALL')
   const [selectedGradeId, setSelectedGradeId] = useState<string>('ALL')
+  const [selectedStatus, setSelectedStatus] = useState<string>('ALL')
+  const [selectedSort, setSelectedSort] = useState<string>('name')
   const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState('Tất cả')
-  const [dialog, setDialog] = useState<'add-class' | 'edit-class' | 'add-student' | 'comment' | 'delete' | 'transfer' | null>(null)
-  const [selected, setSelected] = useState<StudentRecord | null>(null)
 
-  // Form states - Create Class
+  // Dialog states
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [editClassTarget, setEditClassTarget] = useState<ClassRecord | null>(null)
+  const [cloneClassTarget, setCloneClassTarget] = useState<ClassRecord | null>(null)
+  const [completeClassTarget, setCompleteClassTarget] = useState<ClassRecord | null>(null)
+  const [deleteClassTarget, setDeleteClassTarget] = useState<ClassRecord | null>(null)
+
+  // Selected student for detail
+  const [selectedStudent, setSelectedStudent] = useState<StudentRecord | null>(null)
+
+  // Create Form State
   const [formName, setFormName] = useState('')
   const [formCode, setFormCode] = useState('')
   const [formSchoolYearId, setFormSchoolYearId] = useState('')
   const [formGradeId, setFormGradeId] = useState('')
   const [formRoom, setFormRoom] = useState('')
-  const [deleteClassOpen, setDeleteClassOpen] = useState(false)
-  const [deletingClass, setDeletingClass] = useState(false)
+  const [formSchedule, setFormSchedule] = useState('Sáng · Thứ 2 - Thứ 6')
+  const [creating, setCreating] = useState(false)
 
-  // Form states - Edit Class
-  const [editClassName, setEditClassName] = useState('')
-  const [editClassCode, setEditClassCode] = useState('')
-  const [editClassRoom, setEditClassRoom] = useState('')
-  const [editClassSchedule, setEditClassSchedule] = useState('')
+  // Edit Form State
+  const [editName, setEditName] = useState('')
+  const [editCode, setEditCode] = useState('')
+  const [editRoom, setEditRoom] = useState('')
+  const [editSchedule, setEditSchedule] = useState('')
+  const [editGradeId, setEditGradeId] = useState('')
+  const [editStatus, setEditStatus] = useState('ACTIVE')
+  const [updating, setUpdating] = useState(false)
 
-  // Form states - Add Student (Full demographic & contact)
-  const [studentName, setStudentName] = useState('')
-  const [studentGender, setStudentGender] = useState('Nam')
-  const [studentDob, setStudentDob] = useState('')
-  const [studentParentName, setStudentParentName] = useState('')
-  const [studentParentPhone, setStudentParentPhone] = useState('')
-  const [studentNote, setStudentNote] = useState('')
-  const [comment, setComment] = useState('')
+  // Clone Form State
+  const [cloneTargetSyId, setCloneTargetSyId] = useState('')
+  const [cloneTargetName, setCloneTargetName] = useState('')
+  const [cloneTargetCode, setCloneTargetCode] = useState('')
+  const [cloneCopyStudents, setCloneCopyStudents] = useState(false)
+  const [cloning, setCloning] = useState(false)
 
-  useEffect(() => {
-    let alive = true
-    Promise.all([getSchoolYears(), getGrades(), getClasses()]).then(([years, gs, clsList]) => {
-      if (alive) {
-        setSchoolYears(years)
-        setGrades(gs)
-        const currentYear = years.find((y) => y.isCurrent) || years[0]
-        if (currentYear) {
-          setSelectedSchoolYearId(currentYear.id)
-          setFormSchoolYearId(currentYear.id)
-        }
-        if (gs.length > 0) {
-          setFormGradeId(gs[0].id)
-        }
-        setClasses(clsList)
-        setLoading(false)
+  const loadInitialData = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [years, gs, classRes] = await Promise.all([
+        getSchoolYears(),
+        getGrades(),
+        getClassesWithSummary(),
+      ])
+      setSchoolYears(years)
+      setGrades(gs)
+
+      const currentYear = years.find((y) => y.isCurrent) || years[0]
+      if (currentYear) {
+        setSelectedSchoolYearId(currentYear.id)
+        setFormSchoolYearId(currentYear.id)
+        setCloneTargetSyId(currentYear.id)
       }
-    })
-    return () => { alive = false }
+      if (gs.length > 0) {
+        setFormGradeId(gs[0].id)
+      }
+
+      setClasses(classRes.items)
+      setSummaryStats(classRes.summary)
+    } catch (err: any) {
+      setError(err?.message || 'Không thể tải danh sách lớp học')
+      toast.error('Không thể tải danh sách lớp học')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  const reloadClasses = async (syId?: string, gId?: string) => {
+  useEffect(() => {
+    loadInitialData()
+  }, [loadInitialData])
+
+  const reloadClasses = async (params?: {
+    schoolYearId?: string
+    gradeId?: string
+    status?: string
+    keyword?: string
+    sort?: string
+  }) => {
     try {
-      const cls = await getClasses({
-        schoolYearId: syId || (selectedSchoolYearId || undefined),
-        gradeId: gId && gId !== 'ALL' ? gId : undefined,
+      const res = await getClassesWithSummary({
+        schoolYearId: params?.schoolYearId ?? (selectedSchoolYearId !== 'ALL' ? selectedSchoolYearId : undefined),
+        gradeId: params?.gradeId ?? (selectedGradeId !== 'ALL' ? selectedGradeId : undefined),
+        status: params?.status ?? (selectedStatus !== 'ALL' ? selectedStatus : undefined),
+        keyword: params?.keyword ?? (query || undefined),
+        sort: params?.sort ?? selectedSort,
       })
-      setClasses(cls)
+      setClasses(res.items)
+      setSummaryStats(res.summary)
     } catch {
       // keep existing
     }
   }
 
-  const currentClass = classes.find((item) => item.id === view.classId) ?? classes[0] ?? {
-    id: '', code: '', name: 'Lớp học', grade: 'Khối', room: 'Phòng học', schedule: 'Thứ 2 - Thứ 6', studentCount: 0, average: 0, attendance: 100, teacher: 'Giáo viên', accent: 'teal', students: []
-  }
-  const currentStudent = currentClass.students?.find((item) => item.id === view.studentId) ?? selected ?? currentClass.students?.[0]
-  const allStudents = useMemo(() => classes.flatMap((item) => (item.students || []).map((student) => ({ ...student, className: item.name, classId: item.id }))), [classes])
-  const filteredStudents = allStudents.filter((student) => (filter === 'Tất cả' || student.className === filter) && `${student.name} ${student.className}`.toLowerCase().includes(query.toLowerCase()))
-  const notify = (message: string) => toast.success(message)
-  const openStudent = (student: StudentRecord, classId = currentClass.id) => { setSelected(student); setView({ page: 'student', classId, studentId: student.id }) }
-
-  const openEditClass = (item: ClassRecord) => {
-    setEditClassName(item.name || '')
-    setEditClassCode(item.code || '')
-    setEditClassRoom(item.room || '')
-    setEditClassSchedule(item.schedule || '')
-    setDialog('edit-class')
+  // Handle Search & Filter triggers
+  const handleSearchChange = (kw: string) => {
+    setQuery(kw)
+    reloadClasses({ keyword: kw })
   }
 
-  const updateClassDetails = async () => {
-    if (!editClassName.trim()) {
-      toast.error('Vui lòng nhập tên lớp học')
-      return
-    }
-    setSubmitting(true)
-    try {
-      const updated = await apiUpdateClass(currentClass.id, {
-        name: editClassName.trim(),
-        code: editClassCode.trim() || undefined,
-        room: editClassRoom.trim() || undefined,
-        schedule: editClassSchedule.trim() || undefined,
-      })
-      setClasses((items) => items.map((item) => (item.id === currentClass.id ? { ...item, ...updated } : item)))
-      setDialog(null)
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
-      }
-      notify(`Đã cập nhật thông tin lớp ${updated.name}`)
-    } catch (err: any) {
-      toast.error(err?.message || 'Lỗi khi cập nhật lớp học')
-    } finally {
-      setSubmitting(false)
-    }
+  const handleSchoolYearChange = (syId: string) => {
+    setSelectedSchoolYearId(syId)
+    reloadClasses({ schoolYearId: syId !== 'ALL' ? syId : undefined })
   }
 
-  const addClass = async () => {
+  const handleGradeChange = (gId: string) => {
+    setSelectedGradeId(gId)
+    reloadClasses({ gradeId: gId !== 'ALL' ? gId : undefined })
+  }
+
+  const handleStatusChange = (st: string) => {
+    setSelectedStatus(st)
+    reloadClasses({ status: st !== 'ALL' ? st : undefined })
+  }
+
+  const handleSortChange = (sort: string) => {
+    setSelectedSort(sort)
+    reloadClasses({ sort })
+  }
+
+  // Action Handlers
+  const handleCreateClass = async () => {
     if (!formName.trim()) {
       toast.error('Vui lòng nhập tên lớp học')
       return
@@ -175,7 +227,7 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
       return
     }
 
-    setSubmitting(true)
+    setCreating(true)
     try {
       const created = await apiCreateClass({
         name: formName.trim(),
@@ -183,358 +235,467 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
         schoolYearId: formSchoolYearId,
         gradeId: formGradeId,
         room: formRoom.trim() || undefined,
+        schedule: formSchedule.trim() || undefined,
       })
-      setClasses((items) => [...items, created])
+      setClasses((prev) => [created, ...prev])
+      setCreateDialogOpen(false)
       setFormName('')
       setFormCode('')
-      setDialog(null)
+      setFormRoom('')
+      toast.success(`Đã tạo lớp ${created.name} thành công!`)
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
       }
-      notify(`Đã tạo lớp ${created.name} (${created.code || ''}) thành công`)
+      reloadClasses()
     } catch (err: any) {
-      toast.error(err?.message || 'Lỗi khi tạo lớp học')
+      toast.error(err?.message || 'Có lỗi xảy ra khi tạo lớp học')
     } finally {
-      setSubmitting(false)
+      setCreating(false)
     }
   }
 
-  const addStudent = async () => {
-    if (!studentName.trim()) return
-    setSubmitting(true)
+  const openEditModal = (cls: ClassRecord) => {
+    setEditClassTarget(cls)
+    setEditName(cls.name || '')
+    setEditCode(cls.code || '')
+    setEditRoom(cls.room || '')
+    setEditSchedule(cls.schedule || 'Sáng · Thứ 2 - Thứ 6')
+    setEditGradeId(cls.gradeId || '')
+    setEditStatus(cls.status || 'ACTIVE')
+  }
+
+  const handleUpdateClass = async () => {
+    if (!editClassTarget || !editName.trim()) {
+      toast.error('Tên lớp không được để trống')
+      return
+    }
+    setUpdating(true)
     try {
-      const updatedClass = await apiAddStudent(currentClass.id, {
-        fullName: studentName.trim(),
-        gender: studentGender,
-        dob: studentDob || undefined,
-        parentName: studentParentName.trim() || undefined,
-        parentPhone: studentParentPhone.trim() || undefined,
-        note: studentNote.trim() || undefined,
+      const updated = await apiUpdateClass(editClassTarget.id, {
+        name: editName.trim(),
+        code: editCode.trim() || undefined,
+        room: editRoom.trim() || undefined,
+        schedule: editSchedule.trim() || undefined,
+        gradeId: editGradeId || undefined,
+        status: editStatus,
       })
-      setClasses((items) => items.map((item) => item.id === currentClass.id ? updatedClass : item))
-      setStudentName('')
-      setStudentDob('')
-      setStudentParentName('')
-      setStudentParentPhone('')
-      setStudentNote('')
-      setDialog(null)
+      setClasses((prev) => prev.map((c) => (c.id === editClassTarget.id ? { ...c, ...updated } : c)))
+      setEditClassTarget(null)
+      toast.success(`Đã cập nhật thông tin lớp ${updated.name}`)
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
       }
-      notify('Đã thêm học sinh thành công')
+      reloadClasses()
     } catch (err: any) {
-      toast.error(err?.message || 'Lỗi khi thêm học sinh')
+      toast.error(err?.message || 'Lỗi khi cập nhật lớp học')
     } finally {
-      setSubmitting(false)
+      setUpdating(false)
     }
   }
 
-  const deleteStudent = async () => {
-    if (!currentStudent) return
-    try {
-      await apiRemoveStudent(currentClass.id, currentStudent.id)
-    } catch {
-      // Continue locally
-    }
-    setClasses((items) => items.map((item) => item.id === currentClass.id ? { ...item, students: (item.students || []).filter((student) => student.id !== currentStudent.id), studentCount: Math.max(0, item.studentCount - 1) } : item))
-    setDialog(null)
-    setView({ page: 'class', classId: currentClass.id })
-    notify('Đã xóa học sinh khỏi lớp')
+  const openCloneModal = (cls: ClassRecord) => {
+    setCloneClassTarget(cls)
+    setCloneTargetName(`${cls.name} (Mới)`)
+    setCloneTargetCode(`${cls.code || ''}N`)
+    setCloneCopyStudents(true)
   }
 
-  const saveComment = async () => {
-    if (!comment.trim() || !currentStudent) return
-    try {
-      await apiAddStudentComment(currentStudent.id, comment, currentClass.id)
-    } catch {
-      // Continue
+  const handleCloneClass = async () => {
+    if (!cloneClassTarget || !cloneTargetName.trim() || !cloneTargetSyId) {
+      toast.error('Vui lòng điền đầy đủ thông tin nhân bản')
+      return
     }
-    setDialog(null)
-    setComment('')
-    notify('Đã lưu nhận xét học sinh')
-  }
-
-  const deleteClass = async () => {
-    if (!currentClass?.id) return
-    setDeletingClass(true)
+    setCloning(true)
     try {
-      await apiDeleteClass(currentClass.id)
-      setClasses((items) => items.filter((item) => item.id !== currentClass.id))
-      setDeleteClassOpen(false)
-      setView({ page: 'classes' })
+      const cloned = await apiCloneClass(cloneClassTarget.id, {
+        targetSchoolYearId: cloneTargetSyId,
+        targetName: cloneTargetName.trim(),
+        targetCode: cloneTargetCode.trim() || undefined,
+        copyStudents: cloneCopyStudents,
+      })
+      setClasses((prev) => [cloned, ...prev])
+      setCloneClassTarget(null)
+      toast.success(`Đã nhân bản lớp sang ${cloned.name} thành công!`)
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
       }
-      notify(`Đã lưu trữ và ngừng sử dụng lớp ${currentClass.name}`)
+      reloadClasses()
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi nhân bản lớp học')
+    } finally {
+      setCloning(false)
+    }
+  }
+
+  const handleCompleteClass = async () => {
+    if (!completeClassTarget) return
+    try {
+      await apiCompleteClass(completeClassTarget.id)
+      setClasses((prev) =>
+        prev.map((c) => (c.id === completeClassTarget.id ? { ...c, status: 'COMPLETED' } : c)),
+      )
+      setCompleteClassTarget(null)
+      toast.success(`Đã đánh dấu hoàn thành năm học cho lớp ${completeClassTarget.name}`)
+      reloadClasses()
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi kết thúc lớp học')
+    }
+  }
+
+  const handleDeleteClass = async () => {
+    if (!deleteClassTarget) return
+    try {
+      await apiDeleteClass(deleteClassTarget.id)
+      setClasses((prev) => prev.filter((c) => c.id !== deleteClassTarget.id))
+      setDeleteClassTarget(null)
+      toast.success(`Đã lưu trữ và ngừng sử dụng lớp ${deleteClassTarget.name}`)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
+      }
+      reloadClasses()
     } catch (err: any) {
       toast.error(err?.message || 'Lỗi khi xóa lớp học')
-    } finally {
-      setDeletingClass(false)
     }
   }
 
-  if (view.page === 'student' && currentStudent) return (
-    <StudentProfile
-      student={currentStudent}
-      classItem={currentClass}
-      allClasses={classes}
-      onBack={() => setView({ page: 'class', classId: currentClass.id })}
-      onDelete={() => setDialog('delete')}
-      onComment={() => setDialog('comment')}
-      onTransfer={() => setDialog('transfer')}
-      dialog={dialog}
-      setDialog={setDialog}
-      comment={comment}
-      setComment={setComment}
-      onSaveComment={saveComment}
-      onConfirmDelete={deleteStudent}
-      onTransferSuccess={() => {
-        reloadClasses()
-        setView({ page: 'classes' })
-      }}
-    />
-  )
-  if (view.page === 'class')
+  // Navigations
+  const currentClass = classes.find((item) => item.id === view.classId) ?? classes[0]
+
+  if (view.page === 'student' && selectedStudent && currentClass) {
     return (
-      <>
-        <ClassDetail
-          classItem={currentClass}
-          query={query}
-          setQuery={setQuery}
-          onBack={() => setView({ page: 'classes' })}
-          onOpenStudent={(student) => openStudent(student)}
-          dialog={dialog}
-          setDialog={setDialog}
-          studentName={studentName}
-          setStudentName={setStudentName}
-          studentGender={studentGender}
-          setStudentGender={setStudentGender}
-          studentDob={studentDob}
-          setStudentDob={setStudentDob}
-          studentParentName={studentParentName}
-          setStudentParentName={setStudentParentName}
-          studentParentPhone={studentParentPhone}
-          setStudentParentPhone={setStudentParentPhone}
-          studentNote={studentNote}
-          setStudentNote={setStudentNote}
-          addStudent={addStudent}
-          selected={selected}
-          setSelected={setSelected}
-          deleteStudent={deleteStudent}
-          submitting={submitting}
-          onOpenEditClass={() => openEditClass(currentClass)}
-          onOpenDeleteClass={() => setDeleteClassOpen(true)}
-          editClassName={editClassName}
-          setEditClassName={setEditClassName}
-          editClassCode={editClassCode}
-          setEditClassCode={setEditClassCode}
-          editClassRoom={editClassRoom}
-          setEditClassRoom={setEditClassRoom}
-          editClassSchedule={editClassSchedule}
-          setEditClassSchedule={setEditClassSchedule}
-          updateClassDetails={updateClassDetails}
-        />
-        {/* Delete Class Confirmation Dialog */}
-        <Dialog open={deleteClassOpen} onOpenChange={setDeleteClassOpen}>
-          <DialogContent className="sm:max-w-[440px]">
-            <DialogHeader>
-              <DialogTitle>Xác nhận ngừng sử dụng lớp</DialogTitle>
-              <DialogDescription>
-                Bạn có chắc chắn muốn xóa / lưu trữ lớp <strong>{currentClass.name}</strong>? Lớp sẽ được lưu trữ an toàn và dữ liệu điểm danh, đánh giá trước đây sẽ được bảo toàn.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDeleteClassOpen(false)}>Hủy</Button>
-              <Button variant="destructive" onClick={deleteClass} disabled={deletingClass}>
-                {deletingClass ? 'Đang lưu trữ...' : 'Xác nhận xóa'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </>
-    )
-  if (initialSection === 'students') return <StudentDirectory students={filteredStudents} classes={classes} query={query} setQuery={setQuery} filter={filter} setFilter={setFilter} onOpenStudent={(student) => openStudent(student, allStudents.find((item) => item.id === student.id)?.classId)} />
-  return (
-    <ClassDirectory
-      classes={classes}
-      schoolYears={schoolYears}
-      grades={grades}
-      selectedSchoolYearId={selectedSchoolYearId}
-      setSelectedSchoolYearId={(syId) => {
-        setSelectedSchoolYearId(syId)
-        reloadClasses(syId, selectedGradeId)
-      }}
-      selectedGradeId={selectedGradeId}
-      setSelectedGradeId={(gId) => {
-        setSelectedGradeId(gId)
-        reloadClasses(selectedSchoolYearId, gId)
-      }}
-      query={query}
-      setQuery={setQuery}
-      onOpenClass={(item) => setView({ page: 'class', classId: item.id })}
-      onAddClass={() => setDialog('add-class')}
-      dialog={dialog}
-      setDialog={setDialog}
-      formName={formName}
-      setFormName={setFormName}
-      formCode={formCode}
-      setFormCode={setFormCode}
-      formSchoolYearId={formSchoolYearId}
-      setFormSchoolYearId={setFormSchoolYearId}
-      formGradeId={formGradeId}
-      setFormGradeId={setFormGradeId}
-      formRoom={formRoom}
-      setFormRoom={setFormRoom}
-      addClass={addClass}
-    />
-  )
-}
-
-function Header({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) { return <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary"><GraduationCap className="size-4" /> TeachFlow Classroom</div><h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1><p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p></div>{action}</div> }
-function Stat({ label, value, helper, icon }: { label: string; value: string; helper: string; icon: React.ReactNode }) { return <Card><CardContent className="flex items-start justify-between p-4"><div><p className="text-sm text-muted-foreground">{label}</p><p className="mt-1 text-2xl font-semibold">{value}</p><p className="mt-1 text-xs text-muted-foreground">{helper}</p></div><div className="rounded-xl bg-primary/10 p-2 text-primary">{icon}</div></CardContent></Card> }
-function Empty({ title }: { title: string }) { return <div className="p-10 text-center text-sm text-muted-foreground"><Search className="mx-auto mb-3 size-5" />{title}</div> }
-function ClassCard({ item, onClick }: { item: ClassRecord; onClick: () => void }) { return <Card className="cursor-pointer transition-shadow hover:shadow-md" onClick={onClick}><CardHeader><div className="flex justify-between"><div><CardTitle>{item.name} {item.code ? `(${item.code})` : ''}</CardTitle><CardDescription>{item.grade} · {item.room}</CardDescription></div><div className="rounded-xl bg-primary/10 p-3 text-primary"><Users className="size-5" /></div></div></CardHeader><CardContent className="grid gap-4"><div className="grid grid-cols-3 gap-2 text-center">{[['Sĩ số', item.studentCount], ['Điểm TB', item.average || 8.4], ['Đi học', `${item.attendance || 96}%`]].map(([label, value]) => <div key={String(label)} className="rounded-lg bg-muted/60 p-2"><p className="font-semibold">{value}</p><p className="text-[11px] text-muted-foreground">{label}</p></div>)}</div><div className="flex items-center justify-between text-sm text-muted-foreground"><span>{item.schedule}</span><ChevronRight className="size-4" /></div></CardContent></Card> }
-
-function ClassDirectory({
-  classes,
-  schoolYears,
-  grades,
-  selectedSchoolYearId,
-  setSelectedSchoolYearId,
-  selectedGradeId,
-  setSelectedGradeId,
-  query,
-  setQuery,
-  onOpenClass,
-  onAddClass,
-  dialog,
-  setDialog,
-  formName,
-  setFormName,
-  formCode,
-  setFormCode,
-  formSchoolYearId,
-  setFormSchoolYearId,
-  formGradeId,
-  setFormGradeId,
-  formRoom,
-  setFormRoom,
-  addClass,
-}: {
-  classes: ClassRecord[];
-  schoolYears: SchoolYearOption[];
-  grades: GradeOption[];
-  selectedSchoolYearId: string;
-  setSelectedSchoolYearId: (id: string) => void;
-  selectedGradeId: string;
-  setSelectedGradeId: (id: string) => void;
-  query: string;
-  setQuery: (value: string) => void;
-  onOpenClass: (item: ClassRecord) => void;
-  onAddClass: () => void;
-  dialog: string | null;
-  setDialog: (value: 'add-class' | null) => void;
-  formName: string;
-  setFormName: (value: string) => void;
-  formCode: string;
-  setFormCode: (value: string) => void;
-  formSchoolYearId: string;
-  setFormSchoolYearId: (value: string) => void;
-  formGradeId: string;
-  setFormGradeId: (value: string) => void;
-  formRoom: string;
-  setFormRoom: (value: string) => void;
-  addClass: () => void;
-}) {
-  const filtered = classes.filter((item) => {
-    const matchQuery = `${item.name} ${item.code || ''} ${item.grade}`.toLowerCase().includes(query.toLowerCase());
-    const matchYear = !selectedSchoolYearId || item.schoolYearId === selectedSchoolYearId || !item.schoolYearId;
-    const matchGrade = selectedGradeId === 'ALL' || item.gradeId === selectedGradeId;
-    return matchQuery && matchYear && matchGrade;
-  });
-
-  const totalStudents = filtered.reduce((sum, item) => sum + (item.studentCount || 0), 0);
-  const avgAttendance = filtered.length ? Math.round(filtered.reduce((sum, item) => sum + (item.attendance || 96), 0) / filtered.length) : 96;
-
-  return (
-    <div className="mx-auto max-w-7xl">
-      <Header
-        title="Lớp học của tôi"
-        description="Theo dõi sĩ số, tiến độ học tập và hoạt động của từng lớp."
-        action={<Button onClick={onAddClass}><Plus data-icon="inline-start" />Tạo lớp mới</Button>}
+      <StudentProfileView
+        student={selectedStudent}
+        classItem={currentClass}
+        allClasses={classes}
+        onBack={() => setView({ page: 'class', classId: currentClass.id })}
+        onStudentUpdated={() => {
+          reloadClasses()
+        }}
       />
+    )
+  }
 
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[240px] flex-1">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm tên hoặc mã lớp..." className="pl-9" />
+  if (view.page === 'class' && currentClass) {
+    return (
+      <ClassDetailView
+        classItem={currentClass}
+        allClasses={classes}
+        schoolYears={schoolYears}
+        grades={grades}
+        initialTab={view.initialTab}
+        onBack={() => setView({ page: 'classes' })}
+        onOpenStudent={(s) => {
+          setSelectedStudent(s)
+          setView({ page: 'student', classId: currentClass.id, studentId: s.id })
+        }}
+        onOpenEdit={() => openEditModal(currentClass)}
+        onOpenClone={() => openCloneModal(currentClass)}
+        onOpenComplete={() => setCompleteClassTarget(currentClass)}
+        onOpenDelete={() => setDeleteClassTarget(currentClass)}
+        onClassUpdated={() => reloadClasses()}
+      />
+    )
+  }
+
+  // Directory View
+  return (
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 space-y-6">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-teal-700">
+            <GraduationCap className="size-4" /> Quản lý lớp học TeachFlow
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-1">
+            Lớp học của tôi
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Trung tâm quản lý toàn bộ dữ liệu, học sinh, điểm danh và hoạt động học tập theo từng lớp.
+          </p>
         </div>
 
-        {/* School Year Filter */}
-        <select
-          aria-label="Lọc theo năm học"
-          className="h-10 rounded-md border bg-background px-3 text-sm font-medium"
-          value={selectedSchoolYearId}
-          onChange={(e) => setSelectedSchoolYearId(e.target.value)}
+        <Button
+          onClick={() => setCreateDialogOpen(true)}
+          className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs gap-1.5 shadow-sm h-9 px-4 shrink-0"
         >
-          {schoolYears.map((sy) => (
-            <option key={sy.id} value={sy.id}>
-              {sy.name} {sy.isCurrent ? '(Hiện tại)' : ''}
-            </option>
+          <Plus className="size-4" /> Tạo lớp mới
+        </Button>
+      </div>
+
+      {/* 3 Summary KPI Tiles */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="flex items-center justify-between p-4">
+            <div>
+              <p className="text-xs font-medium text-slate-500">Tổng số lớp</p>
+              <p className="text-2xl font-bold text-slate-900 mt-0.5">{summaryStats.totalClasses}</p>
+              <p className="text-[11px] text-teal-700 font-medium mt-0.5">Theo bộ lọc hiện tại</p>
+            </div>
+            <div className="size-10 rounded-xl bg-teal-50 text-teal-700 grid place-items-center">
+              <LayoutGrid className="size-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="flex items-center justify-between p-4">
+            <div>
+              <p className="text-xs font-medium text-slate-500">Tổng học sinh</p>
+              <p className="text-2xl font-bold text-slate-900 mt-0.5">{summaryStats.totalStudents}</p>
+              <p className="text-[11px] text-blue-700 font-medium mt-0.5">Học sinh đang theo học</p>
+            </div>
+            <div className="size-10 rounded-xl bg-blue-50 text-blue-700 grid place-items-center">
+              <Users className="size-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="flex items-center justify-between p-4">
+            <div>
+              <p className="text-xs font-medium text-slate-500">Tỷ lệ đi học</p>
+              <p className="text-2xl font-bold text-slate-900 mt-0.5">{summaryStats.avgAttendanceRate}%</p>
+              <p className="text-[11px] text-amber-700 font-medium mt-0.5">Trung bình tháng này</p>
+            </div>
+            <div className="size-10 rounded-xl bg-amber-50 text-amber-700 grid place-items-center">
+              <CalendarCheck2 className="size-5" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <Card className="border-slate-200 shadow-2xs">
+        <CardContent className="p-3.5 sm:p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {/* Search Input */}
+            <div className="relative sm:col-span-2 lg:col-span-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
+              <Input
+                type="text"
+                placeholder="Tìm theo tên lớp, mã lớp, phòng học..."
+                value={query}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="pl-9 text-xs h-9 bg-slate-50 border-slate-200"
+              />
+            </div>
+
+            {/* School Year Filter */}
+            <div>
+              <select
+                aria-label="Lọc theo năm học"
+                value={selectedSchoolYearId}
+                onChange={(e) => handleSchoolYearChange(e.target.value)}
+                className="w-full h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 focus:outline-teal-500"
+              >
+                <option value="ALL">Tất cả năm học</option>
+                {schoolYears.map((sy) => (
+                  <option key={sy.id} value={sy.id}>
+                    {sy.name} {sy.isCurrent ? '(Hiện tại)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Grade Filter */}
+            <div>
+              <select
+                aria-label="Lọc theo khối lớp"
+                value={selectedGradeId}
+                onChange={(e) => handleGradeChange(e.target.value)}
+                className="w-full h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 focus:outline-teal-500"
+              >
+                <option value="ALL">Tất cả khối</option>
+                {grades.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Sort Filter */}
+            <div>
+              <select
+                aria-label="Sắp xếp danh sách lớp"
+                value={selectedSort}
+                onChange={(e) => handleSortChange(e.target.value)}
+                className="w-full h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 focus:outline-teal-500"
+              >
+                <option value="name">Tên lớp (A-Z)</option>
+                <option value="studentCount">Sĩ số (Cao - Thấp)</option>
+                <option value="attendanceRate">Chuyên cần (Cao - Thấp)</option>
+                <option value="updatedAt">Cập nhật gần nhất</option>
+              </select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Class Cards Grid */}
+      {loading ? (
+        <div className="py-20 text-center text-slate-400">
+          <Loader2 className="size-8 animate-spin mx-auto text-teal-600 mb-2" />
+          <p className="text-sm font-medium">Đang tải danh sách lớp học...</p>
+        </div>
+      ) : error ? (
+        <div className="py-12 text-center bg-white rounded-xl border border-rose-200 p-6 space-y-3">
+          <AlertCircle className="size-8 mx-auto text-rose-500" />
+          <p className="text-sm font-semibold text-rose-700">{error}</p>
+          <Button variant="outline" size="sm" onClick={() => loadInitialData()} className="text-xs gap-1.5">
+            <RefreshCw className="size-3" /> Thử lại
+          </Button>
+        </div>
+      ) : classes.length === 0 ? (
+        <div className="py-16 text-center bg-white rounded-2xl border border-dashed border-slate-200 p-8 space-y-3">
+          <School className="size-10 mx-auto text-slate-300" />
+          <h3 className="text-base font-bold text-slate-800">Bạn chưa có lớp học nào</h3>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+            Bắt đầu thiết lập danh sách lớp học để quản lý học sinh, lập lịch dạy và ghi nhận điểm danh.
+          </p>
+          <Button onClick={() => setCreateDialogOpen(true)} className="bg-teal-600 text-white text-xs font-semibold gap-1.5">
+            <Plus className="size-3.5" /> Tạo lớp đầu tiên
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {classes.map((item) => (
+            <Card
+              key={item.id}
+              className="group hover:border-teal-300 hover:shadow-md transition-all cursor-pointer border-slate-200 flex flex-col justify-between"
+              onClick={() => setView({ page: 'class', classId: item.id })}
+            >
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <CardTitle className="text-lg font-bold text-slate-900 group-hover:text-teal-700 transition-colors">
+                        {item.name}
+                      </CardTitle>
+                      {item.code && (
+                        <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                          {item.code}
+                        </span>
+                      )}
+                    </div>
+                    <CardDescription className="text-xs text-slate-500 mt-1">
+                      {item.grade} · {item.room || 'Phòng học'} · {item.schoolYear?.name || ''}
+                    </CardDescription>
+                  </div>
+
+                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    <Badge
+                      variant={item.status === 'COMPLETED' ? 'secondary' : 'default'}
+                      className={`text-[10px] ${
+                        item.status === 'COMPLETED'
+                          ? 'bg-slate-100 text-slate-600'
+                          : 'bg-teal-50 text-teal-700 border-teal-200'
+                      }`}
+                    >
+                      {item.status === 'COMPLETED' ? 'Đã kết thúc' : 'Đang hoạt động'}
+                    </Badge>
+
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon-sm" className="size-8 text-slate-400 hover:text-slate-700">
+                          <MoreVertical className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48 text-xs">
+                        <DropdownMenuItem onClick={() => setView({ page: 'class', classId: item.id, initialTab: 'overview' })}>
+                          <Eye className="size-3.5 mr-2" /> Xem tổng quan
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setView({ page: 'class', classId: item.id, initialTab: 'students' })}>
+                          <Users className="size-3.5 mr-2" /> Quản lý học sinh
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setView({ page: 'class', classId: item.id, initialTab: 'schedules' })}>
+                          <CalendarDays className="size-3.5 mr-2" /> Lịch dạy
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setView({ page: 'class', classId: item.id, initialTab: 'attendance' })}>
+                          <CalendarCheck2 className="size-3.5 mr-2" /> Điểm danh
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setView({ page: 'class', classId: item.id, initialTab: 'assessments' })}>
+                          <BarChart3 className="size-3.5 mr-2" /> Đánh giá
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => openEditModal(item)}>
+                          <Edit2 className="size-3.5 mr-2" /> Chỉnh sửa lớp
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openCloneModal(item)}>
+                          <Copy className="size-3.5 mr-2" /> Nhân bản sang năm mới
+                        </DropdownMenuItem>
+                        {item.status !== 'COMPLETED' && (
+                          <DropdownMenuItem onClick={() => setCompleteClassTarget(item)}>
+                            <CheckCircle2 className="size-3.5 mr-2 text-blue-600" /> Kết thúc năm học
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => setDeleteClassTarget(item)} className="text-rose-600">
+                          <Trash2 className="size-3.5 mr-2" /> Xóa / Lưu trữ
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent className="grid gap-3 pt-0">
+                {/* 3 Metrics Box */}
+                <div className="grid grid-cols-3 gap-2 bg-slate-50/80 rounded-xl p-2.5 text-center border border-slate-100">
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">{item.studentCount ?? item.students?.length ?? 0}</p>
+                    <p className="text-[10px] text-slate-500">Sĩ số</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-teal-700">
+                      {typeof item.average === 'number' ? `${item.average} đ` : '—'}
+                    </p>
+                    <p className="text-[10px] text-slate-500">Điểm TB</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-blue-700">
+                      {typeof item.attendance === 'number' ? `${item.attendance}%` : '100%'}
+                    </p>
+                    <p className="text-[10px] text-slate-500">Đi học</p>
+                  </div>
+                </div>
+
+                {/* Schedule and Arrow Footer */}
+                <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                  <span className="truncate">{item.schedule || 'Sáng · Thứ 2 - Thứ 6'}</span>
+                  <span className="flex items-center text-teal-600 font-semibold group-hover:translate-x-0.5 transition-transform text-[11px]">
+                    Xem chi tiết <ChevronRight className="size-3.5 ml-0.5" />
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
           ))}
-        </select>
+        </div>
+      )}
 
-        {/* Grade Filter */}
-        <select
-          aria-label="Lọc theo khối"
-          className="h-10 rounded-md border bg-background px-3 text-sm font-medium"
-          value={selectedGradeId}
-          onChange={(e) => setSelectedGradeId(e.target.value)}
-        >
-          <option value="ALL">Tất cả các khối</option>
-          {grades.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <Stat label="Tổng số lớp" value={String(filtered.length)} helper="Đang hiển thị" icon={<LayoutGrid />} />
-        <Stat label="Tổng học sinh" value={String(totalStudents)} helper="Trong các lớp" icon={<Users />} />
-        <Stat label="Tỷ lệ đi học" value={`${avgAttendance}%`} helper="Trung bình tháng này" icon={<CalendarCheck2 />} />
-      </div>
-
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-        {filtered.map((item) => (
-          <ClassCard key={item.id} item={item} onClick={() => onOpenClass(item)} />
-        ))}
-      </div>
-
-      {!filtered.length && <Empty title="Chưa tìm thấy lớp học trong bộ lọc này" />}
-
-      {/* Add Class Dialog */}
-      <Dialog open={dialog === 'add-class'} onOpenChange={(open) => !open && setDialog(null)}>
+      {/* CREATE CLASS DIALOG */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle>Tạo lớp học mới</DialogTitle>
-            <DialogDescription>Nhập thông tin năm học, khối và mã lớp theo quy chuẩn.</DialogDescription>
+            <DialogDescription>
+              Thiết lập thông tin lớp học theo năm học và khối lớp giảng dạy.
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 py-2">
+          <div className="grid gap-4 py-2 text-xs">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label htmlFor="create-school-year" className="text-xs font-semibold">Năm học *</Label>
+                <Label htmlFor="create-sy" className="text-xs font-semibold">Năm học *</Label>
                 <select
-                  id="create-school-year"
-                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  id="create-sy"
                   value={formSchoolYearId}
                   onChange={(e) => setFormSchoolYearId(e.target.value)}
+                  className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs focus:outline-teal-500"
                 >
                   {schoolYears.map((sy) => (
                     <option key={sy.id} value={sy.id}>
-                      {sy.name}
+                      {sy.name} {sy.isCurrent ? '(Hiện tại)' : ''}
                     </option>
                   ))}
                 </select>
@@ -544,9 +705,9 @@ function ClassDirectory({
                 <Label htmlFor="create-grade" className="text-xs font-semibold">Khối lớp *</Label>
                 <select
                   id="create-grade"
-                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                   value={formGradeId}
                   onChange={(e) => setFormGradeId(e.target.value)}
+                  className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs focus:outline-teal-500"
                 >
                   {grades.map((g) => (
                     <option key={g.id} value={g.id}>
@@ -559,260 +720,615 @@ function ClassDirectory({
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label htmlFor="class-code" className="text-xs font-semibold">Mã lớp (ví dụ: 4A1)</Label>
+                <Label htmlFor="create-name" className="text-xs font-semibold">Tên lớp *</Label>
                 <Input
-                  id="class-code"
-                  className="mt-1"
-                  value={formCode}
-                  onChange={(e) => setFormCode(e.target.value)}
-                  placeholder="4A1"
+                  id="create-name"
+                  placeholder="Lớp 4A1"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  className="mt-1 text-xs h-9"
                 />
               </div>
 
               <div>
-                <Label htmlFor="class-name" className="text-xs font-semibold">Tên lớp *</Label>
+                <Label htmlFor="create-code" className="text-xs font-semibold">Mã lớp *</Label>
                 <Input
-                  id="class-name"
-                  className="mt-1"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="Lớp 4A1"
+                  id="create-code"
+                  placeholder="4A1"
+                  value={formCode}
+                  onChange={(e) => setFormCode(e.target.value)}
+                  className="mt-1 text-xs h-9 font-mono"
                 />
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="class-room" className="text-xs font-semibold">Phòng học</Label>
-              <Input
-                id="class-room"
-                className="mt-1"
-                value={formRoom}
-                onChange={(e) => setFormRoom(e.target.value)}
-                placeholder="Phòng 204"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="create-room" className="text-xs font-semibold">Phòng học</Label>
+                <Input
+                  id="create-room"
+                  placeholder="Phòng 204"
+                  value={formRoom}
+                  onChange={(e) => setFormRoom(e.target.value)}
+                  className="mt-1 text-xs h-9"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="create-schedule" className="text-xs font-semibold">Ca học / Thời khóa biểu</Label>
+                <Input
+                  id="create-schedule"
+                  placeholder="Sáng · Thứ 2 - Thứ 6"
+                  value={formSchedule}
+                  onChange={(e) => setFormSchedule(e.target.value)}
+                  className="mt-1 text-xs h-9"
+                />
+              </div>
             </div>
           </div>
 
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setCreateDialogOpen(false)} disabled={creating}>
+              Hủy
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleCreateClass}
+              disabled={creating || !formName.trim()}
+              className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs gap-1.5"
+            >
+              {creating ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />} Tạo lớp
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* EDIT CLASS DIALOG */}
+      <Dialog open={!!editClassTarget} onOpenChange={(val) => !val && setEditClassTarget(null)}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Chỉnh sửa thông tin lớp {editClassTarget?.name}</DialogTitle>
+            <DialogDescription>Cập nhật tên, mã lớp, phòng học và ca học.</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-2 text-xs">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="edit-name" className="text-xs font-semibold">Tên lớp *</Label>
+                <Input
+                  id="edit-name"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="mt-1 text-xs h-9"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-code" className="text-xs font-semibold">Mã lớp</Label>
+                <Input
+                  id="edit-code"
+                  value={editCode}
+                  onChange={(e) => setEditCode(e.target.value)}
+                  className="mt-1 text-xs h-9 font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="edit-room" className="text-xs font-semibold">Phòng học</Label>
+                <Input
+                  id="edit-room"
+                  value={editRoom}
+                  onChange={(e) => setEditRoom(e.target.value)}
+                  className="mt-1 text-xs h-9"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-schedule" className="text-xs font-semibold">Ca học</Label>
+                <Input
+                  id="edit-schedule"
+                  value={editSchedule}
+                  onChange={(e) => setEditSchedule(e.target.value)}
+                  className="mt-1 text-xs h-9"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="edit-grade" className="text-xs font-semibold">Khối lớp</Label>
+                <select
+                  id="edit-grade"
+                  value={editGradeId}
+                  onChange={(e) => setEditGradeId(e.target.value)}
+                  className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs focus:outline-teal-500"
+                >
+                  {grades.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <Label htmlFor="edit-status" className="text-xs font-semibold">Trạng thái</Label>
+                <select
+                  id="edit-status"
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                  className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs focus:outline-teal-500"
+                >
+                  <option value="ACTIVE">Đang hoạt động</option>
+                  <option value="COMPLETED">Đã kết thúc</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setEditClassTarget(null)} disabled={updating}>
+              Hủy
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleUpdateClass}
+              disabled={updating || !editName.trim()}
+              className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs gap-1.5"
+            >
+              {updating ? <Loader2 className="size-3.5 animate-spin" /> : <SaveIcon />} Lưu thay đổi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* CLONE CLASS DIALOG */}
+      <Dialog open={!!cloneClassTarget} onOpenChange={(val) => !val && setCloneClassTarget(null)}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Nhân bản lớp sang năm học mới</DialogTitle>
+            <DialogDescription>
+              Tạo lớp mới từ lớp <strong>{cloneClassTarget?.name}</strong> cho năm học tiếp theo.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-2 text-xs">
+            <div>
+              <Label className="text-xs font-semibold">Năm học đích *</Label>
+              <select
+                value={cloneTargetSyId}
+                onChange={(e) => setCloneTargetSyId(e.target.value)}
+                className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs focus:outline-teal-500"
+              >
+                {schoolYears.map((sy) => (
+                  <option key={sy.id} value={sy.id}>
+                    {sy.name} {sy.isCurrent ? '(Hiện tại)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold">Tên lớp mới *</Label>
+                <Input
+                  value={cloneTargetName}
+                  onChange={(e) => setCloneTargetName(e.target.value)}
+                  className="mt-1 text-xs h-9"
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold">Mã lớp mới</Label>
+                <Input
+                  value={cloneTargetCode}
+                  onChange={(e) => setCloneTargetCode(e.target.value)}
+                  className="mt-1 text-xs h-9 font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <input
+                type="checkbox"
+                id="copy-students"
+                checked={cloneCopyStudents}
+                onChange={(e) => setCloneCopyStudents(e.target.checked)}
+                className="size-4 rounded text-teal-600 focus:ring-teal-500"
+              />
+              <Label htmlFor="copy-students" className="text-xs text-slate-700 cursor-pointer font-medium">
+                Tự động sao chép danh sách học sinh sang năm học mới (Ghi danh mới)
+              </Label>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setCloneClassTarget(null)} disabled={cloning}>
+              Hủy
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleCloneClass}
+              disabled={cloning || !cloneTargetName.trim()}
+              className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs gap-1.5"
+            >
+              {cloning ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />} Nhân bản lớp
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* COMPLETE CLASS CONFIRMATION */}
+      <Dialog open={!!completeClassTarget} onOpenChange={(val) => !val && setCompleteClassTarget(null)}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>Kết thúc năm học lớp {completeClassTarget?.name}?</DialogTitle>
+            <DialogDescription>
+              Lớp sẽ chuyển sang trạng thái <strong>Đã kết thúc</strong>. Dữ liệu học sinh, điểm danh và đánh giá sẽ được bảo lưu an toàn.
+            </DialogDescription>
+          </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialog(null)}>Hủy</Button>
-            <Button onClick={addClass}>Tạo lớp</Button>
+            <Button variant="outline" size="sm" onClick={() => setCompleteClassTarget(null)}>Hủy</Button>
+            <Button size="sm" onClick={handleCompleteClass} className="bg-blue-600 hover:bg-blue-700 text-white">
+              Xác nhận kết thúc
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* DELETE CLASS CONFIRMATION */}
+      <Dialog open={!!deleteClassTarget} onOpenChange={(val) => !val && setDeleteClassTarget(null)}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>Lưu trữ và ngừng sử dụng lớp</DialogTitle>
+            <DialogDescription>
+              Bạn có chắc chắn muốn xóa/lưu trữ lớp <strong>{deleteClassTarget?.name}</strong>? Lớp sẽ không hiển thị trên danh sách chính nhưng dữ liệu lịch sử vẫn được bảo toàn.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setDeleteClassTarget(null)}>Hủy</Button>
+            <Button variant="destructive" size="sm" onClick={handleDeleteClass}>
+              Xác nhận xóa
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
-  );
+  )
 }
 
-function ClassDetail({
+function SaveIcon() {
+  return <Check className="size-3.5" />
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CLASS DETAIL VIEW (7 TABS LAZY-LOADED)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function ClassDetailView({
   classItem,
-  query,
-  setQuery,
+  allClasses,
+  schoolYears,
+  grades,
+  initialTab = 'overview',
   onBack,
   onOpenStudent,
-  dialog,
-  setDialog,
-  studentName,
-  setStudentName,
-  studentGender,
-  setStudentGender,
-  studentDob,
-  setStudentDob,
-  studentParentName,
-  setStudentParentName,
-  studentParentPhone,
-  setStudentParentPhone,
-  studentNote,
-  setStudentNote,
-  addStudent,
-  selected,
-  setSelected,
-  deleteStudent,
-  submitting,
-  onOpenEditClass,
-  onOpenDeleteClass,
-  editClassName,
-  setEditClassName,
-  editClassCode,
-  setEditClassCode,
-  editClassRoom,
-  setEditClassRoom,
-  editClassSchedule,
-  setEditClassSchedule,
-  updateClassDetails,
+  onOpenEdit,
+  onOpenClone,
+  onOpenComplete,
+  onOpenDelete,
+  onClassUpdated,
 }: {
-  classItem: ClassRecord;
-  query: string;
-  setQuery: (value: string) => void;
-  onBack: () => void;
-  onOpenStudent: (student: StudentRecord) => void;
-  dialog: string | null;
-  setDialog: (d: 'add-student' | 'edit-class' | 'delete' | null) => void;
-  studentName: string;
-  setStudentName: (v: string) => void;
-  studentGender: string;
-  setStudentGender: (v: string) => void;
-  studentDob: string;
-  setStudentDob: (v: string) => void;
-  studentParentName: string;
-  setStudentParentName: (v: string) => void;
-  studentParentPhone: string;
-  setStudentParentPhone: (v: string) => void;
-  studentNote: string;
-  setStudentNote: (v: string) => void;
-  addStudent: () => void;
-  selected: StudentRecord | null;
-  setSelected: (s: StudentRecord | null) => void;
-  deleteStudent: () => void;
-  submitting: boolean;
-  onOpenEditClass: () => void;
-  onOpenDeleteClass: () => void;
-  editClassName: string;
-  setEditClassName: (v: string) => void;
-  editClassCode: string;
-  setEditClassCode: (v: string) => void;
-  editClassRoom: string;
-  setEditClassRoom: (v: string) => void;
-  editClassSchedule: string;
-  setEditClassSchedule: (v: string) => void;
-  updateClassDetails: () => void;
+  classItem: ClassRecord
+  allClasses: ClassRecord[]
+  schoolYears: SchoolYearOption[]
+  grades: GradeOption[]
+  initialTab?: string
+  onBack: () => void
+  onOpenStudent: (student: StudentRecord) => void
+  onOpenEdit: () => void
+  onOpenClone: () => void
+  onOpenComplete: () => void
+  onOpenDelete: () => void
+  onClassUpdated: () => void
 }) {
-  const students = (classItem.students || []).filter((student) =>
-    student.name.toLowerCase().includes(query.toLowerCase()),
-  );
-
-  // Teaching contexts state for this classroom
-  const [teachingContexts, setTeachingContexts] = useState<TeachingAssignmentRecord[]>([]);
-  const [loadingContexts, setLoadingContexts] = useState(true);
-  const [subjectsList, setSubjectsList] = useState<SubjectOption[]>([]);
-  const [declareOpen, setDeclareOpen] = useState(false);
-  const [selectedSubjectId, setSelectedSubjectId] = useState('');
-  const [declaring, setDeclaring] = useState(false);
-
-  const loadTeachingContexts = useCallback(async () => {
-    if (!classItem.id) return;
-    setLoadingContexts(true);
-    try {
-      const [ctxs, subs] = await Promise.all([
-        getMyTeachingContexts({ classroomId: classItem.id }),
-        getSubjects(),
-      ]);
-      setTeachingContexts(ctxs.filter((c) => c.isActive !== false));
-      setSubjectsList(subs.filter((s) => s.isActive !== false));
-      if (subs.length > 0) {
-        setSelectedSubjectId(subs[0].id);
-      }
-    } catch {
-      setTeachingContexts([]);
-    } finally {
-      setLoadingContexts(false);
-    }
-  }, [classItem.id]);
-
-  useEffect(() => {
-    loadTeachingContexts();
-  }, [loadTeachingContexts]);
-
-  const handleDeclareSubject = async () => {
-    if (!selectedSubjectId) {
-      toast.error('Vui lòng chọn môn học');
-      return;
-    }
-    setDeclaring(true);
-    try {
-      const declared = await declareTeachingContext({
-        classroomId: classItem.id,
-        subjectId: selectedSubjectId,
-      });
-      setTeachingContexts((prev) => [...prev, declared]);
-      setDeclareOpen(false);
-      toast.success('Đã khai báo môn giảng dạy thành công');
-    } catch (err: any) {
-      toast.error(err?.message || 'Lỗi khi khai báo môn học');
-    } finally {
-      setDeclaring(false);
-    }
-  };
-
-  const handleDeactivateSubject = async (ctxId: string, subjectName: string) => {
-    try {
-      await deactivateTeachingContext(ctxId);
-      setTeachingContexts((prev) => prev.filter((c) => c.id !== ctxId));
-      toast.success(`Đã ngừng phụ trách môn ${subjectName}`);
-    } catch (err: any) {
-      toast.error(err?.message || 'Lỗi khi hủy phụ trách môn');
-    }
-  };
+  const [activeTab, setActiveTab] = useState(initialTab || 'overview')
 
   return (
-    <div className="mx-auto max-w-7xl">
-      <Button variant="ghost" className="mb-4 -ml-3" onClick={onBack}>
-        <ArrowLeft data-icon="inline-start" />Quay lại danh sách lớp
-      </Button>
-      <Header
-        title={`${classItem.name} ${classItem.code ? `(${classItem.code})` : ''} · ${classItem.room}`}
-        description={`${classItem.teacher} · ${classItem.schedule}`}
-        action={
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="outline" onClick={onOpenEditClass}>
-              <Edit2 className="size-4" /> Sửa thông tin
-            </Button>
-            <Button variant="outline" onClick={onOpenDeleteClass} className="text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700">
-              <Trash2 className="size-4" /> Xóa lớp
-            </Button>
-            <Button onClick={() => setDialog('add-student')}>
-              <UserPlus data-icon="inline-start" />Thêm học sinh
-            </Button>
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 space-y-6">
+      {/* Top Breadcrumb & Action */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <button
+            onClick={onBack}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-teal-700 mb-2 transition"
+          >
+            <ArrowLeft className="size-3.5" /> Quay lại danh sách lớp
+          </button>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+              {classItem.name}
+            </h1>
+            {classItem.code && (
+              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                {classItem.code}
+              </span>
+            )}
+            <Badge
+              variant={classItem.status === 'COMPLETED' ? 'secondary' : 'default'}
+              className={`text-xs ${
+                classItem.status === 'COMPLETED'
+                  ? 'bg-slate-100 text-slate-600'
+                  : 'bg-teal-50 text-teal-700 border-teal-200'
+              }`}
+            >
+              {classItem.status === 'COMPLETED' ? 'Đã kết thúc' : 'Đang hoạt động'}
+            </Badge>
           </div>
-        }
-      />
-      <div className="mb-6 grid gap-4 sm:grid-cols-4">
-        <Stat label="Sĩ số" value={String(classItem.studentCount || students.length)} helper="Học sinh" icon={<Users />} />
-        <Stat label="Điểm trung bình" value={String(classItem.average || 8.4)} helper="Học kỳ này" icon={<BarChart3 />} />
-        <Stat label="Chuyên cần" value={`${classItem.attendance || 96}%`} helper="Tháng 8/2026" icon={<CalendarCheck2 />} />
-        <Stat
-          label="Cần quan tâm"
-          value={String(students.filter((student) => student.status === 'Cần cố gắng').length)}
-          helper="Cần hỗ trợ thêm"
-          icon={<Heart />}
-        />
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            {classItem.grade} · {classItem.schoolYear?.name || 'Năm học'} · {classItem.room || 'Phòng học'} · {classItem.schedule || 'Sáng · Thứ 2 - Thứ 6'}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={onOpenEdit} className="text-xs h-9 gap-1.5">
+            <Edit2 className="size-3.5" /> Sửa thông tin
+          </Button>
+          <Button variant="outline" size="sm" onClick={onOpenClone} className="text-xs h-9 gap-1.5">
+            <Copy className="size-3.5" /> Nhân bản lớp
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="h-9 w-9">
+                <MoreVertical className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44 text-xs">
+              {classItem.status !== 'COMPLETED' && (
+                <DropdownMenuItem onClick={onOpenComplete}>
+                  <CheckCircle2 className="size-3.5 mr-2 text-blue-600" /> Kết thúc năm học
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={onOpenDelete} className="text-rose-600">
+                <Trash2 className="size-3.5 mr-2" /> Xóa / Lưu trữ lớp
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
-      {/* Teaching Context Section (Môn học phụ trách trong lớp) */}
-      <Card className="mb-6">
-        <CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between">
+      {/* 7 Tabs Container */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid grid-cols-3 sm:grid-cols-7 h-auto p-1 bg-slate-100 rounded-xl">
+          <TabsTrigger value="overview" className="text-xs py-2 font-medium">Tổng quan</TabsTrigger>
+          <TabsTrigger value="students" className="text-xs py-2 font-medium">Học sinh</TabsTrigger>
+          <TabsTrigger value="schedules" className="text-xs py-2 font-medium">Lịch dạy</TabsTrigger>
+          <TabsTrigger value="attendance" className="text-xs py-2 font-medium">Điểm danh</TabsTrigger>
+          <TabsTrigger value="assessments" className="text-xs py-2 font-medium">Đánh giá</TabsTrigger>
+          <TabsTrigger value="lesson-plans" className="text-xs py-2 font-medium">Giáo án</TabsTrigger>
+          <TabsTrigger value="statistics" className="text-xs py-2 font-medium">Thống kê</TabsTrigger>
+        </TabsList>
+
+        {/* TAB 1: TỔNG QUAN */}
+        <TabsContent value="overview" className="mt-5 space-y-5">
+          <TabOverview classItem={classItem} onSwitchTab={(tab) => setActiveTab(tab)} />
+        </TabsContent>
+
+        {/* TAB 2: HỌC SINH */}
+        <TabsContent value="students" className="mt-5 space-y-5">
+          <TabStudents
+            classItem={classItem}
+            allClasses={allClasses}
+            onOpenStudent={onOpenStudent}
+            onClassUpdated={onClassUpdated}
+          />
+        </TabsContent>
+
+        {/* TAB 3: LỊCH DẠY */}
+        <TabsContent value="schedules" className="mt-5 space-y-5">
+          <TabSchedules classItem={classItem} />
+        </TabsContent>
+
+        {/* TAB 4: ĐIỂM DANH */}
+        <TabsContent value="attendance" className="mt-5 space-y-5">
+          <TabAttendance classItem={classItem} />
+        </TabsContent>
+
+        {/* TAB 5: ĐÁNH GIÁ */}
+        <TabsContent value="assessments" className="mt-5 space-y-5">
+          <TabAssessments classItem={classItem} />
+        </TabsContent>
+
+        {/* TAB 6: GIÁO ÁN */}
+        <TabsContent value="lesson-plans" className="mt-5 space-y-5">
+          <TabLessonPlans classItem={classItem} />
+        </TabsContent>
+
+        {/* TAB 7: THỐNG KÊ */}
+        <TabsContent value="statistics" className="mt-5 space-y-5">
+          <TabStatistics classItem={classItem} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 1: TỔNG QUAN
+// ═══════════════════════════════════════════════════════════════════════════
+
+function TabOverview({
+  classItem,
+  onSwitchTab,
+}: {
+  classItem: ClassRecord
+  onSwitchTab: (tab: string) => void
+}) {
+  const [data, setData] = useState<ClassDashboardData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [teachingContexts, setTeachingContexts] = useState<TeachingAssignmentRecord[]>([])
+  const [subjectsList, setSubjectsList] = useState<SubjectOption[]>([])
+  const [declareOpen, setDeclareOpen] = useState(false)
+  const [selectedSubjectId, setSelectedSubjectId] = useState('')
+  const [declaring, setDeclaring] = useState(false)
+
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [dash, ctxs, subs] = await Promise.all([
+        getClassDashboard(classItem.id),
+        getMyTeachingContexts({ classroomId: classItem.id }),
+        getSubjects(),
+      ])
+      setData(dash)
+      setTeachingContexts(ctxs.filter((c) => c.isActive !== false))
+      setSubjectsList(subs.filter((s) => s.isActive !== false))
+      if (subs.length > 0) setSelectedSubjectId(subs[0].id)
+    } catch {
+      setData(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [classItem.id])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  const handleDeclareSubject = async () => {
+    if (!selectedSubjectId) return
+    setDeclaring(true)
+    try {
+      const created = await declareTeachingContext({
+        classroomId: classItem.id,
+        subjectId: selectedSubjectId,
+      })
+      setTeachingContexts((prev) => [...prev, created])
+      setDeclareOpen(false)
+      toast.success('Đã khai báo môn học phụ trách thành công')
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi khai báo môn học')
+    } finally {
+      setDeclaring(false)
+    }
+  }
+
+  const handleDeactivate = async (ctxId: string) => {
+    try {
+      await deactivateTeachingContext(ctxId)
+      setTeachingContexts((prev) => prev.filter((c) => c.id !== ctxId))
+      toast.success('Đã ngừng phụ trách môn học')
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi hủy phụ trách')
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="py-20 text-center text-slate-400">
+        <Loader2 className="size-8 animate-spin mx-auto text-teal-600 mb-2" />
+        <p className="text-sm font-medium">Đang tải dữ liệu tổng quan...</p>
+      </div>
+    )
+  }
+
+  const kpis = data?.kpis || {
+    studentCount: classItem.studentCount || 0,
+    attendanceRate: classItem.attendance || 96,
+    averageScore: classItem.average || 8.4,
+    weeklyScheduleCount: 0,
+    preparedLessonPlanCount: 0,
+    needsSupportStudentCount: 0,
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* 6 KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-3.5 text-center">
+            <Users className="size-5 mx-auto text-teal-600 mb-1" />
+            <p className="text-lg font-bold text-slate-900">{kpis.studentCount}</p>
+            <p className="text-[11px] text-slate-500 font-medium">Sĩ số lớp</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-3.5 text-center">
+            <CalendarCheck2 className="size-5 mx-auto text-blue-600 mb-1" />
+            <p className="text-lg font-bold text-blue-700">{kpis.attendanceRate}%</p>
+            <p className="text-[11px] text-slate-500 font-medium">Chuyên cần</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-3.5 text-center">
+            <Award className="size-5 mx-auto text-amber-600 mb-1" />
+            <p className="text-lg font-bold text-amber-700">{kpis.averageScore} đ</p>
+            <p className="text-[11px] text-slate-500 font-medium">Điểm TB</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-3.5 text-center">
+            <CalendarDays className="size-5 mx-auto text-purple-600 mb-1" />
+            <p className="text-lg font-bold text-purple-700">{kpis.weeklyScheduleCount}</p>
+            <p className="text-[11px] text-slate-500 font-medium">Tiết tuần này</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-3.5 text-center">
+            <FileText className="size-5 mx-auto text-emerald-600 mb-1" />
+            <p className="text-lg font-bold text-emerald-700">{kpis.preparedLessonPlanCount}</p>
+            <p className="text-[11px] text-slate-500 font-medium">Giáo án đã dạy</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-3.5 text-center">
+            <Heart className="size-5 mx-auto text-rose-500 mb-1" />
+            <p className="text-lg font-bold text-rose-600">{kpis.needsSupportStudentCount}</p>
+            <p className="text-[11px] text-slate-500 font-medium">Cần hỗ trợ</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Teaching Context Section */}
+      <Card className="border-slate-200 shadow-2xs">
+        <CardHeader className="p-4 sm:p-5 flex flex-row items-center justify-between pb-3">
           <div>
-            <CardTitle className="text-base flex items-center gap-2">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
               <BookOpen className="size-4 text-teal-600" /> Môn học phụ trách tại lớp này
             </CardTitle>
-            <CardDescription>
-              Ngữ cảnh giảng dạy do giáo viên tự khai báo để sử dụng trong Lịch dạy, Đánh giá, và Giáo án.
+            <CardDescription className="text-xs mt-0.5">
+              Khai báo môn bạn trực tiếp giảng dạy tại lớp để hiển thị lịch dạy và giáo án.
             </CardDescription>
           </div>
-          <Button size="sm" variant="outline" onClick={() => setDeclareOpen(true)} className="gap-1.5 text-xs">
-            <Plus className="size-3.5" /> Khai báo môn dạy
+          <Button size="sm" variant="outline" onClick={() => setDeclareOpen(true)} className="text-xs h-8 gap-1">
+            <Plus className="size-3.5" /> Khai báo môn
           </Button>
         </CardHeader>
-        <CardContent>
-          {loadingContexts ? (
-            <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" /> Đang tải danh sách môn học...
-            </div>
-          ) : teachingContexts.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-4 text-center text-xs text-muted-foreground">
-              Chưa khai báo môn dạy nào cho lớp này. Nhấn <strong>"Khai báo môn dạy"</strong> để bắt đầu.
+        <CardContent className="p-4 sm:p-5 pt-0">
+          {teachingContexts.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400">
+              Chưa khai báo môn dạy riêng nào. Nhấn <strong>"Khai báo môn"</strong> để bắt đầu.
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
               {teachingContexts.map((ctx) => (
                 <div
                   key={ctx.id}
-                  className="flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50/50 px-3 py-1.5 text-sm"
+                  className="flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50/60 px-3 py-1.5 text-xs font-semibold text-teal-900"
                 >
-                  <span className="font-medium text-teal-900">{ctx.subject?.name || 'Môn học'}</span>
+                  <span>{ctx.subject?.name || 'Môn học'}</span>
                   <button
-                    onClick={() => handleDeactivateSubject(ctx.id, ctx.subject?.name || '')}
-                    className="text-slate-400 hover:text-red-600 transition"
-                    title="Ngừng phụ trách môn này"
+                    type="button"
+                    onClick={() => handleDeactivate(ctx.id)}
+                    className="text-slate-400 hover:text-rose-600 transition"
+                    title="Ngừng phụ trách"
                   >
                     <X className="size-3.5" />
                   </button>
@@ -823,1018 +1339,1528 @@ function ClassDetail({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <CardTitle>Danh sách học sinh</CardTitle>
-            <CardDescription>Nhấn vào một học sinh để xem hồ sơ học tập.</CardDescription>
+      {/* 2x2 Grid of Summary Lists */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Recent Schedules */}
+        <Card className="border-slate-200 shadow-2xs">
+          <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <CalendarDays className="size-4 text-teal-600" /> Lịch dạy gần nhất
+            </CardTitle>
+            <button onClick={() => onSwitchTab('schedules')} className="text-xs text-teal-700 font-semibold hover:underline">
+              Xem tất cả
+            </button>
+          </CardHeader>
+          <CardContent className="p-4 pt-0 space-y-2">
+            {(data?.recentSchedules || []).length === 0 ? (
+              <p className="text-xs text-slate-400 py-3 text-center">Chưa có lịch dạy gần đây</p>
+            ) : (
+              data?.recentSchedules.map((s) => (
+                <div key={s.id} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-100 text-xs">
+                  <div>
+                    <p className="font-semibold text-slate-900">{s.subjectName}</p>
+                    <p className="text-[11px] text-slate-500">{s.plannedDate} · {s.startTime || '07:00'} - {s.endTime || '07:45'}</p>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] bg-white">
+                    {s.status === 'COMPLETED' ? 'Đã dạy' : 'Sắp tới'}
+                  </Badge>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recent Absences & Lates */}
+        <Card className="border-slate-200 shadow-2xs">
+          <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <Clock className="size-4 text-amber-600" /> Vắng / Đi muộn gần đây
+            </CardTitle>
+            <button onClick={() => onSwitchTab('attendance')} className="text-xs text-teal-700 font-semibold hover:underline">
+              Xem chi tiết
+            </button>
+          </CardHeader>
+          <CardContent className="p-4 pt-0 space-y-2">
+            {[...(data?.recentAbsences || []), ...(data?.recentLates || [])].length === 0 ? (
+              <p className="text-xs text-slate-400 py-3 text-center">Lớp chuyên cần tốt, không có vắng / đi muộn gần đây</p>
+            ) : (
+              [...(data?.recentAbsences || []), ...(data?.recentLates || [])].slice(0, 4).map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-100 text-xs">
+                  <div>
+                    <p className="font-semibold text-slate-900">{item.studentName}</p>
+                    <p className="text-[11px] text-slate-500">{item.date} · {item.subjectName}</p>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                    (item as any).lateMinutes ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                  }`}>
+                    {(item as any).lateMinutes ? `Đi muộn ${(item as any).lateMinutes}p` : `Vắng ${(item as any).type || ''}`}
+                  </span>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Declare Subject Modal */}
+      <Dialog open={declareOpen} onOpenChange={setDeclareOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Khai báo môn giảng dạy</DialogTitle>
+            <DialogDescription>Chọn môn học bạn phụ trách giảng dạy tại lớp này.</DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Label className="text-xs font-semibold">Môn học *</Label>
+            <select
+              value={selectedSubjectId}
+              onChange={(e) => setSelectedSubjectId(e.target.value)}
+              className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs focus:outline-teal-500"
+            >
+              {subjectsList.map((sub) => (
+                <option key={sub.id} value={sub.id}>
+                  {sub.name} ({sub.code})
+                </option>
+              ))}
+            </select>
           </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setDeclareOpen(false)}>Hủy</Button>
+            <Button size="sm" onClick={handleDeclareSubject} disabled={declaring} className="bg-teal-600 text-white">
+              {declaring ? 'Đang lưu...' : 'Xác nhận'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 2: HỌC SINH (DANH SÁCH, THÊM, IMPORT EXCEL, CHUYỂN LỚP, RÚT LỚP)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function TabStudents({
+  classItem,
+  allClasses,
+  onOpenStudent,
+  onClassUpdated,
+}: {
+  classItem: ClassRecord
+  allClasses: ClassRecord[]
+  onOpenStudent: (student: StudentRecord) => void
+  onClassUpdated: () => void
+}) {
+  const [students, setStudents] = useState<StudentRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+
+  // Modals
+  const [addModalOpen, setAddModalOpen] = useState(false)
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  const [transferTarget, setTransferTarget] = useState<StudentRecord | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<StudentRecord | null>(null)
+
+  // Add Form
+  const [addName, setAddName] = useState('')
+  const [addGender, setAddGender] = useState('Nam')
+  const [addDob, setAddDob] = useState('')
+  const [addParentName, setAddParentName] = useState('')
+  const [addParentPhone, setAddParentPhone] = useState('')
+  const [addNote, setAddNote] = useState('')
+  const [submittingAdd, setSubmittingAdd] = useState(false)
+
+  // Import Form
+  const [importText, setImportText] = useState('')
+  const [importRows, setImportRows] = useState<Array<{ fullName: string; studentCode?: string; gender?: string; dob?: string; parentName?: string; parentPhone?: string; note?: string; error?: string }>>([])
+  const [submittingImport, setSubmittingImport] = useState(false)
+
+  // Transfer Form
+  const [targetClassId, setTargetClassId] = useState('')
+  const [transferReason, setTransferReason] = useState('')
+  const [submittingTransfer, setSubmittingTransfer] = useState(false)
+
+  const loadStudents = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await getClassStudents(classItem.id)
+      setStudents(data)
+    } catch {
+      setStudents([])
+    } finally {
+      setLoading(false)
+    }
+  }, [classItem.id])
+
+  useEffect(() => {
+    loadStudents()
+  }, [loadStudents])
+
+  const filteredStudents = useMemo(() => {
+    return students.filter((s) =>
+      `${s.name} ${s.studentCode || ''} ${s.phone || ''}`.toLowerCase().includes(search.toLowerCase()),
+    )
+  }, [students, search])
+
+  const handleAddStudent = async () => {
+    if (!addName.trim()) {
+      toast.error('Vui lòng nhập họ và tên học sinh')
+      return
+    }
+    setSubmittingAdd(true)
+    try {
+      await apiAddStudent(classItem.id, {
+        fullName: addName.trim(),
+        gender: addGender,
+        dob: addDob || undefined,
+        parentName: addParentName.trim() || undefined,
+        parentPhone: addParentPhone.trim() || undefined,
+        note: addNote.trim() || undefined,
+      })
+      setAddModalOpen(false)
+      setAddName('')
+      setAddDob('')
+      setAddParentName('')
+      setAddParentPhone('')
+      setAddNote('')
+      toast.success('Đã thêm học sinh vào lớp thành công!')
+      loadStudents()
+      onClassUpdated()
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi thêm học sinh')
+    } finally {
+      setSubmittingAdd(false)
+    }
+  }
+
+  // Parse CSV/Table text for Import
+  const handleParseImport = (text: string) => {
+    setImportText(text)
+    if (!text.trim()) {
+      setImportRows([])
+      return
+    }
+    const lines = text.trim().split('\n')
+    const parsed: typeof importRows = []
+    lines.forEach((line) => {
+      const parts = line.split(/[,\t|]/).map((p) => p.trim())
+      if (parts.length > 0 && parts[0]) {
+        const fullName = parts[0]
+        const studentCode = parts[1] || ''
+        const gender = parts[2] || 'Nam'
+        const dob = parts[3] || ''
+        const parentName = parts[4] || ''
+        const parentPhone = parts[5] || ''
+        const note = parts[6] || ''
+        const error = !fullName ? 'Thiếu họ tên' : undefined
+        parsed.push({ fullName, studentCode, gender, dob, parentName, parentPhone, note, error })
+      }
+    })
+    setImportRows(parsed)
+  }
+
+  const handleExecuteImport = async () => {
+    if (importRows.length === 0) return
+    setSubmittingImport(true)
+    try {
+      const res = await apiImportStudents(classItem.id, importRows)
+      if (res.success) {
+        toast.success(res.message || `Đã import thành công ${res.importedCount} học sinh`)
+        setImportModalOpen(false)
+        setImportText('')
+        setImportRows([])
+        loadStudents()
+        onClassUpdated()
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi import học sinh')
+    } finally {
+      setSubmittingImport(false)
+    }
+  }
+
+  const handleTransfer = async () => {
+    if (!transferTarget || !targetClassId) {
+      toast.error('Vui lòng chọn lớp đích cần chuyển đến')
+      return
+    }
+    setSubmittingTransfer(true)
+    try {
+      await apiTransferStudent(classItem.id, transferTarget.id, {
+        targetClassroomId: targetClassId,
+        reason: transferReason.trim() || undefined,
+      })
+      toast.success(`Đã chuyển học sinh ${transferTarget.name} sang lớp mới`)
+      setTransferTarget(null)
+      setTransferReason('')
+      loadStudents()
+      onClassUpdated()
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi chuyển lớp')
+    } finally {
+      setSubmittingTransfer(false)
+    }
+  }
+
+  const handleRemoveStudent = async () => {
+    if (!deleteTarget) return
+    try {
+      await apiRemoveStudent(classItem.id, deleteTarget.id)
+      toast.success(`Đã rút học sinh ${deleteTarget.name} khỏi lớp`)
+      setDeleteTarget(null)
+      loadStudents()
+      onClassUpdated()
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi rút học sinh')
+    }
+  }
+
+  const otherClasses = allClasses.filter((c) => c.id !== classItem.id && c.status !== 'COMPLETED')
+
+  return (
+    <Card className="border-slate-200 shadow-2xs">
+      <CardHeader className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100">
+        <div>
+          <CardTitle className="text-base font-bold text-slate-900">
+            Danh sách học sinh ({students.length} HS)
+          </CardTitle>
+          <CardDescription className="text-xs mt-0.5">
+            Quản lý hồ sơ, thông tin liên lạc phụ huynh và theo dõi tiến độ từng học sinh.
+          </CardDescription>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
           <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Tìm học sinh..."
-            className="w-full sm:w-72"
+            type="text"
+            placeholder="Tìm học sinh theo tên, mã..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full sm:w-56 text-xs h-8.5 bg-slate-50"
           />
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <table className="w-full min-w-[680px] text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                <th className="pb-3">Học sinh</th>
-                <th className="pb-3">Tiến độ</th>
-                <th className="pb-3">Chuyên cần</th>
-                <th className="pb-3">Trạng thái</th>
-                <th className="pb-3 text-right">Thao tác</th>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setImportModalOpen(true)}
+            className="text-xs h-8.5 gap-1.5"
+          >
+            <FileSpreadsheet className="size-3.5 text-emerald-600" /> Import Excel
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => setAddModalOpen(true)}
+            className="bg-teal-600 hover:bg-teal-700 text-white text-xs h-8.5 gap-1.5 font-semibold"
+          >
+            <UserPlus className="size-3.5" /> Thêm học sinh
+          </Button>
+        </div>
+      </CardHeader>
+
+      <CardContent className="p-0 overflow-x-auto">
+        {loading ? (
+          <div className="py-16 text-center text-slate-400">
+            <Loader2 className="size-6 animate-spin mx-auto text-teal-600 mb-2" />
+            <p className="text-xs">Đang tải danh sách học sinh...</p>
+          </div>
+        ) : filteredStudents.length === 0 ? (
+          <div className="py-16 text-center text-slate-400">
+            <Users className="size-8 mx-auto text-slate-300 mb-2" />
+            <p className="text-sm font-semibold text-slate-700">Chưa có học sinh nào trong lớp</p>
+            <p className="text-xs text-slate-400 mt-0.5">Nhấn "Thêm học sinh" hoặc "Import Excel" để bắt đầu.</p>
+          </div>
+        ) : (
+          <table className="w-full text-xs text-left">
+            <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
+              <tr>
+                <th className="py-3 px-4 w-12 text-center">STT</th>
+                <th className="py-3 px-4">Họ và tên</th>
+                <th className="py-3 px-3">Mã HS</th>
+                <th className="py-3 px-3">Giới tính</th>
+                <th className="py-3 px-3">Ngày sinh</th>
+                <th className="py-3 px-3">Học lực</th>
+                <th className="py-3 px-3">Chuyên cần</th>
+                <th className="py-3 px-4 text-right">Thao tác</th>
               </tr>
             </thead>
-            <tbody>
-              {students.map((student) => (
-                <tr key={student.id} className="border-b last:border-0">
-                  <td className="py-3">
-                    <button className="flex items-center gap-3 text-left" onClick={() => onOpenStudent(student)}>
-                      <Avatar className="size-9">
-                        <AvatarFallback className={student.color}>{student.initials}</AvatarFallback>
+            <tbody className="divide-y divide-slate-100">
+              {filteredStudents.map((s, idx) => (
+                <tr key={s.id} className="hover:bg-slate-50/60 transition-colors">
+                  <td className="py-3 px-4 text-center font-bold text-slate-400">#{idx + 1}</td>
+                  <td className="py-3 px-4">
+                    <button
+                      onClick={() => onOpenStudent(s)}
+                      className="flex items-center gap-2.5 text-left group"
+                    >
+                      <Avatar className="size-8 border border-teal-100">
+                        <AvatarFallback className={s.color || 'bg-teal-100 text-teal-700 font-bold text-xs'}>
+                          {s.initials}
+                        </AvatarFallback>
                       </Avatar>
-                      <span>
-                        <span className="block font-medium">{student.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {student.gender} · {student.dob}
-                        </span>
-                      </span>
+                      <div>
+                        <p className="font-bold text-slate-900 group-hover:text-teal-700 transition-colors">
+                          {s.name}
+                        </p>
+                        <p className="text-[10px] text-slate-400">{s.guardian} ({s.phone})</p>
+                      </div>
                     </button>
                   </td>
-                  <td className="py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-24 rounded-full bg-muted">
-                        <div className="h-2 rounded-full bg-primary" style={{ width: `${student.progress}%` }} />
-                      </div>
-                      {student.progress}%
+                  <td className="py-3 px-3 font-mono text-slate-600 font-semibold">{s.studentCode || '—'}</td>
+                  <td className="py-3 px-3 text-slate-600">{s.gender}</td>
+                  <td className="py-3 px-3 text-slate-600">{s.dob}</td>
+                  <td className="py-3 px-3">
+                    <Badge variant={statusVariant(s.status)} className="text-[10px]">
+                      {s.status}
+                    </Badge>
+                  </td>
+                  <td className="py-3 px-3 font-semibold text-teal-700">{s.attendance || 96}%</td>
+                  <td className="py-3 px-4 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        onClick={() => onOpenStudent(s)}
+                        title="Xem hồ sơ"
+                        className="size-7 text-slate-500 hover:text-teal-700"
+                      >
+                        <Eye className="size-3.5" />
+                      </Button>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setTransferTarget(s)
+                          if (otherClasses.length > 0) setTargetClassId(otherClasses[0].id)
+                        }}
+                        title="Chuyển lớp"
+                        className="size-7 text-slate-500 hover:text-blue-700"
+                      >
+                        <ArrowRightLeft className="size-3.5" />
+                      </Button>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        onClick={() => setDeleteTarget(s)}
+                        title="Rút khỏi lớp"
+                        className="size-7 text-slate-500 hover:text-rose-700"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
                     </div>
                   </td>
-                  <td className="py-3">{student.attendance || 96}%</td>
-                  <td className="py-3">
-                    <Badge variant={statusVariant(student.status)}>{student.status}</Badge>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </CardContent>
+
+      {/* ADD STUDENT DIALOG */}
+      <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Thêm học sinh mới vào lớp</DialogTitle>
+            <DialogDescription>Nhập thông tin cá nhân và liên hệ phụ huynh.</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3 py-2 text-xs">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <Label className="text-xs font-semibold">Họ và tên *</Label>
+                <Input
+                  placeholder="Nguyễn Văn An"
+                  value={addName}
+                  onChange={(e) => setAddName(e.target.value)}
+                  className="mt-1 text-xs h-9"
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold">Giới tính</Label>
+                <select
+                  value={addGender}
+                  onChange={(e) => setAddGender(e.target.value)}
+                  className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs focus:outline-teal-500"
+                >
+                  <option value="Nam">Nam</option>
+                  <option value="Nữ">Nữ</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold">Ngày sinh (DD/MM/YYYY)</Label>
+                <Input
+                  placeholder="12/04/2016"
+                  value={addDob}
+                  onChange={(e) => setAddDob(e.target.value)}
+                  className="mt-1 text-xs h-9"
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold">Điện thoại phụ huynh</Label>
+                <Input
+                  placeholder="0901 234 567"
+                  value={addParentPhone}
+                  onChange={(e) => setAddParentPhone(e.target.value)}
+                  className="mt-1 text-xs h-9"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Họ tên phụ huynh / Người giám hộ</Label>
+              <Input
+                placeholder="Nguyễn Thị Hoa"
+                value={addParentName}
+                onChange={(e) => setAddParentName(e.target.value)}
+                className="mt-1 text-xs h-9"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Ghi chú ban đầu (nếu có)</Label>
+              <Input
+                placeholder="Hăng hái phát biểu, tiếp thu bài nhanh..."
+                value={addNote}
+                onChange={(e) => setAddNote(e.target.value)}
+                className="mt-1 text-xs h-9"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setAddModalOpen(false)} disabled={submittingAdd}>
+              Hủy
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleAddStudent}
+              disabled={submittingAdd || !addName.trim()}
+              className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs"
+            >
+              {submittingAdd ? <Loader2 className="size-3.5 animate-spin" /> : <UserPlus className="size-3.5" />} Thêm học sinh
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* IMPORT EXCEL / CSV MODAL */}
+      <Dialog open={importModalOpen} onOpenChange={setImportModalOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Import danh sách học sinh từ Excel / Bảng dữ liệu</DialogTitle>
+            <DialogDescription>
+              Dán dữ liệu từ bảng tính (Excel/Google Sheets) theo định dạng: <br />
+              <code>Họ tên, Mã HS, Giới tính, Ngày sinh, Tên phụ huynh, Số điện thoại, Ghi chú</code>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2 text-xs">
+            <Textarea
+              placeholder="Nguyễn Văn An	HS001	Nam	12/04/2016	Nguyễn Thị Hoa	0901234567	Chủ động phát biểu
+Trần Thị Bình	HS002	Nữ	25/08/2016	Trần Văn Cường	0912345678	Tiếp thu nhanh"
+              value={importText}
+              onChange={(e) => handleParseImport(e.target.value)}
+              rows={5}
+              className="text-xs font-mono"
+            />
+
+            {importRows.length > 0 && (
+              <div className="border rounded-xl p-3 bg-slate-50 max-h-48 overflow-y-auto space-y-1.5">
+                <p className="font-bold text-slate-700">Xem trước ({importRows.length} dòng):</p>
+                {importRows.map((r, i) => (
+                  <div key={i} className="flex items-center justify-between text-[11px] bg-white p-2 rounded border">
+                    <span className="font-semibold text-slate-800">
+                      {i + 1}. {r.fullName} ({r.gender || 'Nam'}) - Mã: {r.studentCode || 'Tự động'}
+                    </span>
+                    <span className="text-slate-500">{r.dob || 'Chưa ngày sinh'} · {r.parentPhone || 'Chưa SĐT'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setImportModalOpen(false)}>Hủy</Button>
+            <Button
+              size="sm"
+              onClick={handleExecuteImport}
+              disabled={submittingImport || importRows.length === 0}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs"
+            >
+              {submittingImport ? <Loader2 className="size-3.5 animate-spin" /> : <UploadCloud className="size-3.5" />} Xác nhận Import ({importRows.length})
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* TRANSFER STUDENT MODAL */}
+      <Dialog open={!!transferTarget} onOpenChange={(val) => !val && setTransferTarget(null)}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>Chuyển lớp cho học sinh</DialogTitle>
+            <DialogDescription>
+              Chuyển học sinh <strong>{transferTarget?.name}</strong> sang một lớp học khác trong cùng năm học.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2 text-xs">
+            <div>
+              <Label className="text-xs font-semibold">Chọn lớp chuyển đến *</Label>
+              <select
+                value={targetClassId}
+                onChange={(e) => setTargetClassId(e.target.value)}
+                className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs focus:outline-teal-500"
+              >
+                {otherClasses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.grade} · {c.room})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Lý do chuyển lớp (tùy chọn)</Label>
+              <Input
+                placeholder="Chuyển phân ban / theo nguyện vọng..."
+                value={transferReason}
+                onChange={(e) => setTransferReason(e.target.value)}
+                className="mt-1 text-xs h-9"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setTransferTarget(null)}>Hủy</Button>
+            <Button
+              size="sm"
+              onClick={handleTransfer}
+              disabled={submittingTransfer || !targetClassId}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs"
+            >
+              {submittingTransfer ? 'Đang chuyển...' : 'Xác nhận chuyển'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* WITHDRAW / DELETE STUDENT CONFIRMATION */}
+      <Dialog open={!!deleteTarget} onOpenChange={(val) => !val && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Rút học sinh khỏi lớp</DialogTitle>
+            <DialogDescription>
+              Bạn có chắc muốn rút học sinh <strong>{deleteTarget?.name}</strong> khỏi lớp? Hồ sơ và dữ liệu điểm danh, đánh giá trước đó vẫn được lưu giữ trong hệ thống.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)}>Hủy</Button>
+            <Button variant="destructive" size="sm" onClick={handleRemoveStudent}>
+              Xác nhận rút học sinh
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 3: LỊCH DẠY CỦA LỚP
+// ═══════════════════════════════════════════════════════════════════════════
+
+function TabSchedules({ classItem }: { classItem: ClassRecord }) {
+  const [schedules, setSchedules] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [attendanceScheduleId, setAttendanceScheduleId] = useState<string | null>(null)
+
+  const loadSchedules = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await getClassSchedules(classItem.id)
+      setSchedules(data)
+    } catch {
+      setSchedules([])
+    } finally {
+      setLoading(false)
+    }
+  }, [classItem.id])
+
+  useEffect(() => {
+    loadSchedules()
+  }, [loadSchedules])
+
+  return (
+    <Card className="border-slate-200 shadow-2xs">
+      <CardHeader className="p-4 sm:p-5 flex flex-row items-center justify-between border-b border-slate-100">
+        <div>
+          <CardTitle className="text-base font-bold text-slate-900">
+            Thời khóa biểu & Tiết dạy ({schedules.length} tiết)
+          </CardTitle>
+          <CardDescription className="text-xs mt-0.5">
+            Danh sách các tiết giảng dạy được lên lịch tại lớp {classItem.name}.
+          </CardDescription>
+        </div>
+      </CardHeader>
+
+      <CardContent className="p-0 overflow-x-auto">
+        {loading ? (
+          <div className="py-16 text-center text-slate-400">
+            <Loader2 className="size-6 animate-spin mx-auto text-teal-600 mb-2" />
+            <p className="text-xs">Đang tải lịch dạy...</p>
+          </div>
+        ) : schedules.length === 0 ? (
+          <div className="py-16 text-center text-slate-400">
+            <CalendarDays className="size-8 mx-auto text-slate-300 mb-2" />
+            <p className="text-sm font-semibold text-slate-700">Chưa có tiết dạy nào được xếp lịch</p>
+          </div>
+        ) : (
+          <table className="w-full text-xs text-left">
+            <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
+              <tr>
+                <th className="py-3 px-4">Ngày dạy</th>
+                <th className="py-3 px-3">Thời gian</th>
+                <th className="py-3 px-3">Môn học</th>
+                <th className="py-3 px-3">Giáo viên</th>
+                <th className="py-3 px-3">Giáo án</th>
+                <th className="py-3 px-3">Điểm danh</th>
+                <th className="py-3 px-4 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {schedules.map((s) => (
+                <tr key={s.id} className="hover:bg-slate-50/60 transition-colors">
+                  <td className="py-3 px-4 font-semibold text-slate-900">{s.plannedDate}</td>
+                  <td className="py-3 px-3 text-slate-600">{s.startTime || '07:00'} - {s.endTime || '07:45'}</td>
+                  <td className="py-3 px-3 font-semibold text-teal-900">{s.subject?.name || 'Môn học'}</td>
+                  <td className="py-3 px-3 text-slate-600">{s.teacher?.fullName || 'Giáo viên'}</td>
+                  <td className="py-3 px-3">
+                    {s.lessonPlan ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-700 font-medium bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        <CheckCircle2 className="size-3" /> {s.lessonPlan.title}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">Chưa gắn giáo án</span>
+                    )}
                   </td>
-                  <td className="py-3 text-right">
-                    <Button size="icon" variant="ghost" onClick={() => onOpenStudent(student)} aria-label={`Xem ${student.name}`}>
-                      <Eye />
-                    </Button>
+                  <td className="py-3 px-3">
+                    {s.isAttendanceRecorded ? (
+                      <span className="inline-flex items-center gap-1 text-teal-700 font-semibold bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                        <Check className="size-3" /> Đã điểm danh
+                      </span>
+                    ) : (
+                      <span className="text-amber-600 font-medium bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                        Chưa điểm danh
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-3 px-4 text-right">
                     <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => {
-                        setSelected(student)
-                        setDialog('delete')
-                      }}
-                      aria-label={`Xóa ${student.name}`}
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setAttendanceScheduleId(s.id)}
+                      className="text-xs h-7.5 px-2.5 font-semibold text-teal-700 border-teal-200 hover:bg-teal-50"
                     >
-                      <Trash2 />
+                      Điểm danh
                     </Button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {!students.length && <Empty title="Chưa có học sinh phù hợp" />}
-        </CardContent>
-      </Card>
+        )}
+      </CardContent>
 
-      {/* Add Student Dialog (Full Form) */}
-      <Dialog open={dialog === 'add-student'} onOpenChange={(open) => !open && setDialog(null)}>
-        <DialogContent className="sm:max-w-[480px]">
-          <DialogHeader>
-            <DialogTitle>Thêm học sinh mới</DialogTitle>
-            <DialogDescription>Nhập thông tin chi tiết học sinh vào lớp {classItem.name}.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 py-2">
-            <div>
-              <Label htmlFor="student-name-input" className="text-xs font-semibold">
-                Họ và tên học sinh *
-              </Label>
-              <Input
-                id="student-name-input"
-                className="mt-1"
-                value={studentName}
-                onChange={(e) => setStudentName(e.target.value)}
-                placeholder="Ví dụ: Nguyễn Văn An"
-                autoFocus
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="student-gender-input" className="text-xs font-semibold">Giới tính</Label>
-                <select
-                  id="student-gender-input"
-                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                  value={studentGender}
-                  onChange={(e) => setStudentGender(e.target.value)}
-                >
-                  <option value="Nam">Nam</option>
-                  <option value="Nữ">Nữ</option>
-                  <option value="Khác">Khác</option>
-                </select>
-              </div>
-
-              <div>
-                <Label htmlFor="student-dob-input" className="text-xs font-semibold">Ngày sinh</Label>
-                <Input
-                  id="student-dob-input"
-                  type="date"
-                  className="mt-1"
-                  value={studentDob}
-                  onChange={(e) => setStudentDob(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="student-parent-name" className="text-xs font-semibold">Họ tên phụ huynh</Label>
-                <Input
-                  id="student-parent-name"
-                  className="mt-1"
-                  value={studentParentName}
-                  onChange={(e) => setStudentParentName(e.target.value)}
-                  placeholder="Nguyễn Văn Ba"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="student-parent-phone" className="text-xs font-semibold">SĐT phụ huynh</Label>
-                <Input
-                  id="student-parent-phone"
-                  className="mt-1"
-                  value={studentParentPhone}
-                  onChange={(e) => setStudentParentPhone(e.target.value)}
-                  placeholder="0912345678"
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="student-note-input" className="text-xs font-semibold">Ghi chú ban đầu</Label>
-              <Input
-                id="student-note-input"
-                className="mt-1"
-                value={studentNote}
-                onChange={(e) => setStudentNote(e.target.value)}
-                placeholder="VD: Cần hỗ trợ môn Toán, ngồi bàn đầu..."
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialog(null)}>
-              Hủy
-            </Button>
-            <Button onClick={addStudent} disabled={submitting || !studentName.trim()} className="bg-teal-600 hover:bg-teal-700">
-              {submitting ? 'Đang thêm...' : 'Thêm học sinh'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Class Dialog */}
-      <Dialog open={dialog === 'edit-class'} onOpenChange={(open) => !open && setDialog(null)}>
-        <DialogContent className="sm:max-w-[460px]">
-          <DialogHeader>
-            <DialogTitle>Sửa thông tin lớp học</DialogTitle>
-            <DialogDescription>Cập nhật tên lớp, mã lớp, phòng học và thời khóa biểu.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 py-2">
-            <div>
-              <Label htmlFor="edit-class-name" className="text-xs font-semibold">Tên lớp *</Label>
-              <Input
-                id="edit-class-name"
-                className="mt-1"
-                value={editClassName}
-                onChange={(e) => setEditClassName(e.target.value)}
-                placeholder="Lớp 4A1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="edit-class-code" className="text-xs font-semibold">Mã lớp</Label>
-              <Input
-                id="edit-class-code"
-                className="mt-1"
-                value={editClassCode}
-                onChange={(e) => setEditClassCode(e.target.value)}
-                placeholder="4A1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="edit-class-room" className="text-xs font-semibold">Phòng học</Label>
-              <Input
-                id="edit-class-room"
-                className="mt-1"
-                value={editClassRoom}
-                onChange={(e) => setEditClassRoom(e.target.value)}
-                placeholder="Phòng 204"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialog(null)}>Hủy</Button>
-            <Button onClick={updateClassDetails} disabled={submitting || !editClassName.trim()}>
-              {submitting ? 'Đang lưu...' : 'Lưu thay đổi'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Declare Subject Dialog */}
-      <Dialog open={declareOpen} onOpenChange={(open) => !open && setDeclareOpen(false)}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>Khai báo môn giảng dạy</DialogTitle>
-            <DialogDescription>
-              Chọn môn học bạn trực tiếp giảng dạy tại lớp {classItem.name}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-2">
-            <Label htmlFor="declare-subject-select" className="text-xs font-semibold">Môn học *</Label>
-            <select
-              id="declare-subject-select"
-              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={selectedSubjectId}
-              onChange={(e) => setSelectedSubjectId(e.target.value)}
-            >
-              {subjectsList.map((s) => (
-                <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
-              ))}
-            </select>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeclareOpen(false)} disabled={declaring}>Hủy</Button>
-            <Button onClick={handleDeclareSubject} disabled={declaring || !selectedSubjectId}>
-              {declaring ? <Loader2 className="size-4 animate-spin" /> : 'Xác nhận khai báo'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Student Dialog */}
-      <Dialog open={dialog === 'delete'} onOpenChange={(open) => !open && setDialog(null)}>
-        <DialogContent className="sm:max-w-[420px]">
-          <DialogHeader>
-            <DialogTitle>Xóa học sinh</DialogTitle>
-            <DialogDescription>
-              Bạn có chắc chắn muốn xóa học sinh <strong>{selected?.name}</strong> khỏi {classItem.name}?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialog(null)}>
-              Hủy
-            </Button>
-            <Button variant="destructive" onClick={deleteStudent} disabled={submitting}>
-              {submitting ? 'Đang xóa...' : 'Xóa học sinh'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  )
-}
-
-function StudentDirectory({ students, classes, query, setQuery, filter, setFilter, onOpenStudent }: { students: Array<StudentRecord & { className: string; classId: string }>; classes: ClassRecord[]; query: string; setQuery: (value: string) => void; filter: string; setFilter: (value: string) => void; onOpenStudent: (student: StudentRecord) => void }) {
-  return (
-    <div className="mx-auto max-w-7xl">
-      <Header
-        title="Tất cả học sinh"
-        description="Tìm kiếm nhanh và mở hồ sơ học tập của từng học sinh."
-        action={<Button variant="outline" onClick={() => window.print()}><Download data-icon="inline-start" />Xuất danh sách</Button>}
+      <ScheduleAttendanceDialog
+        scheduleId={attendanceScheduleId}
+        open={!!attendanceScheduleId}
+        onOpenChange={(val) => !val && setAttendanceScheduleId(null)}
+        onSaved={() => loadSchedules()}
       />
-      <div className="mb-6 flex gap-3">
-        <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm tên học sinh hoặc lớp..." />
-        <select
-          aria-label="Lọc theo lớp"
-          className="h-9 rounded-md border bg-background px-3 text-sm font-medium"
-          value={filter}
-          onChange={(event) => setFilter(event.target.value)}
-        >
-          <option value="Tất cả">Tất cả các lớp</option>
-          {classes.map((c) => (
-            <option key={c.id} value={c.name}>
-              {c.name} {c.code ? `(${c.code})` : ''}
-            </option>
-          ))}
-        </select>
+    </Card>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 4: ĐIỂM DANH CỦA LỚP
+// ═══════════════════════════════════════════════════════════════════════════
+
+function TabAttendance({ classItem }: { classItem: ClassRecord }) {
+  const [data, setData] = useState<ClassAttendanceData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [range, setRange] = useState('month')
+  const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null)
+
+  const loadAttendance = useCallback(async (r: string) => {
+    setLoading(true)
+    try {
+      const res = await getClassAttendance(classItem.id, r)
+      setData(res)
+    } catch {
+      setData(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [classItem.id])
+
+  useEffect(() => {
+    loadAttendance(range)
+  }, [loadAttendance, range])
+
+  const summary = data?.summary || {
+    attendanceRate: 96,
+    presentCount: 0,
+    absentCount: 0,
+    excusedCount: 0,
+    unexcusedCount: 0,
+    lateCount: 0,
+    totalSessions: 0,
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Attendance KPI Summary */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-3.5 text-center">
+            <p className="text-2xl font-extrabold text-teal-700">{summary.attendanceRate}%</p>
+            <p className="text-[11px] text-slate-500 font-medium">Tỷ lệ chuyên cần</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-3.5 text-center">
+            <p className="text-2xl font-extrabold text-slate-900">{summary.presentCount}</p>
+            <p className="text-[11px] text-slate-500 font-medium">Lượt có mặt</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-3.5 text-center">
+            <p className="text-2xl font-extrabold text-blue-700">{summary.excusedCount}</p>
+            <p className="text-[11px] text-slate-500 font-medium">Có phép</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-3.5 text-center">
+            <p className="text-2xl font-extrabold text-rose-700">{summary.unexcusedCount}</p>
+            <p className="text-[11px] text-slate-500 font-medium">Không phép</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs col-span-2 sm:col-span-1">
+          <CardContent className="p-3.5 text-center">
+            <p className="text-2xl font-extrabold text-amber-700">{summary.lateCount}</p>
+            <p className="text-[11px] text-slate-500 font-medium">Đi muộn</p>
+          </CardContent>
+        </Card>
       </div>
-      <Card>
-        <CardContent className="divide-y p-0">
-          {students.map((student) => (
-            <button
-              key={`${student.classId}-${student.id}`}
-              className="flex w-full items-center gap-3 p-4 text-left hover:bg-muted/40 transition"
-              onClick={() => onOpenStudent(student)}
-            >
-              <Avatar><AvatarFallback className={student.color}>{student.initials}</AvatarFallback></Avatar>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{student.name}</span>
-                <span className="text-xs text-muted-foreground">{student.className} · {student.guardian}</span>
-              </span>
-              <Badge variant={statusVariant(student.status)}>{student.status}</Badge>
-              <ChevronRight className="size-4 text-muted-foreground" />
-            </button>
-          ))}
-          {!students.length && <Empty title="Chưa tìm thấy học sinh" />}
+
+      {/* Attendance Sessions List */}
+      <Card className="border-slate-200 shadow-2xs">
+        <CardHeader className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100">
+          <div>
+            <CardTitle className="text-base font-bold text-slate-900">
+              Nhật ký các buổi điểm danh ({summary.totalSessions} buổi)
+            </CardTitle>
+            <CardDescription className="text-xs mt-0.5">
+              Ghi nhận chi tiết theo từng tiết dạy và ngày học.
+            </CardDescription>
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+            {['today', 'week', 'month', 'all'].map((r) => (
+              <button
+                key={r}
+                onClick={() => setRange(r)}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  range === r ? 'bg-white text-teal-800 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {r === 'today' ? 'Hôm nay' : r === 'week' ? 'Tuần này' : r === 'month' ? 'Tháng này' : 'Tất cả'}
+              </button>
+            ))}
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-0 overflow-x-auto">
+          {loading ? (
+            <div className="py-16 text-center text-slate-400">
+              <Loader2 className="size-6 animate-spin mx-auto text-teal-600 mb-2" />
+              <p className="text-xs">Đang tải nhật ký điểm danh...</p>
+            </div>
+          ) : (data?.sessions || []).length === 0 ? (
+            <div className="py-16 text-center text-slate-400">
+              <CalendarCheck2 className="size-8 mx-auto text-slate-300 mb-2" />
+              <p className="text-sm font-semibold text-slate-700">Chưa có dữ liệu điểm danh trong khoảng thời gian này</p>
+            </div>
+          ) : (
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
+                <tr>
+                  <th className="py-3 px-4">Ngày</th>
+                  <th className="py-3 px-3">Môn học</th>
+                  <th className="py-3 px-3">Giáo viên</th>
+                  <th className="py-3 px-3">Có mặt</th>
+                  <th className="py-3 px-3">Vắng</th>
+                  <th className="py-3 px-3">Đi muộn</th>
+                  <th className="py-3 px-4 text-right">Chi tiết</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data?.sessions.map((sess) => (
+                  <tr key={sess.id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-3 px-4 font-semibold text-slate-900">{sess.date}</td>
+                    <td className="py-3 px-3 font-semibold text-teal-900">{sess.subjectName}</td>
+                    <td className="py-3 px-3 text-slate-600">{sess.teacherName}</td>
+                    <td className="py-3 px-3 text-emerald-700 font-bold">{sess.stats.present} HS</td>
+                    <td className="py-3 px-3 text-rose-700 font-semibold">
+                      {sess.stats.excused + sess.stats.unexcused} HS ({sess.stats.excused} phép)
+                    </td>
+                    <td className="py-3 px-3 text-amber-700 font-semibold">{sess.stats.late} HS</td>
+                    <td className="py-3 px-4 text-right">
+                      {sess.scheduleId && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setSelectedScheduleId(sess.scheduleId || null)}
+                          className="text-xs h-7.5 px-2.5 text-teal-700 font-semibold"
+                        >
+                          Xem chi tiết
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </CardContent>
+      </Card>
+
+      <ScheduleAttendanceDialog
+        scheduleId={selectedScheduleId}
+        open={!!selectedScheduleId}
+        onOpenChange={(val) => !val && setSelectedScheduleId(null)}
+        onSaved={() => loadAttendance(range)}
+      />
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 5: ĐÁNH GIÁ CỦA LỚP
+// ═══════════════════════════════════════════════════════════════════════════
+
+function TabAssessments({ classItem }: { classItem: ClassRecord }) {
+  const [data, setData] = useState<ClassAssessmentData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const loadAssessments = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await getClassAssessments(classItem.id)
+      setData(res)
+    } catch {
+      setData(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [classItem.id])
+
+  useEffect(() => {
+    loadAssessments()
+  }, [loadAssessments])
+
+  const summary = data?.summary || {
+    avgScore: 8.4,
+    excellentCount: 0,
+    completedCount: 0,
+    needsSupportCount: 0,
+    totalAssessments: 0,
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Assessment Summary KPIs */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-3.5 text-center">
+            <p className="text-2xl font-extrabold text-teal-700">{summary.avgScore} đ</p>
+            <p className="text-[11px] text-slate-500 font-medium">Điểm trung bình</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-3.5 text-center">
+            <p className="text-2xl font-extrabold text-emerald-700">{summary.excellentCount}</p>
+            <p className="text-[11px] text-slate-500 font-medium">Hoàn thành tốt</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-3.5 text-center">
+            <p className="text-2xl font-extrabold text-blue-700">{summary.completedCount}</p>
+            <p className="text-[11px] text-slate-500 font-medium">Hoàn thành</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-3.5 text-center">
+            <p className="text-2xl font-extrabold text-rose-700">{summary.needsSupportCount}</p>
+            <p className="text-[11px] text-slate-500 font-medium">Chưa hoàn thành</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Assessments List */}
+      <Card className="border-slate-200 shadow-2xs">
+        <CardHeader className="p-4 sm:p-5 border-b border-slate-100">
+          <CardTitle className="text-base font-bold text-slate-900">
+            Các bài đánh giá & Nhận xét định kỳ ({summary.totalAssessments} bài)
+          </CardTitle>
+          <CardDescription className="text-xs mt-0.5">
+            Tổng hợp kết quả đánh giá theo tiêu chí Thông tư 27 của Bộ GD&ĐT.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="p-0 overflow-x-auto">
+          {loading ? (
+            <div className="py-16 text-center text-slate-400">
+              <Loader2 className="size-6 animate-spin mx-auto text-teal-600 mb-2" />
+              <p className="text-xs">Đang tải kết quả đánh giá...</p>
+            </div>
+          ) : (data?.assessments || []).length === 0 ? (
+            <div className="py-16 text-center text-slate-400">
+              <BarChart3 className="size-8 mx-auto text-slate-300 mb-2" />
+              <p className="text-sm font-semibold text-slate-700">Chưa có bài đánh giá nào cho lớp này</p>
+            </div>
+          ) : (
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
+                <tr>
+                  <th className="py-3 px-4">Tên bài đánh giá</th>
+                  <th className="py-3 px-3">Môn học</th>
+                  <th className="py-3 px-3">Ngày đánh giá</th>
+                  <th className="py-3 px-3">Số HS đánh giá</th>
+                  <th className="py-3 px-4 text-right">Điểm TB</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data?.assessments.map((a) => (
+                  <tr key={a.id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-3 px-4 font-bold text-slate-900">{a.name}</td>
+                    <td className="py-3 px-3 font-semibold text-teal-900">{a.subjectName}</td>
+                    <td className="py-3 px-3 text-slate-600">{a.date}</td>
+                    <td className="py-3 px-3 text-slate-600">{a.studentCount} học sinh</td>
+                    <td className="py-3 px-4 text-right font-extrabold text-teal-700">
+                      {typeof a.averageScore === 'number' ? `${a.averageScore} đ` : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </CardContent>
       </Card>
     </div>
   )
 }
 
-function StudentProfile({
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 6: GIÁO ÁN CỦA LỚP
+// ═══════════════════════════════════════════════════════════════════════════
+
+function TabLessonPlans({ classItem }: { classItem: ClassRecord }) {
+  const [plans, setPlans] = useState<ClassLessonPlanRecord[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const loadPlans = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await getClassLessonPlans(classItem.id)
+      setPlans(data)
+    } catch {
+      setPlans([])
+    } finally {
+      setLoading(false)
+    }
+  }, [classItem.id])
+
+  useEffect(() => {
+    loadPlans()
+  }, [loadPlans])
+
+  return (
+    <Card className="border-slate-200 shadow-2xs">
+      <CardHeader className="p-4 sm:p-5 flex flex-row items-center justify-between border-b border-slate-100">
+        <div>
+          <CardTitle className="text-base font-bold text-slate-900">
+            Giáo án & Kế hoạch bài dạy ({plans.length} bài)
+          </CardTitle>
+          <CardDescription className="text-xs mt-0.5">
+            Danh sách các giáo án được soạn thảo và phân bổ cho lớp {classItem.name}.
+          </CardDescription>
+        </div>
+      </CardHeader>
+
+      <CardContent className="p-0 overflow-x-auto">
+        {loading ? (
+          <div className="py-16 text-center text-slate-400">
+            <Loader2 className="size-6 animate-spin mx-auto text-teal-600 mb-2" />
+            <p className="text-xs">Đang tải danh sách giáo án...</p>
+          </div>
+        ) : plans.length === 0 ? (
+          <div className="py-16 text-center text-slate-400">
+            <FileText className="size-8 mx-auto text-slate-300 mb-2" />
+            <p className="text-sm font-semibold text-slate-700">Chưa có giáo án nào được liên kết với lớp này</p>
+          </div>
+        ) : (
+          <table className="w-full text-xs text-left">
+            <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
+              <tr>
+                <th className="py-3 px-4">Tên bài học</th>
+                <th className="py-3 px-3">Môn học</th>
+                <th className="py-3 px-3">Nguồn</th>
+                <th className="py-3 px-3">Trạng thái</th>
+                <th className="py-3 px-4 text-right">Cập nhật</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {plans.map((p) => (
+                <tr key={p.id} className="hover:bg-slate-50/60 transition-colors">
+                  <td className="py-3 px-4 font-bold text-slate-900">{p.title}</td>
+                  <td className="py-3 px-3 font-semibold text-teal-900">{p.subjectName}</td>
+                  <td className="py-3 px-3">
+                    <Badge variant="outline" className="text-[10px] bg-slate-50 font-mono">
+                      {p.sourceType}
+                    </Badge>
+                  </td>
+                  <td className="py-3 px-3">
+                    <Badge
+                      className={`text-[10px] ${
+                        p.status === 'COMPLETED' || p.status === 'TAUGHT'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}
+                    >
+                      {p.status === 'COMPLETED' ? 'Đã hoàn thành' : p.status === 'TAUGHT' ? 'Đã dạy' : 'Bản nháp'}
+                    </Badge>
+                  </td>
+                  <td className="py-3 px-4 text-right text-slate-400 text-[11px]">
+                    {new Date(p.updatedAt).toLocaleDateString('vi-VN')}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 7: THỐNG KÊ LỚP
+// ═══════════════════════════════════════════════════════════════════════════
+
+function TabStatistics({ classItem }: { classItem: ClassRecord }) {
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="border-slate-200 shadow-2xs">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <TrendingUp className="size-4 text-teal-600" /> Tỷ lệ chuyên cần chung
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-extrabold text-teal-700">{classItem.attendance || 96}%</span>
+              <span className="text-xs text-slate-500">trên tổng số tiết</span>
+            </div>
+            <div className="w-full bg-slate-100 h-2 rounded-full mt-3 overflow-hidden">
+              <div className="bg-teal-600 h-full rounded-full" style={{ width: `${classItem.attendance || 96}%` }} />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <Award className="size-4 text-blue-600" /> Điểm trung bình học kỳ
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-extrabold text-blue-700">{classItem.average || 8.4}</span>
+              <span className="text-xs text-slate-500">/ 10 điểm</span>
+            </div>
+            <div className="w-full bg-slate-100 h-2 rounded-full mt-3 overflow-hidden">
+              <div className="bg-blue-600 h-full rounded-full" style={{ width: `${((classItem.average || 8.4) / 10) * 100}%` }} />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <Users className="size-4 text-purple-600" /> Quy mô lớp học
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-extrabold text-purple-700">{classItem.studentCount || classItem.students?.length || 0}</span>
+              <span className="text-xs text-slate-500">học sinh</span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-3">Đầy đủ hồ sơ và danh sách phân lớp</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="border-slate-200 shadow-2xs">
+        <CardHeader className="p-4 sm:p-5 border-b border-slate-100">
+          <CardTitle className="text-sm font-bold">Gợi ý nâng cao chất lượng lớp học từ TeachFlow AI</CardTitle>
+          <CardDescription className="text-xs">Phân tích tự động dựa trên chuyên cần và điểm đánh giá.</CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 sm:p-5 space-y-2 text-xs text-slate-700">
+          <div className="flex items-start gap-2 p-3 bg-teal-50/50 rounded-xl border border-teal-100">
+            <Sparkles className="size-4 text-teal-600 shrink-0 mt-0.5" />
+            <p>
+              Tỷ lệ chuyên cần của lớp đạt <strong>{classItem.attendance || 96}%</strong>, rất ổn định. Nên duy trì các hoạt động khởi động sôi nổi để giữ vững tinh thần học tập.
+            </p>
+          </div>
+          <div className="flex items-start gap-2 p-3 bg-blue-50/50 rounded-xl border border-blue-100">
+            <Heart className="size-4 text-blue-600 shrink-0 mt-0.5" />
+            <p>
+              Đối với nhóm học sinh cần hỗ trợ, giáo viên có thể tạo thêm phiếu bài tập phân hóa dạng mức độ 1-2 từ mục <strong>Phiếu học tập</strong> để bổ trợ kiến thức.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INDIVIDUAL STUDENT PROFILE VIEW
+// ═══════════════════════════════════════════════════════════════════════════
+
+function StudentProfileView({
   student,
   classItem,
   allClasses,
   onBack,
-  onDelete,
-  onComment,
-  onTransfer,
-  dialog,
-  setDialog,
-  comment,
-  setComment,
-  onSaveComment,
-  onConfirmDelete,
-  onTransferSuccess,
+  onStudentUpdated,
 }: {
-  student: StudentRecord;
-  classItem: ClassRecord;
-  allClasses: ClassRecord[];
-  onBack: () => void;
-  onDelete: () => void;
-  onComment: () => void;
-  onTransfer: () => void;
-  dialog: string | null;
-  setDialog: (value: 'comment' | 'delete' | 'transfer' | null) => void;
-  comment: string;
-  setComment: (value: string) => void;
-  onSaveComment: () => void;
-  onConfirmDelete: () => void;
-  onTransferSuccess: () => void;
+  student: StudentRecord
+  classItem: ClassRecord
+  allClasses: ClassRecord[]
+  onBack: () => void
+  onStudentUpdated: () => void
 }) {
-  const [attendanceList, setAttendanceList] = useState<Array<{ date: string; type: string; note: string }>>([])
-  const [attendanceSummary, setAttendanceSummary] = useState<StudentAttendanceSummary | null>(null)
-  const [commentsList, setCommentsList] = useState<Array<{ id: string; content: string; date: string; teacherName: string }>>([])
-  const [enrollmentsList, setEnrollmentsList] = useState<StudentEnrollmentRecord[]>([])
-  const [suggestions, setSuggestions] = useState<string[]>(commentSuggestions)
-  const [aiLoading, setAiLoading] = useState(false)
+  const [comments, setComments] = useState<any[]>([])
+  const [newComment, setNewComment] = useState('')
+  const [savingComment, setSavingComment] = useState(false)
+  const [generatingAI, setGeneratingAI] = useState(false)
 
-  // Transfer states
-  const [targetClassId, setTargetClassId] = useState<string>('')
-  const [transferDate, setTransferDate] = useState<string>(new Date().toISOString().split('T')[0])
-  const [transferReason, setTransferReason] = useState<string>('')
-  const [transferring, setTransferring] = useState(false)
+  // Edit demographic modal
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [editFullName, setEditFullName] = useState(student.name)
+  const [editGender, setEditGender] = useState<string>(student.gender || 'Nam')
+  const [editDob, setEditDob] = useState(student.dob)
+  const [editParentName, setEditParentName] = useState(student.guardian || '')
+  const [editParentPhone, setEditParentPhone] = useState(student.phone || '')
+  const [savingEdit, setSavingEdit] = useState(false)
 
-  // Edit Profile states
-  const [editProfileOpen, setEditProfileOpen] = useState(false)
-  const [editName, setEditName] = useState(student?.name || '')
-  const [editGender, setEditGender] = useState(student?.gender || 'Nam')
-  const [editDob, setEditDob] = useState(student?.dob || '')
-  const [editParentName, setEditParentName] = useState(student?.guardian || '')
-  const [editParentPhone, setEditParentPhone] = useState(student?.phone || '')
-  const [editNote, setEditNote] = useState(student?.note || '')
-  const [savingProfile, setSavingProfile] = useState(false)
+  const loadComments = useCallback(async () => {
+    try {
+      const data = await apiGetStudentComments(student.id)
+      setComments(data)
+    } catch {
+      setComments([])
+    }
+  }, [student.id])
 
-  // Withdraw states
-  const [withdrawOpen, setWithdrawOpen] = useState(false)
-  const [withdrawReason, setWithdrawReason] = useState('')
-  const [withdrawing, setWithdrawing] = useState(false)
+  useEffect(() => {
+    loadComments()
+  }, [loadComments])
 
-  const openEditProfile = () => {
-    setEditName(student.name || '')
-    setEditGender(student.gender || 'Nam')
-    setEditDob(student.dob || '')
-    setEditParentName(student.guardian || '')
-    setEditParentPhone(student.phone || '')
-    setEditNote(student.note || '')
-    setEditProfileOpen(true)
+  const handleAddComment = async () => {
+    if (!newComment.trim()) return
+    setSavingComment(true)
+    try {
+      await apiAddStudentComment(student.id, newComment.trim(), classItem.id)
+      setNewComment('')
+      toast.success('Đã lưu nhận xét học sinh')
+      loadComments()
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi lưu nhận xét')
+    } finally {
+      setSavingComment(false)
+    }
   }
 
-  const handleSaveProfile = async () => {
-    if (!editName.trim()) {
-      toast.error('Vui lòng nhập họ tên học sinh')
-      return
+  const handleGenerateAIComment = async () => {
+    setGeneratingAI(true)
+    try {
+      const res = await generateStudentComment({
+        studentId: student.id,
+        subject: 'Tất cả môn học',
+        notes: 'Chăm chỉ, hoàn thành bài tập đầy đủ',
+      })
+      const commentText = res?.comments?.[0] || res?.overallAssessment || ''
+      if (commentText) {
+        setNewComment(commentText)
+        toast.success('Đã sinh gợi ý nhận xét từ AI!')
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi sinh nhận xét AI')
+    } finally {
+      setGeneratingAI(false)
     }
-    setSavingProfile(true)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editFullName.trim()) return
+    setSavingEdit(true)
     try {
       await apiUpdateStudent(student.id, {
-        fullName: editName.trim(),
+        fullName: editFullName.trim(),
         gender: editGender,
         dob: editDob || undefined,
         parentName: editParentName.trim() || undefined,
         parentPhone: editParentPhone.trim() || undefined,
-        note: editNote.trim() || undefined,
       })
-      toast.success(`Đã cập nhật hồ sơ học sinh ${editName}`)
-      setEditProfileOpen(false)
-      student.name = editName.trim()
-      student.gender = editGender as any
-      student.dob = editDob
-      student.guardian = editParentName.trim()
-      student.phone = editParentPhone.trim()
-      student.note = editNote.trim()
-      onTransferSuccess() // reloads class list
+      toast.success('Đã cập nhật hồ sơ học sinh!')
+      setEditModalOpen(false)
+      onStudentUpdated()
     } catch (err: any) {
-      toast.error(err?.message || 'Lỗi khi cập nhật hồ sơ học sinh')
+      toast.error(err?.message || 'Lỗi cập nhật hồ sơ')
     } finally {
-      setSavingProfile(false)
-    }
-  }
-
-  const handleWithdraw = async () => {
-    if (!activeEnrollment) {
-      toast.error('Không tìm thấy bản ghi ghi danh để rút khỏi lớp')
-      return
-    }
-    setWithdrawing(true)
-    try {
-      await apiWithdrawStudent(activeEnrollment.id, {
-        reason: withdrawReason.trim() || undefined,
-        withdrawDate: new Date().toISOString(),
-      })
-      toast.success(`Đã rút học sinh ${student.name} khỏi lớp ${classItem.name}`)
-      setWithdrawOpen(false)
-      onTransferSuccess()
-      onBack()
-    } catch (err: any) {
-      toast.error(err?.message || 'Lỗi khi rút học sinh khỏi lớp')
-    } finally {
-      setWithdrawing(false)
-    }
-  }
-
-  useEffect(() => {
-    if (student?.id) {
-      apiGetStudentAttendance(student.id).then(setAttendanceList).catch(() => {})
-      getStudentAttendanceSummary(student.id).then(setAttendanceSummary).catch(() => {})
-      apiGetStudentComments(student.id).then(setCommentsList)
-      apiGetStudentEnrollments(student.id).then((enrs) => {
-        setEnrollmentsList(enrs)
-        // Select first available class in same school year that is not current class
-        const sameYearClasses = allClasses.filter((c) => c.id !== classItem.id && (!classItem.schoolYearId || c.schoolYearId === classItem.schoolYearId))
-        if (sameYearClasses.length > 0) {
-          setTargetClassId(sameYearClasses[0].id)
-        }
-      })
-    }
-  }, [student?.id, classItem.id, classItem.schoolYearId, allClasses])
-
-  const eligibleTransferClasses = allClasses.filter(
-    (c) => c.id !== classItem.id && (!classItem.schoolYearId || c.schoolYearId === classItem.schoolYearId)
-  )
-
-  const activeEnrollment = enrollmentsList.find((e) => e.status === 'ACTIVE')
-
-  const handleTransfer = async () => {
-    if (!targetClassId) {
-      toast.error('Vui lòng chọn lớp học chuyển đến')
-      return
-    }
-    if (!activeEnrollment) {
-      toast.error('Không tìm thấy bản ghi ghi danh đang hoạt động của học sinh này')
-      return
-    }
-
-    setTransferring(true)
-    try {
-      await apiTransferStudent(activeEnrollment.id, {
-        targetClassroomId: targetClassId,
-        transferDate: new Date(transferDate).toISOString(),
-        reason: transferReason.trim() || undefined,
-      })
-      toast.success(`Đã chuyển học sinh ${student.name} sang lớp mới thành công`)
-      setDialog(null)
-      onTransferSuccess()
-    } catch (err: any) {
-      toast.error(err?.message || 'Không thể chuyển lớp lúc này')
-    } finally {
-      setTransferring(false)
-    }
-  }
-
-  const fetchAiSuggestions = async () => {
-    setAiLoading(true)
-    try {
-      const res = await generateStudentComment({
-        subject: 'Tổng hợp',
-        criteria: {
-          'Tiến độ': `${student.progress}%`,
-          'Chuyên cần': `${student.attendance || 96}%`,
-        },
-        assessmentLevel: student.status === 'Tốt' ? 'Hoàn thành tốt' : student.status === 'Khá' ? 'Hoàn thành' : 'Cần hỗ trợ',
-        notes: student.note,
-      })
-      if (res.comments?.length) {
-        setSuggestions(res.comments)
-        toast.success('Đã tải gợi ý nhận xét từ Google Gemini!')
-      }
-    } catch (err: any) {
-      toast.error(err?.message || 'Không thể tạo gợi ý nhận xét lúc này.')
-    } finally {
-      setAiLoading(false)
+      setSavingEdit(false)
     }
   }
 
   return (
-    <div className="mx-auto max-w-7xl">
-      <Button variant="ghost" className="mb-4 -ml-3" onClick={onBack}>
-        <ArrowLeft data-icon="inline-start" />Quay lại {classItem.name}
-      </Button>
+    <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6 space-y-6">
+      <button
+        onClick={onBack}
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-teal-700 mb-2 transition"
+      >
+        <ArrowLeft className="size-3.5" /> Quay lại lớp {classItem.name}
+      </button>
 
-      <Card className="mb-6">
-        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+      {/* Student Identity Card */}
+      <Card className="border-slate-200 shadow-2xs">
+        <CardContent className="p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <Avatar className="size-16">
-              <AvatarFallback className={`text-lg ${student.color}`}>{student.initials}</AvatarFallback>
+            <Avatar className="size-16 border-2 border-teal-200">
+              <AvatarFallback className={student.color || 'bg-teal-100 text-teal-700 text-xl font-bold'}>
+                {student.initials}
+              </AvatarFallback>
             </Avatar>
             <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold">{student.name}</h1>
-                <Badge variant={statusVariant(student.status)}>{student.status}</Badge>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-xl sm:text-2xl font-bold text-slate-900">{student.name}</h2>
+                <Badge variant={statusVariant(student.status)} className="text-xs">{student.status}</Badge>
               </div>
-              <p className="text-sm text-muted-foreground">
-                {classItem.name} {classItem.code ? `(${classItem.code})` : ''} · {student.gender} · Sinh ngày {student.dob}
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Phụ huynh: {student.guardian} · {student.phone}
+              <p className="text-xs text-slate-500 mt-1">
+                Lớp {classItem.name} ({classItem.code || ''}) · Mã HS: <span className="font-mono font-bold text-slate-700">{student.studentCode || 'Chưa cấp'}</span>
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={openEditProfile}>
-              <Edit2 data-icon="inline-start" className="size-4" />Sửa hồ sơ
-            </Button>
-            <Button variant="outline" onClick={onTransfer} className="border-teal-500 text-teal-700 hover:bg-teal-50">
-              <ArrowRightLeft data-icon="inline-start" className="size-4" />Chuyển lớp
-            </Button>
-            <Button variant="outline" onClick={() => setWithdrawOpen(true)} className="border-amber-400 text-amber-700 hover:bg-amber-50">
-              Rút khỏi lớp
-            </Button>
-            <Button onClick={onComment}>
-              <MessageSquare data-icon="inline-start" className="size-4" />Nhận xét
-            </Button>
+
+          <Button variant="outline" size="sm" onClick={() => setEditModalOpen(true)} className="text-xs gap-1.5">
+            <Edit2 className="size-3.5" /> Sửa hồ sơ
+          </Button>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Demographics & Parent info */}
+        <Card className="border-slate-200 shadow-2xs">
+          <CardHeader className="p-4 pb-3 border-b border-slate-100">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <User className="size-4 text-teal-600" /> Thông tin cá nhân & Gia đình
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 space-y-3 text-xs">
+            <div className="flex justify-between py-1 border-b border-slate-100">
+              <span className="text-slate-500">Giới tính:</span>
+              <span className="font-semibold text-slate-900">{student.gender}</span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-slate-100">
+              <span className="text-slate-500">Ngày sinh:</span>
+              <span className="font-semibold text-slate-900">{student.dob}</span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-slate-100">
+              <span className="text-slate-500">Phụ huynh / Giám hộ:</span>
+              <span className="font-semibold text-slate-900">{student.guardian || 'Chưa cập nhật'}</span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="text-slate-500">Số điện thoại liên hệ:</span>
+              <span className="font-mono font-bold text-teal-700">{student.phone || 'Chưa cập nhật'}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Learning metrics */}
+        <Card className="border-slate-200 shadow-2xs">
+          <CardHeader className="p-4 pb-3 border-b border-slate-100">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <TrendingUp className="size-4 text-blue-600" /> Tiến độ & Chuyên cần
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 space-y-3 text-xs">
+            <div className="flex justify-between py-1 border-b border-slate-100">
+              <span className="text-slate-500">Tỷ lệ chuyên cần:</span>
+              <span className="font-bold text-teal-700">{student.attendance || 96}%</span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-slate-100">
+              <span className="text-slate-500">Mức độ hoàn thành bài:</span>
+              <span className="font-bold text-blue-700">{student.progress}%</span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="text-slate-500">Đánh giá chung:</span>
+              <Badge variant={statusVariant(student.status)} className="text-[10px]">{student.status}</Badge>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Teacher Comments Section */}
+      <Card className="border-slate-200 shadow-2xs">
+        <CardHeader className="p-4 sm:p-5 border-b border-slate-100 flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <MessageSquare className="size-4 text-teal-600" /> Nhận xét của giáo viên
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Lưu trữ nhật ký nhận xét và đánh giá thường xuyên cho học sinh.
+            </CardDescription>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleGenerateAIComment}
+            disabled={generatingAI}
+            className="text-xs gap-1.5 text-teal-700 border-teal-200"
+          >
+            {generatingAI ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3.5 text-amber-500" />} Gợi ý từ AI
+          </Button>
+        </CardHeader>
+
+        <CardContent className="p-4 sm:p-5 space-y-4">
+          <div className="space-y-2">
+            <Textarea
+              placeholder="Nhập nhận xét cho học sinh (hoặc bấm 'Gợi ý từ AI')..."
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              rows={3}
+              className="text-xs"
+            />
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                onClick={handleAddComment}
+                disabled={savingComment || !newComment.trim()}
+                className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold"
+              >
+                {savingComment ? 'Đang lưu...' : 'Lưu nhận xét'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-100 pt-2">
+            {comments.length === 0 ? (
+              <p className="text-xs text-slate-400 py-3 text-center">Chưa có nhận xét nào được ghi nhận</p>
+            ) : (
+              comments.map((c) => (
+                <div key={c.id} className="py-3 text-xs space-y-1">
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span className="font-semibold text-slate-700">{c.teacherName || 'Giáo viên'}</span>
+                    <span>{c.date || new Date(c.createdAt).toLocaleDateString('vi-VN')}</span>
+                  </div>
+                  <p className="text-slate-800 leading-relaxed">{c.content}</p>
+                </div>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-4">
-        <Stat label="Tiến độ chung" value={`${student.progress}%`} helper="So với đầu kỳ" icon={<BarChart3 />} />
-        <Stat label="Chuyên cần" value={`${student.attendance || 96}%`} helper="Tháng 8/2026" icon={<CalendarCheck2 />} />
-        <Stat label="Nhận xét" value={String(commentsList.length || 12)} helper="Đã ghi nhận" icon={<MessageSquare />} />
-        <Stat label="Mục tiêu" value="3/4" helper="Đang hoàn thành" icon={<Heart />} />
-      </div>
-
-      <Tabs defaultValue="overview">
-        <TabsList>
-          <TabsTrigger value="overview">Tổng quan</TabsTrigger>
-          <TabsTrigger value="learning">Học tập</TabsTrigger>
-          <TabsTrigger value="comments">Nhận xét</TabsTrigger>
-          <TabsTrigger value="attendance">Chuyên cần</TabsTrigger>
-          <TabsTrigger value="enrollments">Lịch sử phân lớp</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview" className="mt-5 grid gap-5 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Tiến độ học tập</CardTitle>
-              <CardDescription>Kết quả các môn học trong tháng 8.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              {['Toán', 'Tiếng Việt', 'Khoa học', 'Lịch sử & Địa lý'].map((subject, index) => (
-                <div key={subject}>
-                  <div className="mb-2 flex justify-between text-sm">
-                    <span>{subject}</span>
-                    <span className="font-medium">{[9.1, 8.7, 8.9, 8.2][index]}/10</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-muted">
-                    <div className="h-2 rounded-full bg-primary" style={{ width: `${[91, 87, 89, 82][index]}%` }} />
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Ghi chú gần đây</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="rounded-xl bg-primary/5 p-4 text-sm leading-6">{student.note}</p>
-              <Button variant="link" className="px-0" onClick={onComment}>Thêm nhận xét mới</Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="learning" className="mt-5">
-          <Card>
-            <CardHeader>
-              <CardTitle>Kết quả học tập</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
-              {['Toán', 'Tiếng Việt', 'Khoa học', 'Lịch sử & Địa lý'].map((subject, index) => (
-                <div key={subject} className="rounded-xl border p-4">
-                  <p className="font-medium">{subject}</p>
-                  <p className="mt-2 text-sm text-muted-foreground">Điểm trung bình: {[9.1, 8.7, 8.9, 8.2][index]}/10</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="comments" className="mt-5">
-          <Card>
-            <CardHeader>
-              <CardTitle>Nhận xét học sinh</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              <p className="rounded-xl border p-4 text-sm leading-6">{student.note}</p>
-              {commentsList.map((c) => (
-                <div key={c.id} className="rounded-xl border bg-muted/40 p-4 text-sm">
-                  <p className="text-slate-800">{c.content}</p>
-                  <p className="mt-2 text-xs text-muted-foreground">{c.date} · {c.teacherName}</p>
-                </div>
-              ))}
-              <Button variant="outline" onClick={onComment}><Plus data-icon="inline-start" />Thêm nhận xét</Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="attendance" className="mt-5 space-y-4">
-          {/* Summary metrics */}
-          <div className="grid gap-3 sm:grid-cols-4">
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xs text-slate-500 font-medium">Tỷ lệ chuyên cần</p>
-              <p className="mt-1 text-2xl font-bold text-teal-700">
-                {attendanceSummary?.summary.attendanceRate ?? student.attendance ?? 100}%
-              </p>
-              <p className="mt-0.5 text-[11px] text-slate-400">
-                {attendanceSummary ? `${attendanceSummary.summary.presentCount}/${attendanceSummary.summary.totalPeriods} tiết có mặt` : 'Ghi nhận theo tiết'}
-              </p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xs text-slate-500 font-medium">Có mặt đúng giờ</p>
-              <p className="mt-1 text-2xl font-bold text-emerald-600">
-                {attendanceSummary?.summary.presentCount ?? 0}
-              </p>
-              <p className="mt-0.5 text-[11px] text-slate-400">tiết học</p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xs text-slate-500 font-medium">Vắng mặt</p>
-              <p className="mt-1 text-2xl font-bold text-rose-600">
-                {attendanceSummary?.summary.absentCount ?? 0}
-              </p>
-              <p className="mt-0.5 text-[11px] text-slate-400">
-                {attendanceSummary?.summary.excusedCount || 0} có phép · {attendanceSummary?.summary.unexcusedCount || 0} không phép
-              </p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xs text-slate-500 font-medium">Đi muộn</p>
-              <p className="mt-1 text-2xl font-bold text-amber-600">
-                {attendanceSummary?.summary.lateCount ?? 0}
-              </p>
-              <p className="mt-0.5 text-[11px] text-slate-400">lần ghi nhận</p>
-            </div>
-          </div>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">Lịch sử điểm danh theo tiết học</CardTitle>
-              <CardDescription>Ghi nhận chi tiết từ các tiết dạy trên Lịch dạy.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {attendanceSummary && attendanceSummary.recentLogs.length > 0 ? (
-                <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 overflow-hidden">
-                  {attendanceSummary.recentLogs.map((log) => {
-                    const statusLabel =
-                      log.status === 'PRESENT'
-                        ? 'Có mặt'
-                        : log.status === 'EXCUSED_ABSENCE'
-                          ? 'Vắng có phép'
-                          : log.status === 'UNEXCUSED_ABSENCE'
-                            ? 'Vắng không phép'
-                            : 'Đi muộn'
-                    const statusColor =
-                      log.status === 'PRESENT'
-                        ? 'bg-teal-50 text-teal-700 border-teal-200'
-                        : log.status === 'EXCUSED_ABSENCE'
-                          ? 'bg-blue-50 text-blue-700 border-blue-200'
-                          : log.status === 'UNEXCUSED_ABSENCE'
-                            ? 'bg-rose-50 text-rose-700 border-rose-200'
-                            : 'bg-amber-50 text-amber-700 border-amber-200'
-
-                    return (
-                      <div key={log.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 text-sm hover:bg-slate-50/70 transition">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className="font-semibold text-slate-800 shrink-0">{log.date}</span>
-                          <span className="text-slate-400">·</span>
-                          <span className="text-slate-700 truncate font-medium">{log.subjectName}</span>
-                          <span className="text-xs text-slate-400 shrink-0 font-mono">({log.startTime} - {log.endTime})</span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${statusColor}`}>
-                            {statusLabel}
-                            {log.status === 'LATE' && log.lateMinutes > 0 && ` (${log.lateMinutes}p)`}
-                          </span>
-                          {log.note && (
-                            <span className="text-xs text-slate-400 italic max-w-[200px] truncate">
-                              📝 {log.note}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {(attendanceList.length > 0 ? attendanceList : ['20/08/2026 · Có mặt', '19/08/2026 · Có mặt', '18/08/2026 · Đi muộn', '17/08/2026 · Có mặt'].map((e) => typeof e === 'string' ? { date: e.split(' · ')[0], type: e.split(' · ')[1] || 'Có mặt', note: 'Đúng giờ' } : e)).map((event, i) => (
-                    <div key={i} className="flex items-center justify-between rounded-xl border p-3 text-sm">
-                      <span>{event.date} · {event.type}</span>
-                      <span className="text-xs text-muted-foreground">{event.note}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="enrollments" className="mt-5">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <History className="size-5 text-primary" />
-                Lịch sử ghi danh và phân lớp
-              </CardTitle>
-              <CardDescription>Bảo toàn đầy đủ tiến trình học tập qua các năm học và chuyển lớp.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {enrollmentsList.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Chưa có lịch sử ghi danh.</p>
-              ) : (
-                <div className="divide-y rounded-xl border">
-                  {enrollmentsList.map((enr) => (
-                    <div key={enr.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold">{enr.classroom?.name || classItem.name}</span>
-                          <Badge variant={enr.status === 'ACTIVE' ? 'default' : enr.status === 'TRANSFERRED' ? 'secondary' : 'destructive'}>
-                            {enr.status === 'ACTIVE' ? 'Đang học' : enr.status === 'TRANSFERRED' ? 'Đã chuyển lớp' : 'Đã rút hồ sơ'}
-                          </Badge>
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Năm học: {enr.schoolYear?.name || '2026 - 2027'} · Khối {enr.classroom?.gradeName || 'Khối 4'}
-                        </p>
-                        {enr.transferReason && (
-                          <p className="mt-1 text-xs text-slate-600">Lý do chuyển: {enr.transferReason}</p>
-                        )}
-                      </div>
-                      <div className="text-right text-xs text-muted-foreground">
-                        <p>Từ: {new Date(enr.enrolledAt).toLocaleDateString('vi-VN')}</p>
-                        {enr.leftAt && <p>Đến: {new Date(enr.leftAt).toLocaleDateString('vi-VN')}</p>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      <div className="mt-6 flex justify-end">
-        <Button variant="ghost" className="text-destructive" onClick={onDelete}>
-          <Trash2 data-icon="inline-start" />Xóa khỏi lớp
-        </Button>
-      </div>
-
-      {/* Transfer Dialog */}
-      <Dialog open={dialog === 'transfer'} onOpenChange={(open) => !open && setDialog(null)}>
-        <DialogContent className="sm:max-w-[480px]">
-          <DialogHeader>
-            <DialogTitle>Chuyển lớp cho học sinh</DialogTitle>
-            <DialogDescription>
-              Chuyển học sinh sang lớp khác trong cùng năm học mà không làm mất lịch sử học tập.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-2">
-            <div className="rounded-lg bg-muted/60 p-3 text-sm">
-              <p><span className="text-muted-foreground">Học sinh:</span> <strong>{student.name}</strong></p>
-              <p className="mt-1"><span className="text-muted-foreground">Lớp hiện tại:</span> <strong>{classItem.name}</strong></p>
-            </div>
-
-            <div>
-              <Label htmlFor="target-class" className="text-xs font-semibold">Lớp chuyển đến *</Label>
-              <select
-                id="target-class"
-                className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
-                value={targetClassId}
-                onChange={(e) => setTargetClassId(e.target.value)}
-              >
-                {eligibleTransferClasses.length === 0 ? (
-                  <option value="">Không có lớp khả dụng trong cùng năm học</option>
-                ) : (
-                  eligibleTransferClasses.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} {c.code ? `(${c.code})` : ''} - {c.grade} ({c.room})
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-
-            <div>
-              <Label htmlFor="transfer-date" className="text-xs font-semibold">Ngày chuyển lớp *</Label>
-              <Input
-                id="transfer-date"
-                type="date"
-                className="mt-1"
-                value={transferDate}
-                onChange={(e) => setTransferDate(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="transfer-reason" className="text-xs font-semibold">Lý do chuyển lớp</Label>
-              <Input
-                id="transfer-reason"
-                className="mt-1"
-                value={transferReason}
-                onChange={(e) => setTransferReason(e.target.value)}
-                placeholder="Ví dụ: Theo nguyện vọng gia đình, đổi phòng học..."
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialog(null)}>Hủy</Button>
-            <Button
-              onClick={handleTransfer}
-              disabled={transferring || eligibleTransferClasses.length === 0}
-              className="bg-teal-600 hover:bg-teal-700"
-            >
-              {transferring ? 'Đang chuyển...' : 'Xác nhận chuyển lớp'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Comment Dialog */}
-      <Dialog open={dialog === 'comment'} onOpenChange={(open) => !open && setDialog(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
-              <span>Thêm nhận xét</span>
-              <Button size="sm" variant="outline" disabled={aiLoading} onClick={fetchAiSuggestions} className="text-xs text-teal-700 hover:bg-teal-50">
-                {aiLoading ? <Loader2 className="mr-1 size-3 animate-spin" /> : <Sparkles className="mr-1 size-3 text-teal-600" />}
-                {aiLoading ? 'Đang tạo...' : 'Gợi ý AI (Gemini)'}
-              </Button>
-            </DialogTitle>
-            <DialogDescription>Ghi nhận ngắn gọn, tích cực, mang tính khích lệ và chỉ dẫn hành động.</DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-wrap gap-2">
-            {suggestions.map((item) => (
-              <Button key={item} size="sm" variant="outline" className="text-xs" onClick={() => setComment(item)}>
-                {item}
-              </Button>
-            ))}
-          </div>
-          <Textarea value={comment} onChange={(event) => setComment(event.target.value)} rows={5} placeholder="Nhập nhận xét..." />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialog(null)}>Hủy</Button>
-            <Button onClick={onSaveComment}>Lưu nhận xét</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Dialog */}
-      <Dialog open={dialog === 'delete'} onOpenChange={(open) => !open && setDialog(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Xóa học sinh</DialogTitle>
-            <DialogDescription>
-              Bạn có chắc chắn muốn xóa học sinh <strong>{student.name}</strong> khỏi {classItem.name}?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialog(null)}>Hủy</Button>
-            <Button variant="destructive" onClick={onConfirmDelete}>Xóa học sinh</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Profile Dialog */}
-      <Dialog open={editProfileOpen} onOpenChange={setEditProfileOpen}>
-        <DialogContent className="sm:max-w-[480px]">
+      {/* EDIT STUDENT MODAL */}
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent className="sm:max-w-[440px]">
           <DialogHeader>
             <DialogTitle>Chỉnh sửa hồ sơ học sinh</DialogTitle>
-            <DialogDescription>Cập nhật thông tin lý lịch và liên hệ của {student.name}.</DialogDescription>
+            <DialogDescription>Cập nhật thông tin cá nhân và số điện thoại phụ huynh.</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 py-2">
+
+          <div className="space-y-3 py-2 text-xs">
             <div>
-              <Label htmlFor="edit-student-name" className="text-xs font-semibold">Họ và tên *</Label>
+              <Label className="text-xs font-semibold">Họ và tên *</Label>
               <Input
-                id="edit-student-name"
-                className="mt-1"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                placeholder="Nguyễn Văn An"
+                value={editFullName}
+                onChange={(e) => setEditFullName(e.target.value)}
+                className="mt-1 text-xs h-9"
               />
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label htmlFor="edit-student-gender" className="text-xs font-semibold">Giới tính</Label>
+                <Label className="text-xs font-semibold">Giới tính</Label>
                 <select
-                  id="edit-student-gender"
-                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                   value={editGender}
-                  onChange={(e) => setEditGender(e.target.value as any)}
+                  onChange={(e) => setEditGender(e.target.value)}
+                  className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs focus:outline-teal-500"
                 >
                   <option value="Nam">Nam</option>
                   <option value="Nữ">Nữ</option>
-                  <option value="Khác">Khác</option>
                 </select>
               </div>
+
               <div>
-                <Label htmlFor="edit-student-dob" className="text-xs font-semibold">Ngày sinh</Label>
+                <Label className="text-xs font-semibold">Ngày sinh</Label>
                 <Input
-                  id="edit-student-dob"
-                  type="date"
-                  className="mt-1"
                   value={editDob}
                   onChange={(e) => setEditDob(e.target.value)}
+                  className="mt-1 text-xs h-9"
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="edit-parent-name" className="text-xs font-semibold">Họ tên phụ huynh</Label>
-                <Input
-                  id="edit-parent-name"
-                  className="mt-1"
-                  value={editParentName}
-                  onChange={(e) => setEditParentName(e.target.value)}
-                  placeholder="Phụ huynh"
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-parent-phone" className="text-xs font-semibold">SĐT phụ huynh</Label>
-                <Input
-                  id="edit-parent-phone"
-                  className="mt-1"
-                  value={editParentPhone}
-                  onChange={(e) => setEditParentPhone(e.target.value)}
-                  placeholder="0912345678"
-                />
-              </div>
-            </div>
+
             <div>
-              <Label htmlFor="edit-student-note" className="text-xs font-semibold">Ghi chú</Label>
+              <Label className="text-xs font-semibold">Họ tên phụ huynh</Label>
               <Input
-                id="edit-student-note"
-                className="mt-1"
-                value={editNote}
-                onChange={(e) => setEditNote(e.target.value)}
-                placeholder="Ghi chú về học sinh..."
+                value={editParentName}
+                onChange={(e) => setEditParentName(e.target.value)}
+                className="mt-1 text-xs h-9"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Điện thoại phụ huynh</Label>
+              <Input
+                value={editParentPhone}
+                onChange={(e) => setEditParentPhone(e.target.value)}
+                className="mt-1 text-xs h-9"
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditProfileOpen(false)}>Hủy</Button>
-            <Button onClick={handleSaveProfile} disabled={savingProfile || !editName.trim()} className="bg-teal-600 hover:bg-teal-700">
-              {savingProfile ? 'Đang lưu...' : 'Lưu hồ sơ'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      {/* Withdraw Student Dialog */}
-      <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
-        <DialogContent className="sm:max-w-[420px]">
-          <DialogHeader>
-            <DialogTitle>Xác nhận rút học sinh khỏi lớp</DialogTitle>
-            <DialogDescription>
-              Học sinh <strong>{student.name}</strong> sẽ được chuyển trạng thái sang ĐÃ RÚT (Withdrawn). Lịch sử chuyên cần và điểm số trước đây vẫn được bảo toàn.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-2">
-            <Label htmlFor="withdraw-reason" className="text-xs font-semibold">Lý do rút học sinh</Label>
-            <Input
-              id="withdraw-reason"
-              className="mt-1"
-              value={withdrawReason}
-              onChange={(e) => setWithdrawReason(e.target.value)}
-              placeholder="VD: Chuyển trường, nghỉ học..."
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setWithdrawOpen(false)}>Hủy</Button>
-            <Button variant="destructive" onClick={handleWithdraw} disabled={withdrawing}>
-              {withdrawing ? 'Đang xử lý...' : 'Xác nhận rút'}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setEditModalOpen(false)}>Hủy</Button>
+            <Button
+              size="sm"
+              onClick={handleSaveEdit}
+              disabled={savingEdit || !editFullName.trim()}
+              className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs"
+            >
+              {savingEdit ? 'Đang lưu...' : 'Lưu hồ sơ'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1842,5 +2868,3 @@ function StudentProfile({
     </div>
   )
 }
-
-export default ClassroomManager
