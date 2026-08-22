@@ -18,6 +18,12 @@ export type GradeOption = {
   isActive: boolean;
 };
 
+export type ConfiguredClassSubject = {
+  id: string;
+  code: string;
+  name: string;
+};
+
 export type ClassListResponse = {
   items: ClassRecord[];
   summary: {
@@ -269,6 +275,7 @@ export async function createClass(data: {
   room?: string;
   schedule?: string;
   accent?: string;
+  subjectIds?: string[];
 }): Promise<ClassRecord> {
   return await api.post<ClassRecord>('/classes', data);
 }
@@ -284,9 +291,17 @@ export async function updateClass(
     schedule?: string;
     accent?: string;
     status?: string;
+    subjectIds?: string[];
   },
 ): Promise<ClassRecord> {
   return await api.patch<ClassRecord>(`/classes/${id}`, data);
+}
+
+export async function getConfiguredClassSubjects(
+  classId: string,
+): Promise<ConfiguredClassSubject[]> {
+  const result = await api.get<ConfiguredClassSubject[]>('/classes/' + classId + '/subjects');
+  return Array.isArray(result) ? result : [];
 }
 
 export async function deleteClass(id: string): Promise<void> {

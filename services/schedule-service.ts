@@ -107,6 +107,22 @@ export interface UpdateScheduleStatusData {
   isManualStatus?: boolean;
 }
 
+export interface AvailableSubject {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export async function getAvailableScheduleSubjects(
+  classroomId: string,
+): Promise<AvailableSubject[]> {
+  const query = new URLSearchParams({ classroomId });
+  const result = await api.get<AvailableSubject[]>(
+    `/schedules/available-subjects?${query.toString()}`,
+  );
+  return Array.isArray(result) ? result : [];
+}
+
 export async function getSchedules(params?: {
   classroomId?: string;
   subjectId?: string;

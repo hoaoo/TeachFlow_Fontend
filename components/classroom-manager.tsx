@@ -21,6 +21,7 @@ import {
   getClassAttendance,
   getClassAssessments,
   getClassLessonPlans,
+  getConfiguredClassSubjects,
   getStudentAttendance as apiGetStudentAttendance,
   getStudentComments as apiGetStudentComments,
   addStudentComment as apiAddStudentComment,
@@ -142,6 +143,8 @@ export function ClassroomManager({
   const [formGradeId, setFormGradeId] = useState('')
   const [formRoom, setFormRoom] = useState('')
   const [formSchedule, setFormSchedule] = useState('Sáng · Thứ 2 - Thứ 6')
+  const [allSubjects, setAllSubjects] = useState<SubjectOption[]>([])
+  const [formSubjectIds, setFormSubjectIds] = useState<string[]>([])
   const [creating, setCreating] = useState(false)
 
   // Edit Form State
@@ -151,6 +154,7 @@ export function ClassroomManager({
   const [editSchedule, setEditSchedule] = useState('')
   const [editGradeId, setEditGradeId] = useState('')
   const [editStatus, setEditStatus] = useState('ACTIVE')
+  const [editSubjectIds, setEditSubjectIds] = useState<string[]>([])
   const [updating, setUpdating] = useState(false)
 
   // Clone Form State
@@ -164,13 +168,15 @@ export function ClassroomManager({
     setLoading(true)
     setError(null)
     try {
-      const [years, gs, classRes] = await Promise.all([
+      const [years, gs, classRes, subjects] = await Promise.all([
         getSchoolYears(),
         getGrades(),
         getClassesWithSummary(),
+        getSubjects(),
       ])
       setSchoolYears(years)
       setGrades(gs)
+      setAllSubjects(subjects.filter((subject) => subject.isActive !== false))
 
       const currentYear = years.find((y) => y.isCurrent) || years[0]
       if (currentYear) {
@@ -268,12 +274,14 @@ export function ClassroomManager({
         gradeId: formGradeId,
         room: formRoom.trim() || undefined,
         schedule: formSchedule.trim() || undefined,
+        subjectIds: formSubjectIds,
       })
       setClasses((prev) => [created, ...prev])
       setCreateDialogOpen(false)
       setFormName('')
       setFormCode('')
       setFormRoom('')
+      setFormSubjectIds([])
       toast.success(`Đã tạo lớp ${created.name} thành công!`)
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
@@ -286,7 +294,7 @@ export function ClassroomManager({
     }
   }
 
-  const openEditModal = (cls: ClassRecord) => {
+  const openEditModal = async (cls: ClassRecord) => {
     setEditClassTarget(cls)
     setEditName(cls.name || '')
     setEditCode(cls.code || '')
@@ -294,6 +302,13 @@ export function ClassroomManager({
     setEditSchedule(cls.schedule || 'Sáng · Thứ 2 - Thứ 6')
     setEditGradeId(cls.gradeId || '')
     setEditStatus(cls.status || 'ACTIVE')
+    setEditSubjectIds([])
+    try {
+      const configured = await getConfiguredClassSubjects(cls.id)
+      setEditSubjectIds(configured.map((subject) => subject.id))
+    } catch (err: any) {
+      toast.error(err?.message || 'Không thể tải cấu hình môn học của lớp')
+    }
   }
 
   const handleUpdateClass = async () => {
@@ -310,6 +325,7 @@ export function ClassroomManager({
         schedule: editSchedule.trim() || undefined,
         gradeId: editGradeId || undefined,
         status: editStatus,
+        subjectIds: editSubjectIds,
       })
       setClasses((prev) => prev.map((c) => (c.id === editClassTarget.id ? { ...c, ...updated } : c)))
       setEditClassTarget(null)

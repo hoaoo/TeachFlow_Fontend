@@ -11,11 +11,10 @@ import {
   createSchedule, deleteSchedule, duplicateSchedule, formatDateVN, getDayOfWeekShortVN,
   getDayOfWeekVN, getMonthCalendarMatrix, getMonthRange, getScheduleAttendance, getSchedules,
   getTodayISO, getWeekRange, linkScheduleLessonPlan, unlinkScheduleLessonPlan,
-  updateSchedule, updateScheduleStatus, type CreateScheduleData, type DuplicateScheduleData,
+  getAvailableScheduleSubjects, updateSchedule, updateScheduleStatus, type CreateScheduleData, type DuplicateScheduleData,
   type ScheduleEntry, type UpdateScheduleData, type UpdateScheduleStatusData
 } from '@/services/schedule-service'
 import { getClasses, type ClassRecord } from '@/services/classroom-service'
-import { getMyTeachingContexts } from '@/services/teaching-assignment-service'
 import { getLessonPlans, type LessonPlan } from '@/services/lesson-service'
 import { useAuth } from '@/context/auth-context'
 import { toast } from 'sonner'
@@ -954,28 +953,18 @@ function ScheduleFormDialog({
     let alive = true
     setLoadingSubjects(true)
     setSubjectId('')
-    getMyTeachingContexts()
-      .then((contexts) => {
+    getAvailableScheduleSubjects(classroomId)
+      .then((availableSubjects) => {
         if (!alive) return
-        const filtered = contexts
-          .filter((c: any) => c.classroomId === classroomId && c.isActive !== false)
-          .map((c: any) => ({
-            id: c.subject?.id || c.subjectId,
-            name: c.subject?.name || c.subjectId,
-            code: c.subject?.code || '',
-          }))
-          .filter((s: SubjectOption) => s.id)
-        setSubjects(filtered)
-        if (editEntry && filtered.find((s: SubjectOption) => s.id === editEntry.subjectId)) {
+        setSubjects(availableSubjects)
+        if (editEntry && availableSubjects.find((s) => s.id === editEntry.subjectId)) {
           setSubjectId(editEntry.subjectId)
-        } else if (filtered.length > 0) {
-          setSubjectId(filtered[0].id)
         }
       })
       .catch(() => { if (alive) setSubjects([]) })
       .finally(() => { if (alive) setLoadingSubjects(false) })
     return () => { alive = false }
-  }, [classroomId])
+  }, [classroomId, editEntry])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
