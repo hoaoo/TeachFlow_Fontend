@@ -1,5 +1,12 @@
 import { api } from './api-client';
 import { type StudentRecord } from '@/lib/classroom-data';
+import {
+  buildStudentListUrl,
+  normalizeStudentListResponse,
+  notifyStudentDataChanged,
+} from './student-list-contract.mjs';
+
+export { notifyStudentDataChanged };
 
 export type StudentSummaryStats = {
   totalStudents: number;
@@ -92,66 +99,8 @@ export async function getStudents(query?: {
   status?: string;
   sort?: string;
 }): Promise<StudentListResponse> {
-  try {
-    let url = '/students';
-    const params = new URLSearchParams();
-    if (query?.page) params.append('page', String(query.page));
-    if (query?.pageSize) params.append('pageSize', String(query.pageSize));
-    if (query?.keyword) params.append('keyword', query.keyword);
-    if (query?.classId && query.classId !== 'ALL') params.append('classId', query.classId);
-    if (query?.gradeId && query.gradeId !== 'ALL') params.append('gradeId', query.gradeId);
-    if (query?.schoolYearId && query.schoolYearId !== 'ALL') params.append('schoolYearId', query.schoolYearId);
-    if (query?.status && query.status !== 'ALL') params.append('status', query.status);
-    if (query?.sort) params.append('sort', query.sort);
-
-    const qs = params.toString();
-    if (qs) url += `?${qs}`;
-
-    const data = await api.get<any>(url);
-    if (data && Array.isArray(data.items)) {
-      return {
-        items: data.items,
-        totalItems: data.totalItems || data.items.length,
-        page: data.page || 1,
-        pageSize: data.pageSize || 20,
-        totalPages: data.totalPages || 1,
-        summary: data.summary || {
-          totalStudents: data.items.length,
-          activeStudents: data.items.length,
-          needsSupportStudents: 0,
-          avgAttendanceRate: null,
-        },
-      };
-    }
-    const items = Array.isArray(data) ? data : [];
-    return {
-      items,
-      totalItems: items.length,
-      page: 1,
-      pageSize: 20,
-      totalPages: 1,
-      summary: {
-        totalStudents: items.length,
-        activeStudents: items.length,
-        needsSupportStudents: 0,
-        avgAttendanceRate: null,
-      },
-    };
-  } catch {
-    return {
-      items: [],
-      totalItems: 0,
-      page: 1,
-      pageSize: 20,
-      totalPages: 0,
-      summary: {
-        totalStudents: 0,
-        activeStudents: 0,
-        needsSupportStudents: 0,
-        avgAttendanceRate: null,
-      },
-    };
-  }
+  const data = await api.get<unknown>(buildStudentListUrl(query));
+  return normalizeStudentListResponse(data) as StudentListResponse;
 }
 
 export async function getStudent(id: string): Promise<StudentRecord> {
