@@ -8,21 +8,10 @@ export const metadata: Metadata = {
   title: 'TeachFlow — Trợ lý giáo viên',
   description: 'Không gian làm việc thông minh dành cho giáo viên tiểu học.',
   generator: 'TeachFlow',
+
   icons: {
-    icon: [
-      {
-        url: '/apple-icon.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/apple-icon.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
+    icon: '/apple-icon.png',
+    shortcut: '/apple-icon.png',
     apple: '/apple-icon.png',
   },
 }
