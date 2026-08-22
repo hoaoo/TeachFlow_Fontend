@@ -102,6 +102,7 @@ export async function getDashboardSchedule(params: {
   if (params.from) query.set('from', params.from);
   if (params.to) query.set('to', params.to);
   const qs = query.toString() ? `?${query.toString()}` : '';
-  return await api.get<DashboardLesson[]>(`/dashboard/schedule${qs}`);
+  const res = await api.get<DashboardLesson[]>(`/dashboard/schedule${qs}`);
+  return Array.isArray(res) ? res : [];
 }
 

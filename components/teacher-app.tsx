@@ -37,7 +37,13 @@ import {
   type DashboardTask,
 } from '@/services/dashboard-service'
 import { getClasses } from '@/services/classroom-service'
-import { getLibraryActivities, type LibraryActivity } from '@/services/activity-service'
+import {
+  getLibraryActivities,
+  createLibraryActivity,
+  updateLibraryActivity,
+  deleteLibraryActivity,
+  type LibraryActivity,
+} from '@/services/activity-service'
 import {
   generateLessonPlan,
   generateActivity,
@@ -395,9 +401,13 @@ function formatVietnameseDayShort(dateStr: string): string {
 }
 
 function computeScheduleStatus(
-  lesson: DashboardLesson,
-  nowTime: Date,
+  lesson?: DashboardLesson | null,
+  nowTime: Date = new Date(),
 ): { label: string; tone: 'teal' | 'blue' | 'slate' | 'red'; code: string } {
+  if (!lesson) {
+    return { label: 'Chưa bắt đầu', tone: 'slate', code: 'PLANNED' }
+  }
+
   if (lesson.isManualStatus) {
     if (lesson.status === 'CANCELLED') return { label: 'Đã hủy', tone: 'red', code: 'CANCELLED' }
     if (lesson.status === 'TAUGHT' || lesson.status === 'COMPLETED') return { label: 'Đã hoàn thành', tone: 'blue', code: 'TAUGHT' }
@@ -413,9 +423,9 @@ function computeScheduleStatus(
   const startStr = lesson.startTime || '07:00'
   const endStr = lesson.endTime || '07:45'
 
-  const [y, m, d] = lessonDateStr.split('-').map(Number)
-  const [sh, sm] = startStr.split(':').map(Number)
-  const [eh, em] = endStr.split(':').map(Number)
+  const [y, m, d] = (lessonDateStr || '').split('-').map(Number)
+  const [sh, sm] = (startStr || '').split(':').map(Number)
+  const [eh, em] = (endStr || '').split(':').map(Number)
 
   if (isNaN(y) || isNaN(m) || isNaN(d) || isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) {
     return { label: 'Chưa bắt đầu', tone: 'slate', code: 'PLANNED' }
@@ -733,9 +743,10 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
 
   // Group lessons by plannedDate for week view
   const groupedLessons = useMemo(() => {
-    if (scheduleViewMode !== 'week') return []
+    if (scheduleViewMode !== 'week' || !Array.isArray(scheduleLessons)) return []
     const map = new Map<string, DashboardLesson[]>()
     for (const lesson of scheduleLessons) {
+      if (!lesson) continue
       const d = lesson.plannedDate || 'Chưa định ngày'
       if (!map.has(d)) map.set(d, [])
       map.get(d)!.push(lesson)
@@ -746,6 +757,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   const completedTasksCount = tasksList.filter((t) => t.done).length
   const totalTasksCount = tasksList.length
   const taskPercent = totalTasksCount > 0 ? Math.round((completedTasksCount / totalTasksCount) * 100) : 0
+  const overallPercent = data?.classProgress?.overallPercent ?? 0
 
   const stats = (data?.stats || []).map((s) => {
     if (s.label === 'Nhiệm vụ tuần này' || s.label === 'Nhiệm vụ hôm nay') {
@@ -770,11 +782,12 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   }
 
   const renderLessonItem = (lesson: DashboardLesson, i: number, globalIdx?: number) => {
+    if (!lesson) return null;
     const statusInfo = computeScheduleStatus(lesson, nowDate);
     const idx = globalIdx !== undefined ? globalIdx : i;
     return (
       <div
-        key={lesson.id || lesson.title + idx}
+        key={lesson.id || `${lesson.title || 'lesson'}-${idx}`}
         className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 p-4 last:border-0 hover:bg-slate-50/60 transition"
       >
         <div className="flex items-center gap-3.5 min-w-0">
@@ -799,13 +812,13 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-semibold text-sm text-slate-900 truncate">{lesson.title}</h3>
+              <h3 className="font-semibold text-sm text-slate-900 truncate">{lesson.title || 'Tiết dạy'}</h3>
               <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                {lesson.subject}
+                {lesson.subject || 'Chung'}
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500 truncate">
-              {lesson.className}{lesson.gradeName ? ` (${lesson.gradeName})` : ''} · {lesson.room}
+              {lesson.className || 'Lớp'}{lesson.gradeName ? ` (${lesson.gradeName})` : ''} · {lesson.room || 'Phòng học'}
             </p>
           </div>
         </div>

@@ -177,7 +177,7 @@ export function ReportsView() {
               {activeTab !== 'classroom' && <option value="">Tất cả các lớp</option>}
               {classrooms.map((cls) => (
                 <option key={cls.id} value={cls.id}>
-                  Lớp {cls.name} ({cls.grade?.name || 'Khối'})
+                  Lớp {cls.name} ({typeof cls.grade === 'string' ? cls.grade : (cls.grade as any)?.name || 'Khối'})
                 </option>
               ))}
             </select>

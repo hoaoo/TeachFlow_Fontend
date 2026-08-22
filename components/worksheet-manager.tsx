@@ -215,14 +215,14 @@ export function WorksheetManager() {
       const generated = await generateWorksheet({
         grade: aiGrade,
         subject: aiSubject,
-        topic: aiTopic.trim(),
-        questionCount: aiCount,
+        lesson: aiTopic.trim(),
+        numberOfQuestions: aiCount,
       })
 
       const title = generated.title || `Phiếu học tập: ${aiTopic.trim()}`
       const created = await createWorksheet({
         title,
-        description: generated.description || `Phiếu bài tập ${aiSubject} Lớp ${aiGrade} gồm ${aiCount} câu hỏi`,
+        description: `Phiếu bài tập ${aiSubject} Lớp ${aiGrade} gồm ${aiCount} câu hỏi`,
         subtitle: `${aiSubject} · Lớp ${aiGrade}`,
         status: 'Bản nháp',
       })

@@ -25,6 +25,7 @@ import {
   Link2,
   X,
   BookOpen,
+  CheckCircle2,
 } from 'lucide-react'
 import {
   deleteWorkspaceRecord,
@@ -48,18 +49,21 @@ type View =
   | 'Chủ nhiệm'
   | 'Tài nguyên'
   | 'Cài đặt'
+  | 'Phiếu học tập'
 
 const iconFor = (view: View) =>
   ({
     'Chủ nhiệm': School,
     'Tài nguyên': Download,
     'Cài đặt': School,
+    'Phiếu học tập': FileText,
   }[view])
 
 const descriptions: Record<View, string> = {
   'Chủ nhiệm': 'Quản lý công việc chủ nhiệm, trao đổi phụ huynh và kế hoạch lớp.',
   'Tài nguyên': 'Lưu trữ, tải lên và quản lý kho học liệu số dùng cho các tiết dạy.',
   'Cài đặt': 'Cá nhân hóa workspace, thông báo và thông tin giáo viên.',
+  'Phiếu học tập': 'Quản lý phiếu bài tập, câu hỏi và tài liệu học tập.',
 }
 
 function getResourceIcon(type: string, ext?: string) {

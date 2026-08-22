@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { classroomClasses, commentSuggestions, type ClassRecord, type StudentRecord } from '@/lib/classroom-data'
 import {
   getClasses,
@@ -40,7 +40,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { ArrowLeft, BarChart3, CalendarCheck2, ChevronRight, Download, Eye, Filter, GraduationCap, Heart, LayoutGrid, MessageSquare, Plus, Search, Trash2, UserPlus, Users, Sparkles, Loader2, ArrowRightLeft, History, Edit2, BookOpen } from 'lucide-react'
+import { ArrowLeft, BarChart3, CalendarCheck2, ChevronRight, Download, Eye, Filter, GraduationCap, Heart, LayoutGrid, MessageSquare, Plus, Search, Trash2, UserPlus, Users, Sparkles, Loader2, ArrowRightLeft, History, Edit2, BookOpen, X } from 'lucide-react'
 import { generateStudentComment } from '@/services/ai-service'
 
 type ViewState = { page: 'classes' | 'class' | 'student'; classId?: string; studentId?: string }
@@ -1665,7 +1665,7 @@ function StudentProfile({
                   id="edit-student-gender"
                   className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                   value={editGender}
-                  onChange={(e) => setEditGender(e.target.value)}
+                  onChange={(e) => setEditGender(e.target.value as any)}
                 >
                   <option value="Nam">Nam</option>
                   <option value="Nữ">Nữ</option>
