@@ -151,7 +151,7 @@ function ScheduleCard({
               {entry.title}
             </button>
             <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-              {entry.subject?.name || '—'}
+              {entry.subjectName || entry.subject?.name || '—'}
             </span>
             {entry.recurrenceType === 'WEEKLY' && (
               <span className="inline-flex items-center gap-1 rounded-md bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 text-[10px] font-medium" title="Lịch lặp hàng tuần">
@@ -398,7 +398,7 @@ function WeeklyTimetableGrid({
                             {lesson.title}
                           </p>
                           <p className="mt-0.5 text-[11px] text-slate-500 truncate">
-                            {lesson.subject?.name || '—'} · {lesson.classroom?.name || '—'}
+                            {lesson.subjectName || lesson.subject?.name || '—'} · {lesson.classroom?.name || '—'}
                           </p>
                           {lesson.room && (
                             <p className="mt-0.5 text-[10px] text-slate-400 flex items-center gap-0.5">
@@ -513,7 +513,7 @@ function MonthCalendarView({
                         className="truncate rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-teal-100 hover:text-teal-800 transition"
                         title={`${l.startTime || ''} ${l.title} (${l.classroom?.name || ''})`}
                       >
-                        {l.startTime ? `${l.startTime} ` : ''}{l.subject?.name || l.title}
+                        {l.startTime ? `${l.startTime} ` : ''}{l.subjectName || l.subject?.name || l.title}
                       </div>
                     ))}
                     {dayLessons.length > 2 && (
@@ -624,7 +624,7 @@ function LessonDetailDialog({
             {entry.title}
           </DialogTitle>
           <DialogDescription>
-            {entry.subject?.name || '—'} · Lớp {entry.classroom?.name || '—'}
+            {entry.subjectName || entry.subject?.name || '—'} · Lớp {entry.classroom?.name || '—'}
             {entry.classroom?.gradeName ? ` (${entry.classroom.gradeName})` : ''}
           </DialogDescription>
         </DialogHeader>
@@ -1334,7 +1334,7 @@ function DuplicateScheduleDialog({
 
           <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 border border-slate-100">
             <p>Lớp: <span className="font-semibold">{entry.classroom?.name}</span></p>
-            <p>Môn: <span className="font-semibold">{entry.subject?.name}</span></p>
+            <p>Môn: <span className="font-semibold">{entry.subjectName || entry.subject?.name || '—'}</span></p>
           </div>
 
           <DialogFooter className="mt-2">
@@ -1554,7 +1554,7 @@ export function ScheduleView({ onNavigate }: { onNavigate?: (view: any) => void 
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterClassId, setFilterClassId] = useState('')
-  const [filterSubjectId, setFilterSubjectId] = useState('')
+  const [filterSubjectName, setFilterSubjectName] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
 
   // Modals & Drawers
@@ -1639,7 +1639,6 @@ export function ScheduleView({ onNavigate }: { onNavigate?: (view: any) => void 
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
         classroomId: filterClassId || undefined,
-        subjectId: filterSubjectId || undefined,
         status: filterStatus || undefined,
         search: searchQuery.trim() || undefined,
       })
@@ -1656,7 +1655,7 @@ export function ScheduleView({ onNavigate }: { onNavigate?: (view: any) => void 
         setLoading(false)
       }
     }
-  }, [user, dateFrom, dateTo, filterClassId, filterSubjectId, filterStatus, searchQuery])
+  }, [user, dateFrom, dateTo, filterClassId, filterStatus, searchQuery])
 
   useEffect(() => {
     loadData()
@@ -1668,23 +1667,27 @@ export function ScheduleView({ onNavigate }: { onNavigate?: (view: any) => void 
 
   // Unique subjects for filter
   const allSubjects = useMemo(() => {
-    const seen = new Map<string, { id: string; name: string }>()
+    const seen = new Set<string>()
     schedules.forEach((s) => {
-      if (s.subject) seen.set(s.subject.id, { id: s.subject.id, name: s.subject.name })
+      const name = (s.subjectName || s.subject?.name || '').trim()
+      if (name) seen.add(name)
     })
-    return Array.from(seen.values())
+    return Array.from(seen).sort((a, b) => a.localeCompare(b, 'vi'))
   }, [schedules])
 
   // Filtered schedules for rendering
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return schedules
+    const bySubject = filterSubjectName
+      ? schedules.filter((s) => (s.subjectName || s.subject?.name || '') === filterSubjectName)
+      : schedules
+    if (!searchQuery.trim()) return bySubject
     const q = searchQuery.toLowerCase().trim()
-    return schedules.filter((s) =>
-      `${s.title} ${s.subject?.name || ''} ${s.classroom?.name || ''} ${s.room || ''} ${s.notes || ''}`
+    return bySubject.filter((s) =>
+      `${s.title} ${s.subjectName || s.subject?.name || ''} ${s.classroom?.name || ''} ${s.room || ''} ${s.notes || ''}`
         .toLowerCase()
         .includes(q)
     )
-  }, [schedules, searchQuery])
+  }, [schedules, searchQuery, filterSubjectName])
 
   // Summary statistics
   const stats = useMemo(() => {
@@ -1902,11 +1905,11 @@ export function ScheduleView({ onNavigate }: { onNavigate?: (view: any) => void 
           <select
             aria-label="Lọc theo môn"
             className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs sm:text-sm font-medium text-slate-700 shadow-2xs"
-            value={filterSubjectId}
-            onChange={(e) => setFilterSubjectId(e.target.value)}
+            value={filterSubjectName}
+            onChange={(e) => setFilterSubjectName(e.target.value)}
           >
             <option value="">Tất cả môn</option>
-            {allSubjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {allSubjects.map((name) => <option key={name} value={name}>{name}</option>)}
           </select>
         )}
 
