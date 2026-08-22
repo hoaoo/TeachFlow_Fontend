@@ -1414,7 +1414,7 @@ function GenericView({ view, onNavigate }: { view: View; onNavigate: (view: View
   if (view === 'Chủ nhiệm') return <HomeroomView onNavigate={onNavigate} />
   if (view === 'Báo cáo & Thống kê') return <ReportsView />
   if (view === 'Cài đặt') return <TeacherSettingsView />
-  if (view === 'Lịch dạy') return <ScheduleView />
+  if (view === 'Lịch dạy') return <ScheduleView onNavigate={onNavigate} />
   if (view === 'Đánh giá') return <AssessmentManager />
   if (view === 'Điểm danh') return <AttendanceView />
   if (view === 'Phiếu học tập') return <WorksheetManager />
