@@ -3,16 +3,23 @@
  * Handles token attachment, refresh token flow, error parsing and standardized requests.
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api').replace(/\/+$/, '');
 
 let accessToken: string | null = null;
 let isRefreshing = false;
-let refreshSubscribers: Array<(token: string) => void> = [];
+let refreshSubscribers: Array<{
+  resolve: (token: string) => void;
+  reject: (err: any) => void;
+}> = [];
 
 export function getAccessToken(): string | null {
   if (accessToken) return accessToken;
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('teachflow_access_token');
+    const stored = localStorage.getItem('teachflow_access_token');
+    if (stored) {
+      accessToken = stored;
+      return stored;
+    }
   }
   return null;
 }
@@ -36,12 +43,17 @@ export function clearAuth(): void {
 }
 
 function onRefreshed(token: string) {
-  refreshSubscribers.forEach((callback) => callback(token));
+  refreshSubscribers.forEach(({ resolve }) => resolve(token));
   refreshSubscribers = [];
 }
 
-function addRefreshSubscriber(callback: (token: string) => void) {
-  refreshSubscribers.push(callback);
+function onRefreshFailed(err: any) {
+  refreshSubscribers.forEach(({ reject }) => reject(err));
+  refreshSubscribers = [];
+}
+
+function addRefreshSubscriber(resolve: (token: string) => void, reject: (err: any) => void) {
+  refreshSubscribers.push({ resolve, reject });
 }
 
 export class ApiError extends Error {
@@ -63,26 +75,47 @@ export async function apiClient<T = any>(
   options: RequestInit = {},
   isRetry = false,
 ): Promise<T> {
-  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${cleanEndpoint}`;
 
   const token = getAccessToken();
-  const headers: HeadersInit = {
+  const customHeaders = options.headers instanceof Headers
+    ? Object.fromEntries(options.headers.entries())
+    : (options.headers as Record<string, string>) || {};
+
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...(options.headers || {}),
+    ...customHeaders,
   };
+
+  // Attach fresh Bearer token
+  if (token && !headers['Authorization'] && !headers['authorization']) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  // If this is a retry after token refresh, force new Bearer token
+  if (isRetry && token) {
+    headers['Authorization'] = `Bearer ${token}`;
+    delete headers['authorization'];
+  }
 
   const config: RequestInit = {
     ...options,
     headers,
-    credentials: 'include', // Support HttpOnly cookies for refresh token
+    credentials: 'include', // Support HttpOnly cookies for refresh token cross-origin
   };
 
   try {
     const response = await fetch(url, config);
 
     // Handle 401 Unauthorized -> Refresh Token Flow
-    if (response.status === 401 && !isRetry && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/refresh')) {
+    if (
+      response.status === 401 &&
+      !isRetry &&
+      !endpoint.includes('/auth/login') &&
+      !endpoint.includes('/auth/refresh') &&
+      !endpoint.includes('/auth/logout')
+    ) {
       if (!isRefreshing) {
         isRefreshing = true;
         try {
@@ -94,7 +127,10 @@ export async function apiClient<T = any>(
 
           if (refreshRes.ok) {
             const data = await refreshRes.json();
-            const newToken = data.accessToken;
+            const newToken = data.accessToken || data.tokens?.accessToken;
+            if (!newToken) {
+              throw new Error('Refresh response missing accessToken');
+            }
             setAccessToken(newToken);
             isRefreshing = false;
             onRefreshed(newToken);
@@ -102,24 +138,32 @@ export async function apiClient<T = any>(
           } else {
             isRefreshing = false;
             clearAuth();
-            throw new ApiError('Phiên đăng nhập đã hết hạn', 401);
+            const err = new ApiError('Phiên đăng nhập đã hết hạn', 401);
+            onRefreshFailed(err);
+            throw err;
           }
         } catch (err) {
           isRefreshing = false;
           clearAuth();
-          throw err;
+          onRefreshFailed(err);
+          throw err instanceof ApiError ? err : new ApiError((err as Error).message || 'Lỗi làm mới token', 401);
         }
       } else {
-        // Wait for refreshing to complete
+        // Wait for active refreshing to complete
         return new Promise<T>((resolve, reject) => {
-          addRefreshSubscriber(async (newToken) => {
-            try {
-              const retryRes = await apiClient<T>(endpoint, options, true);
-              resolve(retryRes);
-            } catch (error) {
+          addRefreshSubscriber(
+            async (_newToken) => {
+              try {
+                const retryRes = await apiClient<T>(endpoint, options, true);
+                resolve(retryRes);
+              } catch (error) {
+                reject(error);
+              }
+            },
+            (error) => {
               reject(error);
-            }
-          });
+            },
+          );
         });
       }
     }
