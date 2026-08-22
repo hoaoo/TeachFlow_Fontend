@@ -11,7 +11,7 @@ import {
   createSchedule, deleteSchedule, duplicateSchedule, formatDateVN, getDayOfWeekShortVN,
   getDayOfWeekVN, getMonthCalendarMatrix, getMonthRange, getScheduleAttendance, getSchedules,
   getTodayISO, getWeekRange, linkScheduleLessonPlan, unlinkScheduleLessonPlan,
-  getAvailableScheduleSubjects, updateSchedule, updateScheduleStatus, type CreateScheduleData, type DuplicateScheduleData,
+  updateSchedule, updateScheduleStatus, type CreateScheduleData, type DuplicateScheduleData,
   type ScheduleEntry, type UpdateScheduleData, type UpdateScheduleStatusData
 } from '@/services/schedule-service'
 import { getClasses, type ClassRecord } from '@/services/classroom-service'
@@ -25,12 +25,6 @@ import { Label } from '@/components/ui/label'
 import { ScheduleAttendanceDialog } from '@/components/schedule-attendance-dialog'
 
 // ─── Types & Constants ───────────────────────────────────────────────────────
-interface SubjectOption {
-  id: string
-  name: string
-  code: string
-}
-
 type CalendarTab = 'day' | 'week' | 'month'
 
 export function computeScheduleStatus(
@@ -899,7 +893,7 @@ function ScheduleFormDialog({
 
   const [title, setTitle] = useState('')
   const [classroomId, setClassroomId] = useState('')
-  const [subjectId, setSubjectId] = useState('')
+  const [subjectName, setSubjectName] = useState('')
   const [plannedDate, setPlannedDate] = useState(defaultDate || getTodayISO())
   const [startTime, setStartTime] = useState('07:00')
   const [endTime, setEndTime] = useState('07:45')
@@ -909,8 +903,6 @@ function ScheduleFormDialog({
   const [isRecurring, setIsRecurring] = useState(false)
   const [recurrenceEndDate, setRecurrenceEndDate] = useState('')
   const [recurrenceScope, setRecurrenceScope] = useState<'THIS_ONLY' | 'THIS_AND_FUTURE' | 'ALL'>('THIS_ONLY')
-  const [subjects, setSubjects] = useState<SubjectOption[]>([])
-  const [loadingSubjects, setLoadingSubjects] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   // Populate form
@@ -918,7 +910,7 @@ function ScheduleFormDialog({
     if (editEntry) {
       setTitle(editEntry.title || '')
       setClassroomId(editEntry.classroomId || '')
-      setSubjectId(editEntry.subjectId || '')
+      setSubjectName(editEntry.subjectName || editEntry.subject?.name || '')
       setPlannedDate(editEntry.plannedDate || getTodayISO())
       setStartTime(editEntry.startTime || '07:00')
       setEndTime(editEntry.endTime || '07:45')
@@ -931,7 +923,7 @@ function ScheduleFormDialog({
     } else {
       setTitle('')
       setClassroomId(classes[0]?.id || '')
-      setSubjectId('')
+      setSubjectName('')
       setPlannedDate(defaultDate || getTodayISO())
       setStartTime('07:00')
       setEndTime('07:45')
@@ -947,30 +939,13 @@ function ScheduleFormDialog({
     }
   }, [editEntry, open, classes, defaultDate])
 
-  // Load subjects
-  useEffect(() => {
-    if (!classroomId) { setSubjects([]); return }
-    let alive = true
-    setLoadingSubjects(true)
-    setSubjectId('')
-    getAvailableScheduleSubjects(classroomId)
-      .then((availableSubjects) => {
-        if (!alive) return
-        setSubjects(availableSubjects)
-        if (editEntry && availableSubjects.find((s) => s.id === editEntry.subjectId)) {
-          setSubjectId(editEntry.subjectId)
-        }
-      })
-      .catch(() => { if (alive) setSubjects([]) })
-      .finally(() => { if (alive) setLoadingSubjects(false) })
-    return () => { alive = false }
-  }, [classroomId, editEntry])
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim()) { toast.error('Vui lòng nhập tên bài / nội dung tiết dạy'); return }
     if (!classroomId) { toast.error('Vui lòng chọn lớp học'); return }
-    if (!subjectId) { toast.error('Vui lòng chọn môn học'); return }
+    const trimmedSubjectName = subjectName.trim()
+    if (!trimmedSubjectName) { toast.error('Vui lòng nhập môn học'); return }
+    if (trimmedSubjectName.length > 100) { toast.error('Môn học không được vượt quá 100 ký tự'); return }
     if (startTime && endTime && startTime >= endTime) {
       toast.error('Giờ bắt đầu phải nhỏ hơn giờ kết thúc')
       return
@@ -982,6 +957,7 @@ function ScheduleFormDialog({
       if (isEdit && editEntry) {
         const payload: UpdateScheduleData = {
           title: title.trim(),
+          subjectName: trimmedSubjectName,
           plannedDate: plannedDate || undefined,
           startTime: startTime || undefined,
           endTime: endTime || undefined,
@@ -996,7 +972,7 @@ function ScheduleFormDialog({
         const payload: CreateScheduleData = {
           title: title.trim(),
           classroomId,
-          subjectId,
+          subjectName: trimmedSubjectName,
           plannedDate: plannedDate || undefined,
           startTime: startTime || undefined,
           endTime: endTime || undefined,
@@ -1102,47 +1078,26 @@ function ScheduleFormDialog({
           )}
 
           {/* Môn học */}
-          {!isEdit && (
-            <div>
-              <Label htmlFor="sch-subject" className="text-xs font-semibold">
-                Môn học * {loadingSubjects && <Loader2 className="inline size-3 animate-spin ml-1" />}
-              </Label>
-              {subjects.length > 0 ? (
-                <select
-                  id="sch-subject"
-                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                  value={subjectId}
-                  onChange={(e) => setSubjectId(e.target.value)}
-                  required
-                >
-                  <option value="">— Chọn môn —</option>
-                  {subjects.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              ) : (
-                <div className="mt-1 rounded-md border bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                  {classroomId
-                    ? 'Chưa có môn học được khai báo cho lớp này. Vào "Thư viện hoạt động" để khai báo ngữ cảnh giảng dạy.'
-                    : 'Vui lòng chọn lớp trước.'}
-                </div>
-              )}
-            </div>
-          )}
+          <div>
+            <Label htmlFor="sch-subject" className="text-xs font-semibold">Môn học *</Label>
+            <Input
+              id="sch-subject"
+              className="mt-1"
+              placeholder="VD: Toán học"
+              value={subjectName}
+              onChange={(e) => setSubjectName(e.target.value)}
+              maxLength={100}
+              required
+            />
+          </div>
 
-          {/* If edit: read-only class/subject */}
+          {/* If edit: read-only class */}
           {isEdit && (
-            <div className="grid grid-cols-2 gap-3">
+            <div>
               <div>
                 <Label className="text-xs font-semibold text-slate-500">Lớp</Label>
                 <div className="mt-1 h-9 flex items-center rounded-md border bg-slate-50 px-3 text-xs text-slate-700">
                   {editEntry?.classroom?.name || '—'}
-                </div>
-              </div>
-              <div>
-                <Label className="text-xs font-semibold text-slate-500">Môn</Label>
-                <div className="mt-1 h-9 flex items-center rounded-md border bg-slate-50 px-3 text-xs text-slate-700">
-                  {editEntry?.subject?.name || '—'}
                 </div>
               </div>
             </div>
@@ -1258,7 +1213,7 @@ function ScheduleFormDialog({
           <Button variant="outline" onClick={onClose} disabled={submitting}>Hủy</Button>
           <Button
             onClick={handleSubmit as any}
-            disabled={submitting || (subjects.length === 0 && !isEdit && !!classroomId)}
+            disabled={submitting}
             className="bg-teal-600 hover:bg-teal-700 font-semibold"
           >
             {submitting && <Loader2 className="size-4 animate-spin mr-1" />}

@@ -24,7 +24,8 @@ export interface ScheduleEntry {
     gradeName?: string | null;
     room?: string | null;
   };
-  subjectId: string;
+  subjectId: string | null;
+  subjectName: string | null;
   subject?: {
     id: string;
     name: string;
@@ -62,7 +63,7 @@ export interface ScheduleEntry {
 export interface CreateScheduleData {
   title: string;
   classroomId: string;
-  subjectId: string;
+  subjectName: string;
   plannedDate?: string;   // YYYY-MM-DD
   startTime?: string;     // HH:MM
   endTime?: string;       // HH:MM
@@ -76,6 +77,7 @@ export interface CreateScheduleData {
 
 export interface UpdateScheduleData {
   title?: string;
+  subjectName?: string;
   plannedDate?: string;
   startTime?: string;
   endTime?: string;
@@ -105,22 +107,6 @@ export interface UpdateScheduleStatusData {
   actualEndTime?: string;
   postLessonNotes?: string;
   isManualStatus?: boolean;
-}
-
-export interface AvailableSubject {
-  id: string;
-  code: string;
-  name: string;
-}
-
-export async function getAvailableScheduleSubjects(
-  classroomId: string,
-): Promise<AvailableSubject[]> {
-  const query = new URLSearchParams({ classroomId });
-  const result = await api.get<AvailableSubject[]>(
-    `/schedules/available-subjects?${query.toString()}`,
-  );
-  return Array.isArray(result) ? result : [];
 }
 
 export async function getSchedules(params?: {
