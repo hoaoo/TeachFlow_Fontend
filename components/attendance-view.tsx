@@ -91,14 +91,17 @@ async function saveAttendanceSession(data: {
   attendanceDate: string
   sessionPeriod: string
   entries: Array<{ studentId: string; status: AttendanceStatus; note?: string }>
-}): Promise<AttendanceSession> {
-  return api.post<AttendanceSession>('/attendance', data)
-}
-
-async function updateAttendanceSession(sessionId: string, data: {
-  entries: Array<{ studentId: string; status: AttendanceStatus; note?: string }>
-}): Promise<AttendanceSession> {
-  return api.patch<AttendanceSession>(`/attendance/${sessionId}`, data)
+}) {
+  return api.put('/attendance', {
+    classId: data.classroomId,
+    date: data.attendanceDate,
+    sessionPeriod: data.sessionPeriod,
+    attendances: data.entries.map((e) => ({
+      studentId: e.studentId,
+      status: e.status,
+      note: e.note || undefined,
+    })),
+  })
 }
 
 // ─── Session flow: Step 1 = Select class+date, Step 2 = Mark, Step 3 = History ──
@@ -213,13 +216,8 @@ export function AttendanceView() {
         sessionPeriod,
         entries: entries.map((e) => ({ studentId: e.studentId, status: e.status, note: e.note || undefined })),
       }
-      if (editSessionId) {
-        await updateAttendanceSession(editSessionId, { entries: payload.entries })
-        toast.success('Đã cập nhật điểm danh')
-      } else {
-        await saveAttendanceSession(payload)
-        toast.success('Đã lưu điểm danh thành công')
-      }
+      await saveAttendanceSession(payload)
+      toast.success('Đã lưu điểm danh thành công')
       setStep('history')
     } catch (err: any) {
       toast.error(err?.message || 'Lỗi khi lưu điểm danh')

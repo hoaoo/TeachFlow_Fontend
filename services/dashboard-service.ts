@@ -11,9 +11,17 @@ export type DashboardLesson = {
   subject: string;
   title: string;
   className: string;
+  classroomId?: string;
   gradeName?: string | null;
   room: string;
   color: string;
+  hasLessonPlan?: boolean;
+  lessonPlanId?: string | null;
+  lessonPlanTitle?: string | null;
+  attendanceRecorded?: boolean;
+  attendanceLabel?: string;
+  attendancePresentCount?: number;
+  attendanceTotalCount?: number;
 };
 
 export type DashboardTask = {

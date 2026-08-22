@@ -42,6 +42,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { ArrowLeft, BarChart3, CalendarCheck2, ChevronRight, Download, Eye, Filter, GraduationCap, Heart, LayoutGrid, MessageSquare, Plus, Search, Trash2, UserPlus, Users, Sparkles, Loader2, ArrowRightLeft, History, Edit2, BookOpen, X } from 'lucide-react'
 import { generateStudentComment } from '@/services/ai-service'
+import { getStudentAttendanceSummary, type StudentAttendanceSummary } from '@/services/attendance-service'
 
 type ViewState = { page: 'classes' | 'class' | 'student'; classId?: string; studentId?: string }
 const statusVariant = (status: StudentRecord['status']) => status === 'Tốt' ? 'default' : status === 'Khá' ? 'secondary' : 'destructive'
@@ -1175,6 +1176,7 @@ function StudentProfile({
   onTransferSuccess: () => void;
 }) {
   const [attendanceList, setAttendanceList] = useState<Array<{ date: string; type: string; note: string }>>([])
+  const [attendanceSummary, setAttendanceSummary] = useState<StudentAttendanceSummary | null>(null)
   const [commentsList, setCommentsList] = useState<Array<{ id: string; content: string; date: string; teacherName: string }>>([])
   const [enrollmentsList, setEnrollmentsList] = useState<StudentEnrollmentRecord[]>([])
   const [suggestions, setSuggestions] = useState<string[]>(commentSuggestions)
@@ -1266,7 +1268,8 @@ function StudentProfile({
 
   useEffect(() => {
     if (student?.id) {
-      apiGetStudentAttendance(student.id).then(setAttendanceList)
+      apiGetStudentAttendance(student.id).then(setAttendanceList).catch(() => {})
+      getStudentAttendanceSummary(student.id).then(setAttendanceSummary).catch(() => {})
       apiGetStudentComments(student.id).then(setCommentsList)
       apiGetStudentEnrollments(student.id).then((enrs) => {
         setEnrollmentsList(enrs)
@@ -1459,18 +1462,102 @@ function StudentProfile({
           </Card>
         </TabsContent>
 
-        <TabsContent value="attendance" className="mt-5">
+        <TabsContent value="attendance" className="mt-5 space-y-4">
+          {/* Summary metrics */}
+          <div className="grid gap-3 sm:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <p className="text-xs text-slate-500 font-medium">Tỷ lệ chuyên cần</p>
+              <p className="mt-1 text-2xl font-bold text-teal-700">
+                {attendanceSummary?.summary.attendanceRate ?? student.attendance ?? 100}%
+              </p>
+              <p className="mt-0.5 text-[11px] text-slate-400">
+                {attendanceSummary ? `${attendanceSummary.summary.presentCount}/${attendanceSummary.summary.totalPeriods} tiết có mặt` : 'Ghi nhận theo tiết'}
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <p className="text-xs text-slate-500 font-medium">Có mặt đúng giờ</p>
+              <p className="mt-1 text-2xl font-bold text-emerald-600">
+                {attendanceSummary?.summary.presentCount ?? 0}
+              </p>
+              <p className="mt-0.5 text-[11px] text-slate-400">tiết học</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <p className="text-xs text-slate-500 font-medium">Vắng mặt</p>
+              <p className="mt-1 text-2xl font-bold text-rose-600">
+                {attendanceSummary?.summary.absentCount ?? 0}
+              </p>
+              <p className="mt-0.5 text-[11px] text-slate-400">
+                {attendanceSummary?.summary.excusedCount || 0} có phép · {attendanceSummary?.summary.unexcusedCount || 0} không phép
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <p className="text-xs text-slate-500 font-medium">Đi muộn</p>
+              <p className="mt-1 text-2xl font-bold text-amber-600">
+                {attendanceSummary?.summary.lateCount ?? 0}
+              </p>
+              <p className="mt-0.5 text-[11px] text-slate-400">lần ghi nhận</p>
+            </div>
+          </div>
+
           <Card>
-            <CardHeader>
-              <CardTitle>Lịch sử chuyên cần</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold">Lịch sử điểm danh theo tiết học</CardTitle>
+              <CardDescription>Ghi nhận chi tiết từ các tiết dạy trên Lịch dạy.</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-3">
-              {(attendanceList.length > 0 ? attendanceList : ['20/08/2026 · Có mặt', '19/08/2026 · Có mặt', '18/08/2026 · Đi muộn', '17/08/2026 · Có mặt'].map((e) => typeof e === 'string' ? { date: e.split(' · ')[0], type: e.split(' · ')[1] || 'Có mặt', note: 'Đúng giờ' } : e)).map((event, i) => (
-                <div key={i} className="flex items-center justify-between rounded-xl border p-3 text-sm">
-                  <span>{event.date} · {event.type}</span>
-                  <span className="text-xs text-muted-foreground">{event.note}</span>
+            <CardContent>
+              {attendanceSummary && attendanceSummary.recentLogs.length > 0 ? (
+                <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 overflow-hidden">
+                  {attendanceSummary.recentLogs.map((log) => {
+                    const statusLabel =
+                      log.status === 'PRESENT'
+                        ? 'Có mặt'
+                        : log.status === 'EXCUSED_ABSENCE'
+                          ? 'Vắng có phép'
+                          : log.status === 'UNEXCUSED_ABSENCE'
+                            ? 'Vắng không phép'
+                            : 'Đi muộn'
+                    const statusColor =
+                      log.status === 'PRESENT'
+                        ? 'bg-teal-50 text-teal-700 border-teal-200'
+                        : log.status === 'EXCUSED_ABSENCE'
+                          ? 'bg-blue-50 text-blue-700 border-blue-200'
+                          : log.status === 'UNEXCUSED_ABSENCE'
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+
+                    return (
+                      <div key={log.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 text-sm hover:bg-slate-50/70 transition">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="font-semibold text-slate-800 shrink-0">{log.date}</span>
+                          <span className="text-slate-400">·</span>
+                          <span className="text-slate-700 truncate font-medium">{log.subjectName}</span>
+                          <span className="text-xs text-slate-400 shrink-0 font-mono">({log.startTime} - {log.endTime})</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${statusColor}`}>
+                            {statusLabel}
+                            {log.status === 'LATE' && log.lateMinutes > 0 && ` (${log.lateMinutes}p)`}
+                          </span>
+                          {log.note && (
+                            <span className="text-xs text-slate-400 italic max-w-[200px] truncate">
+                              📝 {log.note}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-              ))}
+              ) : (
+                <div className="space-y-2">
+                  {(attendanceList.length > 0 ? attendanceList : ['20/08/2026 · Có mặt', '19/08/2026 · Có mặt', '18/08/2026 · Đi muộn', '17/08/2026 · Có mặt'].map((e) => typeof e === 'string' ? { date: e.split(' · ')[0], type: e.split(' · ')[1] || 'Có mặt', note: 'Đúng giờ' } : e)).map((event, i) => (
+                    <div key={i} className="flex items-center justify-between rounded-xl border p-3 text-sm">
+                      <span>{event.date} · {event.type}</span>
+                      <span className="text-xs text-muted-foreground">{event.note}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

@@ -26,6 +26,7 @@ import { AssessmentManager } from '@/components/assessment-manager'
 import { AttendanceView } from '@/components/attendance-view'
 import { WorksheetManager } from '@/components/worksheet-manager'
 import { NotificationDropdown } from '@/components/notification-dropdown'
+import { ScheduleAttendanceDialog } from '@/components/schedule-attendance-dialog'
 import {
   getDashboardData,
   getDashboardSchedule as apiGetDashboardSchedule,
@@ -484,6 +485,8 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   const [editStartTime, setEditStartTime] = useState('07:00')
   const [editEndTime, setEditEndTime] = useState('07:45')
   const [savingStatus, setSavingStatus] = useState(false)
+  const [attendanceScheduleId, setAttendanceScheduleId] = useState<string | null>(null)
+  const [attendanceModalOpen, setAttendanceModalOpen] = useState(false)
 
   // Clock tick every second
   useEffect(() => {
@@ -825,6 +828,35 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
         </div>
 
         <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+          {/* Attendance badge / action */}
+          {lesson.attendanceRecorded ? (
+            <button
+              onClick={() => {
+                if (lesson.id) {
+                  setAttendanceScheduleId(lesson.id)
+                  setAttendanceModalOpen(true)
+                }
+              }}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200 hover:bg-teal-100 transition shadow-2xs"
+              title="Xem / Chỉnh sửa điểm danh"
+            >
+              <Users className="size-3 text-teal-600" /> {lesson.attendanceLabel || `${lesson.attendancePresentCount}/${lesson.attendanceTotalCount}`}
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                if (lesson.id) {
+                  setAttendanceScheduleId(lesson.id)
+                  setAttendanceModalOpen(true)
+                }
+              }}
+              className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-200 hover:text-slate-800 transition shadow-2xs"
+              title="Điểm danh tiết học"
+            >
+              <Users className="size-3 text-slate-400" /> Điểm danh
+            </button>
+          )}
+
           <span
             className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold border ${
               statusInfo.tone === 'teal'
@@ -1346,6 +1378,16 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
           </div>
         </div>
       </section>
+
+      {/* Schedule Attendance Dialog */}
+      <ScheduleAttendanceDialog
+        scheduleId={attendanceScheduleId}
+        open={attendanceModalOpen}
+        onOpenChange={setAttendanceModalOpen}
+        onSaved={() => {
+          setScheduleRetryKey((k) => k + 1)
+        }}
+      />
     </div>
   )
 }

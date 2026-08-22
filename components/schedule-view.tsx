@@ -23,6 +23,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ScheduleAttendanceDialog } from '@/components/schedule-attendance-dialog'
 
 // ─── Types & Constants ───────────────────────────────────────────────────────
 interface SubjectOption {
@@ -101,6 +102,7 @@ function ScheduleCard({
   onDelete,
   onStartLesson,
   onCompleteLesson,
+  onOpenAttendance,
   onNavigate,
 }: {
   entry: ScheduleEntry
@@ -111,6 +113,7 @@ function ScheduleCard({
   onDelete: (e: ScheduleEntry) => void
   onStartLesson: (e: ScheduleEntry) => void
   onCompleteLesson: (e: ScheduleEntry) => void
+  onOpenAttendance?: (e: ScheduleEntry) => void
   onNavigate?: (view: any) => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -205,6 +208,25 @@ function ScheduleCard({
           {statusInfo.tone === 'teal' && <span className="size-1.5 rounded-full bg-teal-500 animate-ping" />}
           {statusInfo.label}
         </span>
+
+        {/* Attendance badge / action */}
+        {entry.attendance?.isRecorded ? (
+          <button
+            onClick={() => onOpenAttendance?.(entry)}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200 hover:bg-teal-100 transition shadow-2xs"
+            title="Xem / Chỉnh sửa điểm danh"
+          >
+            <UserCheck className="size-3 text-teal-600" /> {entry.attendance.presentCount}/{entry.attendance.totalStudents}
+          </button>
+        ) : (
+          <button
+            onClick={() => onOpenAttendance?.(entry)}
+            className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-200 hover:text-slate-800 transition shadow-2xs"
+            title="Điểm danh tiết học"
+          >
+            <UserCheck className="size-3 text-slate-400" /> Điểm danh
+          </button>
+        )}
 
         {/* Quick action: Start / Complete */}
         {statusInfo.code === 'PLANNED' && (
@@ -529,6 +551,7 @@ function LessonDetailDialog({
   onStatusChange,
   onOpenLessonPicker,
   onUnlinkLessonPlan,
+  onOpenAttendance,
   onNavigate,
 }: {
   entry: ScheduleEntry | null
@@ -541,6 +564,7 @@ function LessonDetailDialog({
   onStatusChange: (status: string, extra?: { actualStartTime?: string; actualEndTime?: string; postLessonNotes?: string }) => void
   onOpenLessonPicker: (e: ScheduleEntry) => void
   onUnlinkLessonPlan: (e: ScheduleEntry) => void
+  onOpenAttendance?: (e: ScheduleEntry) => void
   onNavigate?: (view: any) => void
 }) {
   const [notesDraft, setNotesDraft] = useState('')
@@ -768,35 +792,29 @@ function LessonDetailDialog({
                 <span>Đang tải thông tin điểm danh...</span>
               </div>
             ) : attendanceInfo?.isRecorded ? (
-              <div className="flex items-center justify-between rounded-lg bg-blue-50/70 p-3 border border-blue-100 text-xs">
+              <div className="flex items-center justify-between rounded-lg bg-teal-50/70 p-3 border border-teal-100 text-xs">
                 <div>
-                  <p className="font-semibold text-blue-900">Đã hoàn thành điểm danh</p>
-                  <p className="text-blue-700 mt-0.5">
-                    {attendanceInfo.presentCount} có mặt · {attendanceInfo.absentCount} vắng mặt
+                  <p className="font-semibold text-teal-900">Đã hoàn thành điểm danh</p>
+                  <p className="text-teal-700 mt-0.5">
+                    {attendanceInfo.presentCount} có mặt · {attendanceInfo.absentCount} vắng mặt · {attendanceInfo.lateCount || 0} đi muộn
                   </p>
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="text-xs h-7 bg-white"
-                  onClick={() => {
-                    onClose()
-                    onNavigate?.('Điểm danh')
-                  }}
+                  className="text-xs h-7 bg-white text-teal-700 border-teal-200 hover:bg-teal-50 gap-1"
+                  onClick={() => onOpenAttendance?.(entry)}
                 >
-                  Xem chi tiết
+                  <Edit2 className="size-3" /> Chỉnh sửa điểm danh
                 </Button>
               </div>
             ) : (
               <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3 border border-slate-100 text-xs text-slate-500">
-                <span>Chưa có dữ liệu điểm danh cho ngày này.</span>
+                <span>Chưa có dữ liệu điểm danh cho tiết học này.</span>
                 <Button
                   size="sm"
                   className="text-xs h-7 bg-teal-600 hover:bg-teal-700 text-white gap-1"
-                  onClick={() => {
-                    onClose()
-                    onNavigate?.('Điểm danh')
-                  }}
+                  onClick={() => onOpenAttendance?.(entry)}
                 >
                   <UserCheck className="size-3" /> Điểm danh ngay
                 </Button>
@@ -1603,6 +1621,13 @@ export function ScheduleView({ onNavigate }: { onNavigate?: (view: any) => void 
   const [duplicateEntry, setDuplicateEntry] = useState<ScheduleEntry | null>(null)
   const [deleteEntry, setDeleteEntry] = useState<ScheduleEntry | null>(null)
   const [lessonPickerSchedule, setLessonPickerSchedule] = useState<ScheduleEntry | null>(null)
+  const [attendanceScheduleId, setAttendanceScheduleId] = useState<string | null>(null)
+  const [attendanceModalOpen, setAttendanceModalOpen] = useState(false)
+
+  const handleOpenAttendance = (entry: ScheduleEntry) => {
+    setAttendanceScheduleId(entry.id)
+    setAttendanceModalOpen(true)
+  }
 
   // Realtime clock
   const [nowTime, setNowTime] = useState<Date>(() => new Date())
@@ -2018,6 +2043,7 @@ export function ScheduleView({ onNavigate }: { onNavigate?: (view: any) => void 
                 const nowStr = new Date().toLocaleTimeString('vi-VN', { hour12: false, hour: '2-digit', minute: '2-digit' })
                 handleStatusChange(e, 'TAUGHT', { actualEndTime: nowStr })
               }}
+              onOpenAttendance={handleOpenAttendance}
               onNavigate={onNavigate}
             />
           ))}
@@ -2065,6 +2091,7 @@ export function ScheduleView({ onNavigate }: { onNavigate?: (view: any) => void 
                       const nowStr = new Date().toLocaleTimeString('vi-VN', { hour12: false, hour: '2-digit', minute: '2-digit' })
                       handleStatusChange(e, 'TAUGHT', { actualEndTime: nowStr })
                     }}
+                    onOpenAttendance={handleOpenAttendance}
                     onNavigate={onNavigate}
                   />
                 ))}
@@ -2099,6 +2126,7 @@ export function ScheduleView({ onNavigate }: { onNavigate?: (view: any) => void 
         }}
         onOpenLessonPicker={setLessonPickerSchedule}
         onUnlinkLessonPlan={handleUnlinkLessonPlan}
+        onOpenAttendance={handleOpenAttendance}
         onNavigate={onNavigate}
       />
 
@@ -2134,6 +2162,16 @@ export function ScheduleView({ onNavigate }: { onNavigate?: (view: any) => void 
           if (lessonPickerSchedule) {
             handleLinkLessonPlan(lessonPickerSchedule, lp)
           }
+        }}
+      />
+
+      {/* Schedule Attendance Dialog */}
+      <ScheduleAttendanceDialog
+        scheduleId={attendanceScheduleId}
+        open={attendanceModalOpen}
+        onOpenChange={setAttendanceModalOpen}
+        onSaved={() => {
+          loadData()
         }}
       />
     </div>
