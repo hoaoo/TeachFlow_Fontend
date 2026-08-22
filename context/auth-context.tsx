@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { api, setAccessToken, getAccessToken, clearAuth } from '@/services/api-client';
+import { api, setAccessToken, getAccessToken, clearAuth, notifyAuthStateChanged } from '@/services/api-client';
 
 export type UserProfile = {
   id: string;
@@ -81,13 +81,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     fetchProfile();
 
+    // Listen for successful login/auth-state-changed (re-fetch profile)
     const handleAuthChange = () => {
       fetchProfile();
     };
 
+    // Listen for session-cleared (logout or token refresh failure): just clear user, no re-fetch
+    const handleAuthCleared = () => {
+      setUser(null);
+      setIsLoading(false);
+    };
+
     window.addEventListener('teachflow:auth-state-changed', handleAuthChange);
+    window.addEventListener('teachflow:auth-cleared', handleAuthCleared);
     return () => {
       window.removeEventListener('teachflow:auth-state-changed', handleAuthChange);
+      window.removeEventListener('teachflow:auth-cleared', handleAuthCleared);
     };
   }, [fetchProfile]);
 
@@ -106,6 +115,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAccessToken(token);
       }
       await fetchProfile();
+      // Notify data loaders (Dashboard, Sidebar, etc.) to reload after successful login
+      notifyAuthStateChanged();
     } finally {
       setIsLoading(false);
     }

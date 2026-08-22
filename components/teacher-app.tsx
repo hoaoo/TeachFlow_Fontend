@@ -455,6 +455,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   const [scheduleLessons, setScheduleLessons] = useState<DashboardLesson[]>([])
   const [loadingSchedule, setLoadingSchedule] = useState<boolean>(false)
   const [scheduleError, setScheduleError] = useState<string | null>(null)
+  const [scheduleRetryKey, setScheduleRetryKey] = useState(0)
   const scheduleReqSeq = useRef(0)
 
   // Task creation modal
@@ -518,6 +519,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   useEffect(() => {
     loadDashboardData()
 
+    // Only reload on successful login (teachflow:auth-state-changed), not on logout/token-cleared
     const handleAuthChange = () => {
       loadDashboardData()
     }
@@ -540,48 +542,56 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
     return mondayStr === curMonStr
   }, [mondayStr])
 
-  // Fetch schedule whenever viewMode or selectedDate changes
-  const loadSchedule = useCallback(async () => {
+  // Fetch schedule whenever viewMode or selectedDate changes (no auth event listeners — avoids refresh storm)
+  useEffect(() => {
     const reqId = ++scheduleReqSeq.current
     setLoadingSchedule(true)
     setScheduleError(null)
 
-    try {
-      let res: DashboardLesson[] = []
-      if (scheduleViewMode === 'day') {
-        res = await apiGetDashboardSchedule({ date: selectedDate })
-      } else {
-        res = await apiGetDashboardSchedule({ from: mondayStr, to: sundayStr })
-      }
-
-      if (reqId === scheduleReqSeq.current) {
-        setScheduleLessons(res || [])
-        setLoadingSchedule(false)
-      }
-    } catch (err: any) {
-      if (reqId === scheduleReqSeq.current) {
-        if (err?.statusCode === 401 || err?.status === 401) {
-          setScheduleError('Vui lòng đăng nhập để xem lịch dạy')
-        } else if (err?.statusCode === 403 || err?.status === 403) {
-          setScheduleError('Bạn không có quyền xem lịch dạy này')
-        } else {
-          setScheduleError(err?.message || 'Không thể tải lịch dạy lúc này')
-        }
-        setScheduleLessons([])
-        setLoadingSchedule(false)
-      }
+    if (scheduleViewMode === 'day') {
+      apiGetDashboardSchedule({ date: selectedDate })
+        .then((res) => {
+          if (reqId === scheduleReqSeq.current) {
+            setScheduleLessons(res || [])
+            setLoadingSchedule(false)
+          }
+        })
+        .catch((err: any) => {
+          if (reqId === scheduleReqSeq.current) {
+            if (err?.statusCode === 401 || err?.status === 401) {
+              setScheduleError('Vui lòng đăng nhập để xem lịch dạy')
+            } else if (err?.statusCode === 403 || err?.status === 403) {
+              setScheduleError('Bạn không có quyền xem lịch dạy này')
+            } else {
+              setScheduleError(err?.message || 'Không thể tải lịch dạy lúc này')
+            }
+            setScheduleLessons([])
+            setLoadingSchedule(false)
+          }
+        })
+    } else {
+      apiGetDashboardSchedule({ from: mondayStr, to: sundayStr })
+        .then((res) => {
+          if (reqId === scheduleReqSeq.current) {
+            setScheduleLessons(res || [])
+            setLoadingSchedule(false)
+          }
+        })
+        .catch((err: any) => {
+          if (reqId === scheduleReqSeq.current) {
+            if (err?.statusCode === 401 || err?.status === 401) {
+              setScheduleError('Vui lòng đăng nhập để xem lịch dạy')
+            } else if (err?.statusCode === 403 || err?.status === 403) {
+              setScheduleError('Bạn không có quyền xem lịch dạy này')
+            } else {
+              setScheduleError(err?.message || 'Không thể tải lịch dạy lúc này')
+            }
+            setScheduleLessons([])
+            setLoadingSchedule(false)
+          }
+        })
     }
-  }, [scheduleViewMode, selectedDate, mondayStr, sundayStr])
-
-  useEffect(() => {
-    loadSchedule()
-
-    const handleAuthChange = () => {
-      loadSchedule()
-    }
-    window.addEventListener('teachflow:auth-state-changed', handleAuthChange)
-    return () => window.removeEventListener('teachflow:auth-state-changed', handleAuthChange)
-  }, [loadSchedule])
+  }, [scheduleViewMode, selectedDate, mondayStr, sundayStr, scheduleRetryKey])
 
   const handlePrev = () => {
     if (scheduleViewMode === 'day') {
@@ -1022,7 +1032,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
                 <p className="text-xs text-slate-500">{scheduleError}</p>
                 <button
                   type="button"
-                  onClick={loadSchedule}
+                  onClick={() => setScheduleRetryKey(k => k + 1)}
                   className="mt-3 inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition shadow-2xs"
                 >
                   Tải lại lịch

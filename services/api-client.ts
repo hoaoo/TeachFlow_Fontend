@@ -38,6 +38,17 @@ export function setAccessToken(token: string | null): void {
 export function clearAuth(): void {
   setAccessToken(null);
   if (typeof window !== 'undefined') {
+    // Dispatch 'teachflow:auth-cleared' for logout/session-expiry — data loaders must NOT reload on this
+    window.dispatchEvent(new CustomEvent('teachflow:auth-cleared', { detail: null }));
+  }
+}
+
+/**
+ * Called after a successful login to signal all components to reload their data.
+ * This is the only event that should trigger data loaders to re-fetch.
+ */
+export function notifyAuthStateChanged(): void {
+  if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('teachflow:auth-state-changed', { detail: null }));
   }
 }
