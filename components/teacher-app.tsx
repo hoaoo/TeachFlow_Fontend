@@ -13,6 +13,7 @@ import { navItems } from '@/lib/mock-data'
 import { LessonView } from '@/components/lesson-editor'
 import { LibraryView } from '@/components/library-view'
 import { ClassroomManager } from '@/components/classroom-manager'
+import { StudentManager } from '@/components/student-manager'
 import { WorkspaceModule } from '@/components/workspace-module'
 import { AdminTeachersView } from '@/components/admin-teachers-view'
 import { AdminDashboardView } from '@/components/admin-dashboard-view'
@@ -91,7 +92,17 @@ type View =
   | 'Nhật ký hệ thống'
   | 'Sức khỏe hệ thống'
 
-function Sidebar({ active, onSelect, open, onClose }: { active: View; onSelect: (view: View) => void; open: boolean; onClose: () => void }) {
+function Sidebar({
+  active,
+  onSelect,
+  open,
+  onClose,
+}: {
+  active: View
+  onSelect: (view: View, classId?: string) => void
+  open: boolean
+  onClose: () => void
+}) {
   const { user, logout } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
   const displayName = user?.teacher?.fullName || (isAdmin ? 'Quản trị viên' : 'Giáo viên')
@@ -244,10 +255,10 @@ function Sidebar({ active, onSelect, open, onClose }: { active: View; onSelect: 
                   <button
                     key={cls.id}
                     onClick={() => {
-                      onSelect('Lớp học')
+                      onSelect('Lớp học', cls.id)
                       onClose()
                     }}
-                    className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50 transition"
+                    className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50 transition cursor-pointer"
                   >
                     <span className={`grid size-8 place-items-center rounded-lg text-xs font-semibold ${colorClass}`}>
                       {shortCode}
@@ -1392,7 +1403,15 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   )
 }
 
-function GenericView({ view, onNavigate }: { view: View; onNavigate: (view: View) => void }) {
+function GenericView({
+  view,
+  selectedClassId,
+  onNavigate,
+}: {
+  view: View
+  selectedClassId?: string
+  onNavigate: (view: View, classId?: string) => void
+}) {
   const { user } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
 
@@ -1451,8 +1470,8 @@ function GenericView({ view, onNavigate }: { view: View; onNavigate: (view: View
   // Teacher Workspace Views
   if (view === 'Trợ lý AI') return <AIView onNavigate={onNavigate} />
   if (view === 'Giáo án') return <LessonView onNavigate={onNavigate} />
-  if (view === 'Lớp học') return <ClassroomManager initialSection="classes" />
-  if (view === 'Học sinh') return <ClassroomManager initialSection="students" />
+  if (view === 'Lớp học') return <ClassroomManager initialSection="classes" initialClassId={selectedClassId} />
+  if (view === 'Học sinh') return <StudentManager />
   if (view === 'Thư viện hoạt động') return <LibraryView onNavigate={onNavigate} />
   if (view === 'Chủ nhiệm') return <HomeroomView onNavigate={onNavigate} />
   if (view === 'Báo cáo & Thống kê') return <ReportsView />
@@ -2070,8 +2089,14 @@ export function TeacherApp() {
   const { user, isLoading, isAuthenticated } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
   const [active, setActive] = useState<View>(isAdmin ? 'Tổng quan hệ thống' : 'Tổng quan')
+  const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined)
   const [menuOpen, setMenuOpen] = useState(false)
   const [authModalOpen, setAuthModalOpen] = useState(false)
+
+  const handleNavigate = (v: View, classId?: string) => {
+    setSelectedClassId(classId)
+    setActive(v)
+  }
 
   // Switch default active view when user login state changes
   useEffect(() => {
@@ -2132,17 +2157,17 @@ export function TeacherApp() {
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-900">
-      <Sidebar active={active} onSelect={setActive} open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <Sidebar active={active} onSelect={handleNavigate} open={menuOpen} onClose={() => setMenuOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Header onMenu={() => setMenuOpen(true)} onOpenLogin={() => setAuthModalOpen(true)} onNavigate={setActive} />
+        <Header onMenu={() => setMenuOpen(true)} onOpenLogin={() => setAuthModalOpen(true)} onNavigate={handleNavigate} />
         <main className="flex-1 overflow-y-auto px-5 py-8 sm:px-8 lg:px-10">
           <div className="mx-auto max-w-7xl">
             {isAdmin ? (
-              <GenericView view={active} onNavigate={setActive} />
+              <GenericView view={active} selectedClassId={selectedClassId} onNavigate={handleNavigate} />
             ) : active === 'Tổng quan' ? (
-              <Dashboard onNavigate={setActive} />
+              <Dashboard onNavigate={handleNavigate} />
             ) : (
-              <GenericView view={active} onNavigate={setActive} />
+              <GenericView view={active} selectedClassId={selectedClassId} onNavigate={handleNavigate} />
             )}
           </div>
         </main>

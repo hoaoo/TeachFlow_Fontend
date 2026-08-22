@@ -17,6 +17,11 @@ export type StudentRecord = {
   color: string
   enrollmentId?: string
   enrolledAt?: string | Date
+  classId?: string
+  className?: string
+  grade?: string
+  gradeName?: string
+  schoolYearName?: string
 }
 
 export type ClassRecord = {

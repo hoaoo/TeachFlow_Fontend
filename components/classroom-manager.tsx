@@ -79,8 +79,23 @@ type ViewState = {
 const statusVariant = (status: StudentRecord['status']) =>
   status === 'Tốt' ? 'default' : status === 'Khá' ? 'secondary' : 'destructive'
 
-export function ClassroomManager({ initialSection = 'classes' }: { initialSection?: 'classes' | 'students' }) {
-  const [view, setView] = useState<ViewState>({ page: initialSection === 'students' ? 'classes' : 'classes' })
+export function ClassroomManager({
+  initialSection = 'classes',
+  initialClassId,
+}: {
+  initialSection?: 'classes' | 'students'
+  initialClassId?: string
+}) {
+  const [view, setView] = useState<ViewState>({
+    page: initialClassId ? 'class' : 'classes',
+    classId: initialClassId,
+  })
+
+  useEffect(() => {
+    if (initialClassId) {
+      setView({ page: 'class', classId: initialClassId })
+    }
+  }, [initialClassId])
   const [classes, setClasses] = useState<ClassRecord[]>([])
   const [summaryStats, setSummaryStats] = useState<{ totalClasses: number; totalStudents: number; avgAttendanceRate: number | null }>({
     totalClasses: 0,
