@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bell, BookOpen, CalendarDays, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock3, Clock,
   FileText, Files, GraduationCap, Grid2X2, LayoutDashboard, Library, Menu, MoreHorizontal,
@@ -420,7 +420,6 @@ function computeScheduleStatus(
   if (isNaN(y) || isNaN(m) || isNaN(d) || isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) {
     return { label: 'Chưa bắt đầu', tone: 'slate', code: 'PLANNED' }
   }
-
   const slotStart = new Date(y, m - 1, d, sh, sm, 0)
   const slotEnd = new Date(y, m - 1, d, eh, em, 0)
 
@@ -435,9 +434,14 @@ function computeScheduleStatus(
 }
 
 function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
+  const { user } = useAuth()
   const [data, setData] = useState<DashboardData | null>(null)
   const [tasksList, setTasksList] = useState<DashboardTask[]>([])
   const [loading, setLoading] = useState(true)
+  const [dashboardError, setDashboardError] = useState<{
+    type: 'UNAUTHENTICATED' | 'FORBIDDEN' | 'SERVER_ERROR' | 'NETWORK_ERROR'
+    message: string
+  } | null>(null)
 
   // Real-time clock (HH:mm:ss in local time)
   const [nowDate, setNowDate] = useState<Date>(() => new Date())
@@ -450,6 +454,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   const [selectedDate, setSelectedDate] = useState<string>(() => formatYYYYMMDD(new Date()))
   const [scheduleLessons, setScheduleLessons] = useState<DashboardLesson[]>([])
   const [loadingSchedule, setLoadingSchedule] = useState<boolean>(false)
+  const [scheduleError, setScheduleError] = useState<string | null>(null)
   const scheduleReqSeq = useRef(0)
 
   // Task creation modal
@@ -478,20 +483,47 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
     return () => clearInterval(timer)
   }, [])
 
-  // Initial load dashboard stats & tasks
-  useEffect(() => {
-    let alive = true
-    getDashboardData().then((res) => {
-      if (alive && res) {
+  // Load dashboard overview data
+  const loadDashboardData = useCallback(async () => {
+    setLoading(true)
+    setDashboardError(null)
+    try {
+      const res = await getDashboardData()
+      if (res) {
         setData(res)
         if (res.tasks) setTasksList(res.tasks)
       }
-      if (alive) setLoading(false)
-    }).catch(() => {
-      if (alive) setLoading(false)
-    })
-    return () => { alive = false }
+    } catch (err: any) {
+      if (err?.statusCode === 401 || err?.status === 401) {
+        setDashboardError({
+          type: 'UNAUTHENTICATED',
+          message: 'Vui lòng đăng nhập để xem tổng quan dữ liệu giảng dạy.',
+        })
+      } else if (err?.statusCode === 403 || err?.status === 403) {
+        setDashboardError({
+          type: 'FORBIDDEN',
+          message: 'Bạn không có quyền truy cập trang tổng quan này.',
+        })
+      } else {
+        setDashboardError({
+          type: 'SERVER_ERROR',
+          message: err?.message || 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại kết nối mạng.',
+        })
+      }
+    } finally {
+      setLoading(false)
+    }
   }, [])
+
+  useEffect(() => {
+    loadDashboardData()
+
+    const handleAuthChange = () => {
+      loadDashboardData()
+    }
+    window.addEventListener('teachflow:auth-state-changed', handleAuthChange)
+    return () => window.removeEventListener('teachflow:auth-state-changed', handleAuthChange)
+  }, [loadDashboardData])
 
   // Date calculations
   const todayStr = useMemo(() => formatYYYYMMDD(nowDate), [nowDate])
@@ -509,34 +541,47 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   }, [mondayStr])
 
   // Fetch schedule whenever viewMode or selectedDate changes
-  useEffect(() => {
+  const loadSchedule = useCallback(async () => {
     const reqId = ++scheduleReqSeq.current
     setLoadingSchedule(true)
+    setScheduleError(null)
 
-    if (scheduleViewMode === 'day') {
-      apiGetDashboardSchedule({ date: selectedDate })
-        .then((res) => {
-          if (reqId === scheduleReqSeq.current) {
-            setScheduleLessons(res)
-            setLoadingSchedule(false)
-          }
-        })
-        .catch(() => {
-          if (reqId === scheduleReqSeq.current) setLoadingSchedule(false)
-        })
-    } else {
-      apiGetDashboardSchedule({ from: mondayStr, to: sundayStr })
-        .then((res) => {
-          if (reqId === scheduleReqSeq.current) {
-            setScheduleLessons(res)
-            setLoadingSchedule(false)
-          }
-        })
-        .catch(() => {
-          if (reqId === scheduleReqSeq.current) setLoadingSchedule(false)
-        })
+    try {
+      let res: DashboardLesson[] = []
+      if (scheduleViewMode === 'day') {
+        res = await apiGetDashboardSchedule({ date: selectedDate })
+      } else {
+        res = await apiGetDashboardSchedule({ from: mondayStr, to: sundayStr })
+      }
+
+      if (reqId === scheduleReqSeq.current) {
+        setScheduleLessons(res || [])
+        setLoadingSchedule(false)
+      }
+    } catch (err: any) {
+      if (reqId === scheduleReqSeq.current) {
+        if (err?.statusCode === 401 || err?.status === 401) {
+          setScheduleError('Vui lòng đăng nhập để xem lịch dạy')
+        } else if (err?.statusCode === 403 || err?.status === 403) {
+          setScheduleError('Bạn không có quyền xem lịch dạy này')
+        } else {
+          setScheduleError(err?.message || 'Không thể tải lịch dạy lúc này')
+        }
+        setScheduleLessons([])
+        setLoadingSchedule(false)
+      }
     }
   }, [scheduleViewMode, selectedDate, mondayStr, sundayStr])
+
+  useEffect(() => {
+    loadSchedule()
+
+    const handleAuthChange = () => {
+      loadSchedule()
+    }
+    window.addEventListener('teachflow:auth-state-changed', handleAuthChange)
+    return () => window.removeEventListener('teachflow:auth-state-changed', handleAuthChange)
+  }, [loadSchedule])
 
   const handlePrev = () => {
     if (scheduleViewMode === 'day') {
@@ -696,7 +741,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
 
   const students = data?.featuredStudents || []
 
-  if (loading && !data) {
+  if (loading && !data && !dashboardError) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-400">
         <Loader2 className="size-8 animate-spin text-teal-600" />
@@ -778,7 +823,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
     <div className="flex flex-col gap-8">
       <PageTitle
         eyebrow={data?.greeting?.date || "Hôm nay"}
-        title={data?.greeting?.title || "Chào mừng thầy/cô"}
+        title={data?.greeting?.title || (user ? `Chào mừng ${user.teacher?.fullName || user.email}` : "Chào mừng thầy/cô")}
         description={data?.greeting?.description || "Tổng quan công việc và dữ liệu học tập hôm nay."}
         action={
           <button
@@ -789,6 +834,40 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
           </button>
         }
       />
+
+      {/* Unauthenticated Alert Card */}
+      {dashboardError?.type === 'UNAUTHENTICATED' && (
+        <div className="rounded-2xl border border-teal-200 bg-teal-50/70 p-6 text-center shadow-xs">
+          <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-teal-100 text-teal-700 mb-3 shadow-2xs">
+            <LogIn className="size-6" />
+          </div>
+          <h3 className="text-base font-bold text-slate-900">Vui lòng đăng nhập</h3>
+          <p className="mt-1 text-xs text-slate-600 max-w-md mx-auto">
+            Đăng nhập tài khoản giáo viên để xem đầy đủ kế hoạch lịch dạy, việc cần làm và phân tích lớp học.
+          </p>
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('teachflow:open-login'))}
+              className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-teal-700 transition"
+            >
+              <LogIn className="size-3.5" /> Đăng nhập ngay
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Server / Network Error Alert Card */}
+      {dashboardError && dashboardError.type !== 'UNAUTHENTICATED' && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-6 text-center shadow-xs">
+          <p className="text-sm font-semibold text-rose-800">{dashboardError.message}</p>
+          <button
+            onClick={loadDashboardData}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 transition shadow-xs"
+          >
+            Thử lại
+          </button>
+        </div>
+      )}
 
       {stats.length > 0 && (
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -937,6 +1016,17 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
               <div className="flex items-center justify-center py-12 gap-2 text-slate-400">
                 <Loader2 className="size-5 animate-spin text-teal-600" />
                 <span className="text-xs font-medium">Đang tải lịch dạy...</span>
+              </div>
+            ) : scheduleError ? (
+              <div className="p-8 text-center">
+                <p className="text-xs text-slate-500">{scheduleError}</p>
+                <button
+                  type="button"
+                  onClick={loadSchedule}
+                  className="mt-3 inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition shadow-2xs"
+                >
+                  Tải lại lịch
+                </button>
               </div>
             ) : scheduleViewMode === 'day' ? (
               scheduleLessons.length > 0 ? (
@@ -2109,6 +2199,13 @@ export function TeacherApp() {
       setActive('Tổng quan')
     }
   }, [user?.role])
+
+  // Listen for login modal open requests
+  useEffect(() => {
+    const handleOpenLogin = () => setAuthModalOpen(true)
+    window.addEventListener('teachflow:open-login', handleOpenLogin)
+    return () => window.removeEventListener('teachflow:open-login', handleOpenLogin)
+  }, [])
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-900">
