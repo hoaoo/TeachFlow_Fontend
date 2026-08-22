@@ -82,7 +82,11 @@ const statusVariant = (status: StudentRecord['status']) =>
 export function ClassroomManager({ initialSection = 'classes' }: { initialSection?: 'classes' | 'students' }) {
   const [view, setView] = useState<ViewState>({ page: initialSection === 'students' ? 'classes' : 'classes' })
   const [classes, setClasses] = useState<ClassRecord[]>([])
-  const [summaryStats, setSummaryStats] = useState({ totalClasses: 0, totalStudents: 0, avgAttendanceRate: 96 })
+  const [summaryStats, setSummaryStats] = useState<{ totalClasses: number; totalStudents: number; avgAttendanceRate: number | null }>({
+    totalClasses: 0,
+    totalStudents: 0,
+    avgAttendanceRate: null,
+  })
   const [schoolYears, setSchoolYears] = useState<SchoolYearOption[]>([])
   const [grades, setGrades] = useState<GradeOption[]>([])
   const [selectedSchoolYearId, setSelectedSchoolYearId] = useState<string>('ALL')
@@ -93,7 +97,7 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
 
-  // Dialog states
+  // Global Dialog States (isolated from navigation view)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [editClassTarget, setEditClassTarget] = useState<ClassRecord | null>(null)
   const [cloneClassTarget, setCloneClassTarget] = useState<ClassRecord | null>(null)
@@ -347,7 +351,11 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
     try {
       await apiDeleteClass(deleteClassTarget.id)
       setClasses((prev) => prev.filter((c) => c.id !== deleteClassTarget.id))
+      const targetId = deleteClassTarget.id
       setDeleteClassTarget(null)
+      if (view.page === 'class' && view.classId === targetId) {
+        setView({ page: 'classes' })
+      }
       toast.success(`Đã lưu trữ và ngừng sử dụng lớp ${deleteClassTarget.name}`)
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
@@ -358,320 +366,330 @@ export function ClassroomManager({ initialSection = 'classes' }: { initialSectio
     }
   }
 
-  // Navigations
+  // Selected current class
   const currentClass = classes.find((item) => item.id === view.classId) ?? classes[0]
 
-  if (view.page === 'student' && selectedStudent && currentClass) {
-    return (
-      <StudentProfileView
-        student={selectedStudent}
-        classItem={currentClass}
-        allClasses={classes}
-        onBack={() => setView({ page: 'class', classId: currentClass.id })}
-        onStudentUpdated={() => {
-          reloadClasses()
-        }}
-      />
-    )
-  }
-
-  if (view.page === 'class' && currentClass) {
-    return (
-      <ClassDetailView
-        classItem={currentClass}
-        allClasses={classes}
-        schoolYears={schoolYears}
-        grades={grades}
-        initialTab={view.initialTab}
-        onBack={() => setView({ page: 'classes' })}
-        onOpenStudent={(s) => {
-          setSelectedStudent(s)
-          setView({ page: 'student', classId: currentClass.id, studentId: s.id })
-        }}
-        onOpenEdit={() => openEditModal(currentClass)}
-        onOpenClone={() => openCloneModal(currentClass)}
-        onOpenComplete={() => setCompleteClassTarget(currentClass)}
-        onOpenDelete={() => setDeleteClassTarget(currentClass)}
-        onClassUpdated={() => reloadClasses()}
-      />
-    )
-  }
-
-  // Directory View
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-teal-700">
-            <GraduationCap className="size-4" /> Quản lý lớp học TeachFlow
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-1">
-            Lớp học của tôi
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Trung tâm quản lý toàn bộ dữ liệu, học sinh, điểm danh và hoạt động học tập theo từng lớp.
-          </p>
-        </div>
-
-        <Button
-          onClick={() => setCreateDialogOpen(true)}
-          className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs gap-1.5 shadow-sm h-9 px-4 shrink-0"
-        >
-          <Plus className="size-4" /> Tạo lớp mới
-        </Button>
-      </div>
-
-      {/* 3 Summary KPI Tiles */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="border-slate-200 shadow-2xs">
-          <CardContent className="flex items-center justify-between p-4">
-            <div>
-              <p className="text-xs font-medium text-slate-500">Tổng số lớp</p>
-              <p className="text-2xl font-bold text-slate-900 mt-0.5">{summaryStats.totalClasses}</p>
-              <p className="text-[11px] text-teal-700 font-medium mt-0.5">Theo bộ lọc hiện tại</p>
-            </div>
-            <div className="size-10 rounded-xl bg-teal-50 text-teal-700 grid place-items-center">
-              <LayoutGrid className="size-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 shadow-2xs">
-          <CardContent className="flex items-center justify-between p-4">
-            <div>
-              <p className="text-xs font-medium text-slate-500">Tổng học sinh</p>
-              <p className="text-2xl font-bold text-slate-900 mt-0.5">{summaryStats.totalStudents}</p>
-              <p className="text-[11px] text-blue-700 font-medium mt-0.5">Học sinh đang theo học</p>
-            </div>
-            <div className="size-10 rounded-xl bg-blue-50 text-blue-700 grid place-items-center">
-              <Users className="size-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 shadow-2xs">
-          <CardContent className="flex items-center justify-between p-4">
-            <div>
-              <p className="text-xs font-medium text-slate-500">Tỷ lệ đi học</p>
-              <p className="text-2xl font-bold text-slate-900 mt-0.5">{summaryStats.avgAttendanceRate}%</p>
-              <p className="text-[11px] text-amber-700 font-medium mt-0.5">Trung bình tháng này</p>
-            </div>
-            <div className="size-10 rounded-xl bg-amber-50 text-amber-700 grid place-items-center">
-              <CalendarCheck2 className="size-5" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filter and Search Bar */}
-      <Card className="border-slate-200 shadow-2xs">
-        <CardContent className="p-3.5 sm:p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-            {/* Search Input */}
-            <div className="relative sm:col-span-2 lg:col-span-2">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
-              <Input
-                type="text"
-                placeholder="Tìm theo tên lớp, mã lớp, phòng học..."
-                value={query}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="pl-9 text-xs h-9 bg-slate-50 border-slate-200"
-              />
-            </div>
-
-            {/* School Year Filter */}
-            <div>
-              <select
-                aria-label="Lọc theo năm học"
-                value={selectedSchoolYearId}
-                onChange={(e) => handleSchoolYearChange(e.target.value)}
-                className="w-full h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 focus:outline-teal-500"
-              >
-                <option value="ALL">Tất cả năm học</option>
-                {schoolYears.map((sy) => (
-                  <option key={sy.id} value={sy.id}>
-                    {sy.name} {sy.isCurrent ? '(Hiện tại)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Grade Filter */}
-            <div>
-              <select
-                aria-label="Lọc theo khối lớp"
-                value={selectedGradeId}
-                onChange={(e) => handleGradeChange(e.target.value)}
-                className="w-full h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 focus:outline-teal-500"
-              >
-                <option value="ALL">Tất cả khối</option>
-                {grades.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Sort Filter */}
-            <div>
-              <select
-                aria-label="Sắp xếp danh sách lớp"
-                value={selectedSort}
-                onChange={(e) => handleSortChange(e.target.value)}
-                className="w-full h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 focus:outline-teal-500"
-              >
-                <option value="name">Tên lớp (A-Z)</option>
-                <option value="studentCount">Sĩ số (Cao - Thấp)</option>
-                <option value="attendanceRate">Chuyên cần (Cao - Thấp)</option>
-                <option value="updatedAt">Cập nhật gần nhất</option>
-              </select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Class Cards Grid */}
-      {loading ? (
-        <div className="py-20 text-center text-slate-400">
-          <Loader2 className="size-8 animate-spin mx-auto text-teal-600 mb-2" />
-          <p className="text-sm font-medium">Đang tải danh sách lớp học...</p>
-        </div>
-      ) : error ? (
-        <div className="py-12 text-center bg-white rounded-xl border border-rose-200 p-6 space-y-3">
-          <AlertCircle className="size-8 mx-auto text-rose-500" />
-          <p className="text-sm font-semibold text-rose-700">{error}</p>
-          <Button variant="outline" size="sm" onClick={() => loadInitialData()} className="text-xs gap-1.5">
-            <RefreshCw className="size-3" /> Thử lại
-          </Button>
-        </div>
-      ) : classes.length === 0 ? (
-        <div className="py-16 text-center bg-white rounded-2xl border border-dashed border-slate-200 p-8 space-y-3">
-          <School className="size-10 mx-auto text-slate-300" />
-          <h3 className="text-base font-bold text-slate-800">Bạn chưa có lớp học nào</h3>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            Bắt đầu thiết lập danh sách lớp học để quản lý học sinh, lập lịch dạy và ghi nhận điểm danh.
-          </p>
-          <Button onClick={() => setCreateDialogOpen(true)} className="bg-teal-600 text-white text-xs font-semibold gap-1.5">
-            <Plus className="size-3.5" /> Tạo lớp đầu tiên
-          </Button>
-        </div>
+    <div className="w-full">
+      {/* 1. STUDENT PROFILE VIEW */}
+      {view.page === 'student' && selectedStudent && currentClass ? (
+        <StudentProfileView
+          student={selectedStudent}
+          classItem={currentClass}
+          allClasses={classes}
+          onBack={() => setView({ page: 'class', classId: currentClass.id })}
+          onStudentUpdated={() => {
+            reloadClasses()
+          }}
+        />
+      ) : view.page === 'class' && currentClass ? (
+        /* 2. CLASS DETAIL VIEW (Overlay Dialogs rendered globally) */
+        <ClassDetailView
+          classItem={currentClass}
+          allClasses={classes}
+          schoolYears={schoolYears}
+          grades={grades}
+          initialTab={view.initialTab}
+          onBack={() => setView({ page: 'classes' })}
+          onOpenStudent={(s) => {
+            setSelectedStudent(s)
+            setView({ page: 'student', classId: currentClass.id, studentId: s.id })
+          }}
+          onOpenEdit={() => openEditModal(currentClass)}
+          onOpenClone={() => openCloneModal(currentClass)}
+          onOpenComplete={() => setCompleteClassTarget(currentClass)}
+          onOpenDelete={() => setDeleteClassTarget(currentClass)}
+          onClassUpdated={() => reloadClasses()}
+        />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {classes.map((item) => (
-            <Card
-              key={item.id}
-              className="group hover:border-teal-300 hover:shadow-md transition-all cursor-pointer border-slate-200 flex flex-col justify-between"
-              onClick={() => setView({ page: 'class', classId: item.id })}
+        /* 3. DIRECTORY VIEW */
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 space-y-6">
+          {/* Top Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-teal-700">
+                <GraduationCap className="size-4" /> Quản lý lớp học TeachFlow
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-1">
+                Lớp học của tôi
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                Trung tâm quản lý toàn bộ dữ liệu, học sinh, điểm danh và hoạt động học tập theo từng lớp.
+              </p>
+            </div>
+
+            <Button
+              onClick={() => setCreateDialogOpen(true)}
+              className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs gap-1.5 shadow-sm h-9 px-4 shrink-0"
             >
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <CardTitle className="text-lg font-bold text-slate-900 group-hover:text-teal-700 transition-colors">
-                        {item.name}
-                      </CardTitle>
-                      {item.code && (
-                        <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                          {item.code}
-                        </span>
-                      )}
-                    </div>
-                    <CardDescription className="text-xs text-slate-500 mt-1">
-                      {item.grade} · {item.room || 'Phòng học'} · {item.schoolYear?.name || ''}
-                    </CardDescription>
-                  </div>
+              <Plus className="size-4" /> Tạo lớp mới
+            </Button>
+          </div>
 
-                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                    <Badge
-                      variant={item.status === 'COMPLETED' ? 'secondary' : 'default'}
-                      className={`text-[10px] ${
-                        item.status === 'COMPLETED'
-                          ? 'bg-slate-100 text-slate-600'
-                          : 'bg-teal-50 text-teal-700 border-teal-200'
-                      }`}
-                    >
-                      {item.status === 'COMPLETED' ? 'Đã kết thúc' : 'Đang hoạt động'}
-                    </Badge>
-
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon-sm" className="size-8 text-slate-400 hover:text-slate-700">
-                          <MoreVertical className="size-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48 text-xs">
-                        <DropdownMenuItem onClick={() => setView({ page: 'class', classId: item.id, initialTab: 'overview' })}>
-                          <Eye className="size-3.5 mr-2" /> Xem tổng quan
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setView({ page: 'class', classId: item.id, initialTab: 'students' })}>
-                          <Users className="size-3.5 mr-2" /> Quản lý học sinh
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setView({ page: 'class', classId: item.id, initialTab: 'schedules' })}>
-                          <CalendarDays className="size-3.5 mr-2" /> Lịch dạy
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setView({ page: 'class', classId: item.id, initialTab: 'attendance' })}>
-                          <CalendarCheck2 className="size-3.5 mr-2" /> Điểm danh
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setView({ page: 'class', classId: item.id, initialTab: 'assessments' })}>
-                          <BarChart3 className="size-3.5 mr-2" /> Đánh giá
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => openEditModal(item)}>
-                          <Edit2 className="size-3.5 mr-2" /> Chỉnh sửa lớp
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => openCloneModal(item)}>
-                          <Copy className="size-3.5 mr-2" /> Nhân bản sang năm mới
-                        </DropdownMenuItem>
-                        {item.status !== 'COMPLETED' && (
-                          <DropdownMenuItem onClick={() => setCompleteClassTarget(item)}>
-                            <CheckCircle2 className="size-3.5 mr-2 text-blue-600" /> Kết thúc năm học
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => setDeleteClassTarget(item)} className="text-rose-600">
-                          <Trash2 className="size-3.5 mr-2" /> Xóa / Lưu trữ
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+          {/* 3 Summary KPI Tiles */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Card className="border-slate-200 shadow-2xs">
+              <CardContent className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-xs font-medium text-slate-500">Tổng số lớp</p>
+                  <p className="text-2xl font-bold text-slate-900 mt-0.5">{summaryStats.totalClasses}</p>
+                  <p className="text-[11px] text-teal-700 font-medium mt-0.5">Theo bộ lọc hiện tại</p>
                 </div>
-              </CardHeader>
-
-              <CardContent className="grid gap-3 pt-0">
-                {/* 3 Metrics Box */}
-                <div className="grid grid-cols-3 gap-2 bg-slate-50/80 rounded-xl p-2.5 text-center border border-slate-100">
-                  <div>
-                    <p className="text-xs font-bold text-slate-800">{item.studentCount ?? item.students?.length ?? 0}</p>
-                    <p className="text-[10px] text-slate-500">Sĩ số</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-teal-700">
-                      {typeof item.average === 'number' ? `${item.average} đ` : '—'}
-                    </p>
-                    <p className="text-[10px] text-slate-500">Điểm TB</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-blue-700">
-                      {typeof item.attendance === 'number' ? `${item.attendance}%` : '100%'}
-                    </p>
-                    <p className="text-[10px] text-slate-500">Đi học</p>
-                  </div>
-                </div>
-
-                {/* Schedule and Arrow Footer */}
-                <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-                  <span className="truncate">{item.schedule || 'Sáng · Thứ 2 - Thứ 6'}</span>
-                  <span className="flex items-center text-teal-600 font-semibold group-hover:translate-x-0.5 transition-transform text-[11px]">
-                    Xem chi tiết <ChevronRight className="size-3.5 ml-0.5" />
-                  </span>
+                <div className="size-10 rounded-xl bg-teal-50 text-teal-700 grid place-items-center">
+                  <LayoutGrid className="size-5" />
                 </div>
               </CardContent>
             </Card>
-          ))}
+
+            <Card className="border-slate-200 shadow-2xs">
+              <CardContent className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-xs font-medium text-slate-500">Tổng học sinh</p>
+                  <p className="text-2xl font-bold text-slate-900 mt-0.5">{summaryStats.totalStudents}</p>
+                  <p className="text-[11px] text-blue-700 font-medium mt-0.5">Học sinh đang theo học</p>
+                </div>
+                <div className="size-10 rounded-xl bg-blue-50 text-blue-700 grid place-items-center">
+                  <Users className="size-5" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200 shadow-2xs">
+              <CardContent className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-xs font-medium text-slate-500">Tỷ lệ đi học</p>
+                  <p className="text-2xl font-bold text-slate-900 mt-0.5">
+                    {summaryStats.avgAttendanceRate !== null && summaryStats.avgAttendanceRate !== undefined
+                      ? `${summaryStats.avgAttendanceRate}%`
+                      : '—'}
+                  </p>
+                  <p className="text-[11px] text-amber-700 font-medium mt-0.5">
+                    {summaryStats.avgAttendanceRate !== null && summaryStats.avgAttendanceRate !== undefined
+                      ? 'Trung bình tháng này'
+                      : 'Chưa có dữ liệu tháng này'}
+                  </p>
+                </div>
+                <div className="size-10 rounded-xl bg-amber-50 text-amber-700 grid place-items-center">
+                  <CalendarCheck2 className="size-5" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Filter and Search Bar */}
+          <Card className="border-slate-200 shadow-2xs">
+            <CardContent className="p-3.5 sm:p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                {/* Search Input */}
+                <div className="relative sm:col-span-2 lg:col-span-2">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
+                  <Input
+                    type="text"
+                    placeholder="Tìm theo tên lớp, mã lớp, phòng học..."
+                    value={query}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    className="pl-9 text-xs h-9 bg-slate-50 border-slate-200"
+                  />
+                </div>
+
+                {/* School Year Filter */}
+                <div>
+                  <select
+                    aria-label="Lọc theo năm học"
+                    value={selectedSchoolYearId}
+                    onChange={(e) => handleSchoolYearChange(e.target.value)}
+                    className="w-full h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 focus:outline-teal-500"
+                  >
+                    <option value="ALL">Tất cả năm học</option>
+                    {schoolYears.map((sy) => (
+                      <option key={sy.id} value={sy.id}>
+                        {sy.name} {sy.isCurrent ? '(Hiện tại)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Grade Filter */}
+                <div>
+                  <select
+                    aria-label="Lọc theo khối lớp"
+                    value={selectedGradeId}
+                    onChange={(e) => handleGradeChange(e.target.value)}
+                    className="w-full h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 focus:outline-teal-500"
+                  >
+                    <option value="ALL">Tất cả khối</option>
+                    {grades.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Sort Filter */}
+                <div>
+                  <select
+                    aria-label="Sắp xếp danh sách lớp"
+                    value={selectedSort}
+                    onChange={(e) => handleSortChange(e.target.value)}
+                    className="w-full h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 focus:outline-teal-500"
+                  >
+                    <option value="name">Tên lớp (A-Z)</option>
+                    <option value="studentCount">Sĩ số (Cao - Thấp)</option>
+                    <option value="attendanceRate">Chuyên cần (Cao - Thấp)</option>
+                    <option value="updatedAt">Cập nhật gần nhất</option>
+                  </select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Class Cards Grid */}
+          {loading ? (
+            <div className="py-20 text-center text-slate-400">
+              <Loader2 className="size-8 animate-spin mx-auto text-teal-600 mb-2" />
+              <p className="text-sm font-medium">Đang tải danh sách lớp học...</p>
+            </div>
+          ) : error ? (
+            <div className="py-12 text-center bg-white rounded-xl border border-rose-200 p-6 space-y-3">
+              <AlertCircle className="size-8 mx-auto text-rose-500" />
+              <p className="text-sm font-semibold text-rose-700">{error}</p>
+              <Button variant="outline" size="sm" onClick={() => loadInitialData()} className="text-xs gap-1.5">
+                <RefreshCw className="size-3" /> Thử lại
+              </Button>
+            </div>
+          ) : classes.length === 0 ? (
+            <div className="py-16 text-center bg-white rounded-2xl border border-dashed border-slate-200 p-8 space-y-3">
+              <School className="size-10 mx-auto text-slate-300" />
+              <h3 className="text-base font-bold text-slate-800">Bạn chưa có lớp học nào</h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Bắt đầu thiết lập danh sách lớp học để quản lý học sinh, lập lịch dạy và ghi nhận điểm danh.
+              </p>
+              <Button onClick={() => setCreateDialogOpen(true)} className="bg-teal-600 text-white text-xs font-semibold gap-1.5">
+                <Plus className="size-3.5" /> Tạo lớp đầu tiên
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {classes.map((item) => (
+                <Card
+                  key={item.id}
+                  className="group hover:border-teal-300 hover:shadow-md transition-all cursor-pointer border-slate-200 flex flex-col justify-between"
+                  onClick={() => setView({ page: 'class', classId: item.id })}
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <CardTitle className="text-lg font-bold text-slate-900 group-hover:text-teal-700 transition-colors">
+                            {item.name}
+                          </CardTitle>
+                          {item.code && (
+                            <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                              {item.code}
+                            </span>
+                          )}
+                        </div>
+                        <CardDescription className="text-xs text-slate-500 mt-1">
+                          {item.grade} · {item.room || 'Phòng học'} · {item.schoolYear?.name || ''}
+                        </CardDescription>
+                      </div>
+
+                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        <Badge
+                          variant={item.status === 'COMPLETED' ? 'secondary' : 'default'}
+                          className={`text-[10px] ${
+                            item.status === 'COMPLETED'
+                              ? 'bg-slate-100 text-slate-600'
+                              : 'bg-teal-50 text-teal-700 border-teal-200'
+                          }`}
+                        >
+                          {item.status === 'COMPLETED' ? 'Đã kết thúc' : 'Đang hoạt động'}
+                        </Badge>
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon-sm" className="size-8 text-slate-400 hover:text-slate-700">
+                              <MoreVertical className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48 text-xs">
+                            <DropdownMenuItem onClick={() => setView({ page: 'class', classId: item.id, initialTab: 'overview' })}>
+                              <Eye className="size-3.5 mr-2" /> Xem tổng quan
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setView({ page: 'class', classId: item.id, initialTab: 'students' })}>
+                              <Users className="size-3.5 mr-2" /> Quản lý học sinh
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setView({ page: 'class', classId: item.id, initialTab: 'schedules' })}>
+                              <CalendarDays className="size-3.5 mr-2" /> Lịch dạy
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setView({ page: 'class', classId: item.id, initialTab: 'attendance' })}>
+                              <CalendarCheck2 className="size-3.5 mr-2" /> Điểm danh
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setView({ page: 'class', classId: item.id, initialTab: 'assessments' })}>
+                              <BarChart3 className="size-3.5 mr-2" /> Đánh giá
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => openEditModal(item)}>
+                              <Edit2 className="size-3.5 mr-2" /> Chỉnh sửa lớp
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openCloneModal(item)}>
+                              <Copy className="size-3.5 mr-2" /> Nhân bản sang năm mới
+                            </DropdownMenuItem>
+                            {item.status !== 'COMPLETED' && (
+                              <DropdownMenuItem onClick={() => setCompleteClassTarget(item)}>
+                                <CheckCircle2 className="size-3.5 mr-2 text-blue-600" /> Kết thúc năm học
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => setDeleteClassTarget(item)} className="text-rose-600">
+                              <Trash2 className="size-3.5 mr-2" /> Xóa / Lưu trữ
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="grid gap-3 pt-0">
+                    {/* 3 Metrics Box */}
+                    <div className="grid grid-cols-3 gap-2 bg-slate-50/80 rounded-xl p-2.5 text-center border border-slate-100">
+                      <div>
+                        <p className="text-xs font-bold text-slate-800">{item.studentCount ?? item.students?.length ?? 0}</p>
+                        <p className="text-[10px] text-slate-500">Sĩ số</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-teal-700">
+                          {typeof item.average === 'number' && item.average !== null ? `${item.average} đ` : '—'}
+                        </p>
+                        <p className="text-[10px] text-slate-500">Điểm TB</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-blue-700">
+                          {typeof item.attendance === 'number' && item.attendance !== null ? `${item.attendance}%` : '—'}
+                        </p>
+                        <p className="text-[10px] text-slate-500">Đi học</p>
+                      </div>
+                    </div>
+
+                    {/* Schedule and Arrow Footer */}
+                    <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                      <span className="truncate">{item.schedule || 'Sáng · Thứ 2 - Thứ 6'}</span>
+                      <span className="flex items-center text-teal-600 font-semibold group-hover:translate-x-0.5 transition-transform text-[11px]">
+                        Xem chi tiết <ChevronRight className="size-3.5 ml-0.5" />
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* GLOBAL MODALS (Preserves Classroom Detail or Directory in background) */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
 
       {/* CREATE CLASS DIALOG */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
@@ -1043,7 +1061,7 @@ function ClassDetailView({
         <div>
           <button
             onClick={onBack}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-teal-700 mb-2 transition"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-teal-700 mb-2 transition cursor-pointer"
           >
             <ArrowLeft className="size-3.5" /> Quay lại danh sách lớp
           </button>
@@ -1236,8 +1254,8 @@ function TabOverview({
 
   const kpis = data?.kpis || {
     studentCount: classItem.studentCount || 0,
-    attendanceRate: classItem.attendance || 96,
-    averageScore: classItem.average || 8.4,
+    attendanceRate: classItem.attendance,
+    averageScore: classItem.average,
     weeklyScheduleCount: 0,
     preparedLessonPlanCount: 0,
     needsSupportStudentCount: 0,
@@ -1258,7 +1276,11 @@ function TabOverview({
         <Card className="border-slate-200 shadow-2xs">
           <CardContent className="p-3.5 text-center">
             <CalendarCheck2 className="size-5 mx-auto text-blue-600 mb-1" />
-            <p className="text-lg font-bold text-blue-700">{kpis.attendanceRate}%</p>
+            <p className="text-lg font-bold text-blue-700">
+              {kpis.attendanceRate !== null && kpis.attendanceRate !== undefined
+                ? `${kpis.attendanceRate}%`
+                : '—'}
+            </p>
             <p className="text-[11px] text-slate-500 font-medium">Chuyên cần</p>
           </CardContent>
         </Card>
@@ -1266,7 +1288,11 @@ function TabOverview({
         <Card className="border-slate-200 shadow-2xs">
           <CardContent className="p-3.5 text-center">
             <Award className="size-5 mx-auto text-amber-600 mb-1" />
-            <p className="text-lg font-bold text-amber-700">{kpis.averageScore} đ</p>
+            <p className="text-lg font-bold text-amber-700">
+              {kpis.averageScore !== null && kpis.averageScore !== undefined
+                ? `${kpis.averageScore} đ`
+                : '—'}
+            </p>
             <p className="text-[11px] text-slate-500 font-medium">Điểm TB</p>
           </CardContent>
         </Card>
@@ -1327,7 +1353,7 @@ function TabOverview({
                   <button
                     type="button"
                     onClick={() => handleDeactivate(ctx.id)}
-                    className="text-slate-400 hover:text-rose-600 transition"
+                    className="text-slate-400 hover:text-rose-600 transition cursor-pointer"
                     title="Ngừng phụ trách"
                   >
                     <X className="size-3.5" />
@@ -1347,7 +1373,7 @@ function TabOverview({
             <CardTitle className="text-sm font-bold flex items-center gap-2">
               <CalendarDays className="size-4 text-teal-600" /> Lịch dạy gần nhất
             </CardTitle>
-            <button onClick={() => onSwitchTab('schedules')} className="text-xs text-teal-700 font-semibold hover:underline">
+            <button onClick={() => onSwitchTab('schedules')} className="text-xs text-teal-700 font-semibold hover:underline cursor-pointer">
               Xem tất cả
             </button>
           </CardHeader>
@@ -1376,7 +1402,7 @@ function TabOverview({
             <CardTitle className="text-sm font-bold flex items-center gap-2">
               <Clock className="size-4 text-amber-600" /> Vắng / Đi muộn gần đây
             </CardTitle>
-            <button onClick={() => onSwitchTab('attendance')} className="text-xs text-teal-700 font-semibold hover:underline">
+            <button onClick={() => onSwitchTab('attendance')} className="text-xs text-teal-700 font-semibold hover:underline cursor-pointer">
               Xem chi tiết
             </button>
           </CardHeader>
@@ -1640,14 +1666,14 @@ function TabStudents({
             size="sm"
             variant="outline"
             onClick={() => setImportModalOpen(true)}
-            className="text-xs h-8.5 gap-1.5"
+            className="text-xs h-8.5 gap-1.5 cursor-pointer"
           >
             <FileSpreadsheet className="size-3.5 text-emerald-600" /> Import Excel
           </Button>
           <Button
             size="sm"
             onClick={() => setAddModalOpen(true)}
-            className="bg-teal-600 hover:bg-teal-700 text-white text-xs h-8.5 gap-1.5 font-semibold"
+            className="bg-teal-600 hover:bg-teal-700 text-white text-xs h-8.5 gap-1.5 font-semibold cursor-pointer"
           >
             <UserPlus className="size-3.5" /> Thêm học sinh
           </Button>
@@ -1687,7 +1713,7 @@ function TabStudents({
                   <td className="py-3 px-4">
                     <button
                       onClick={() => onOpenStudent(s)}
-                      className="flex items-center gap-2.5 text-left group"
+                      className="flex items-center gap-2.5 text-left group cursor-pointer"
                     >
                       <Avatar className="size-8 border border-teal-100">
                         <AvatarFallback className={s.color || 'bg-teal-100 text-teal-700 font-bold text-xs'}>
@@ -1710,7 +1736,9 @@ function TabStudents({
                       {s.status}
                     </Badge>
                   </td>
-                  <td className="py-3 px-3 font-semibold text-teal-700">{s.attendance || 96}%</td>
+                  <td className="py-3 px-3 font-semibold text-teal-700">
+                    {s.attendance !== null && s.attendance !== undefined ? `${s.attendance}%` : '—'}
+                  </td>
                   <td className="py-3 px-4 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Button
@@ -1718,7 +1746,7 @@ function TabStudents({
                         variant="ghost"
                         onClick={() => onOpenStudent(s)}
                         title="Xem hồ sơ"
-                        className="size-7 text-slate-500 hover:text-teal-700"
+                        className="size-7 text-slate-500 hover:text-teal-700 cursor-pointer"
                       >
                         <Eye className="size-3.5" />
                       </Button>
@@ -1730,7 +1758,7 @@ function TabStudents({
                           if (otherClasses.length > 0) setTargetClassId(otherClasses[0].id)
                         }}
                         title="Chuyển lớp"
-                        className="size-7 text-slate-500 hover:text-blue-700"
+                        className="size-7 text-slate-500 hover:text-blue-700 cursor-pointer"
                       >
                         <ArrowRightLeft className="size-3.5" />
                       </Button>
@@ -1739,7 +1767,7 @@ function TabStudents({
                         variant="ghost"
                         onClick={() => setDeleteTarget(s)}
                         title="Rút khỏi lớp"
-                        className="size-7 text-slate-500 hover:text-rose-700"
+                        className="size-7 text-slate-500 hover:text-rose-700 cursor-pointer"
                       >
                         <Trash2 className="size-3.5" />
                       </Button>
@@ -1836,7 +1864,7 @@ function TabStudents({
               size="sm"
               onClick={handleAddStudent}
               disabled={submittingAdd || !addName.trim()}
-              className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs"
+              className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs cursor-pointer"
             >
               {submittingAdd ? <Loader2 className="size-3.5 animate-spin" /> : <UserPlus className="size-3.5" />} Thêm học sinh
             </Button>
@@ -1886,7 +1914,7 @@ Trần Thị Bình	HS002	Nữ	25/08/2016	Trần Văn Cường	0912345678	Tiếp 
               size="sm"
               onClick={handleExecuteImport}
               disabled={submittingImport || importRows.length === 0}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs cursor-pointer"
             >
               {submittingImport ? <Loader2 className="size-3.5 animate-spin" /> : <UploadCloud className="size-3.5" />} Xác nhận Import ({importRows.length})
             </Button>
@@ -1937,7 +1965,7 @@ Trần Thị Bình	HS002	Nữ	25/08/2016	Trần Văn Cường	0912345678	Tiếp 
               size="sm"
               onClick={handleTransfer}
               disabled={submittingTransfer || !targetClassId}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs cursor-pointer"
             >
               {submittingTransfer ? 'Đang chuyển...' : 'Xác nhận chuyển'}
             </Button>
@@ -1956,7 +1984,7 @@ Trần Thị Bình	HS002	Nữ	25/08/2016	Trần Văn Cường	0912345678	Tiếp 
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)}>Hủy</Button>
-            <Button variant="destructive" size="sm" onClick={handleRemoveStudent}>
+            <Button variant="destructive" size="sm" onClick={handleRemoveStudent} className="cursor-pointer">
               Xác nhận rút học sinh
             </Button>
           </DialogFooter>
@@ -2060,7 +2088,7 @@ function TabSchedules({ classItem }: { classItem: ClassRecord }) {
                       size="sm"
                       variant="outline"
                       onClick={() => setAttendanceScheduleId(s.id)}
-                      className="text-xs h-7.5 px-2.5 font-semibold text-teal-700 border-teal-200 hover:bg-teal-50"
+                      className="text-xs h-7.5 px-2.5 font-semibold text-teal-700 border-teal-200 hover:bg-teal-50 cursor-pointer"
                     >
                       Điểm danh
                     </Button>
@@ -2109,7 +2137,7 @@ function TabAttendance({ classItem }: { classItem: ClassRecord }) {
   }, [loadAttendance, range])
 
   const summary = data?.summary || {
-    attendanceRate: 96,
+    attendanceRate: classItem.attendance,
     presentCount: 0,
     absentCount: 0,
     excusedCount: 0,
@@ -2124,7 +2152,11 @@ function TabAttendance({ classItem }: { classItem: ClassRecord }) {
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
         <Card className="border-slate-200 shadow-2xs">
           <CardContent className="p-3.5 text-center">
-            <p className="text-2xl font-extrabold text-teal-700">{summary.attendanceRate}%</p>
+            <p className="text-2xl font-extrabold text-teal-700">
+              {summary.attendanceRate !== null && summary.attendanceRate !== undefined
+                ? `${summary.attendanceRate}%`
+                : '—'}
+            </p>
             <p className="text-[11px] text-slate-500 font-medium">Tỷ lệ chuyên cần</p>
           </CardContent>
         </Card>
@@ -2175,7 +2207,7 @@ function TabAttendance({ classItem }: { classItem: ClassRecord }) {
               <button
                 key={r}
                 onClick={() => setRange(r)}
-                className={`px-3 py-1.5 rounded-lg transition ${
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
                   range === r ? 'bg-white text-teal-800 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -2226,7 +2258,7 @@ function TabAttendance({ classItem }: { classItem: ClassRecord }) {
                           size="sm"
                           variant="ghost"
                           onClick={() => setSelectedScheduleId(sess.scheduleId || null)}
-                          className="text-xs h-7.5 px-2.5 text-teal-700 font-semibold"
+                          className="text-xs h-7.5 px-2.5 text-teal-700 font-semibold cursor-pointer"
                         >
                           Xem chi tiết
                         </Button>
@@ -2275,7 +2307,7 @@ function TabAssessments({ classItem }: { classItem: ClassRecord }) {
   }, [loadAssessments])
 
   const summary = data?.summary || {
-    avgScore: 8.4,
+    avgScore: classItem.average,
     excellentCount: 0,
     completedCount: 0,
     needsSupportCount: 0,
@@ -2288,7 +2320,9 @@ function TabAssessments({ classItem }: { classItem: ClassRecord }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
         <Card className="border-slate-200 shadow-2xs">
           <CardContent className="p-3.5 text-center">
-            <p className="text-2xl font-extrabold text-teal-700">{summary.avgScore} đ</p>
+            <p className="text-2xl font-extrabold text-teal-700">
+              {summary.avgScore !== null && summary.avgScore !== undefined ? `${summary.avgScore} đ` : '—'}
+            </p>
             <p className="text-[11px] text-slate-500 font-medium">Điểm trung bình</p>
           </CardContent>
         </Card>
@@ -2356,7 +2390,7 @@ function TabAssessments({ classItem }: { classItem: ClassRecord }) {
                     <td className="py-3 px-3 text-slate-600">{a.date}</td>
                     <td className="py-3 px-3 text-slate-600">{a.studentCount} học sinh</td>
                     <td className="py-3 px-4 text-right font-extrabold text-teal-700">
-                      {typeof a.averageScore === 'number' ? `${a.averageScore} đ` : '—'}
+                      {typeof a.averageScore === 'number' && a.averageScore !== null ? `${a.averageScore} đ` : '—'}
                     </td>
                   </tr>
                 ))}
@@ -2478,11 +2512,16 @@ function TabStatistics({ classItem }: { classItem: ClassRecord }) {
           </CardHeader>
           <CardContent className="p-4 pt-0">
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-teal-700">{classItem.attendance || 96}%</span>
+              <span className="text-3xl font-extrabold text-teal-700">
+                {classItem.attendance !== null && classItem.attendance !== undefined ? `${classItem.attendance}%` : '—'}
+              </span>
               <span className="text-xs text-slate-500">trên tổng số tiết</span>
             </div>
             <div className="w-full bg-slate-100 h-2 rounded-full mt-3 overflow-hidden">
-              <div className="bg-teal-600 h-full rounded-full" style={{ width: `${classItem.attendance || 96}%` }} />
+              <div
+                className="bg-teal-600 h-full rounded-full"
+                style={{ width: `${classItem.attendance !== null && classItem.attendance !== undefined ? classItem.attendance : 0}%` }}
+              />
             </div>
           </CardContent>
         </Card>
@@ -2495,11 +2534,16 @@ function TabStatistics({ classItem }: { classItem: ClassRecord }) {
           </CardHeader>
           <CardContent className="p-4 pt-0">
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-blue-700">{classItem.average || 8.4}</span>
+              <span className="text-3xl font-extrabold text-blue-700">
+                {classItem.average !== null && classItem.average !== undefined ? `${classItem.average} đ` : '—'}
+              </span>
               <span className="text-xs text-slate-500">/ 10 điểm</span>
             </div>
             <div className="w-full bg-slate-100 h-2 rounded-full mt-3 overflow-hidden">
-              <div className="bg-blue-600 h-full rounded-full" style={{ width: `${((classItem.average || 8.4) / 10) * 100}%` }} />
+              <div
+                className="bg-blue-600 h-full rounded-full"
+                style={{ width: `${classItem.average !== null && classItem.average !== undefined ? (classItem.average / 10) * 100 : 0}%` }}
+              />
             </div>
           </CardContent>
         </Card>
@@ -2529,7 +2573,7 @@ function TabStatistics({ classItem }: { classItem: ClassRecord }) {
           <div className="flex items-start gap-2 p-3 bg-teal-50/50 rounded-xl border border-teal-100">
             <Sparkles className="size-4 text-teal-600 shrink-0 mt-0.5" />
             <p>
-              Tỷ lệ chuyên cần của lớp đạt <strong>{classItem.attendance || 96}%</strong>, rất ổn định. Nên duy trì các hoạt động khởi động sôi nổi để giữ vững tinh thần học tập.
+              Tỷ lệ chuyên cần của lớp đạt <strong>{classItem.attendance !== null && classItem.attendance !== undefined ? `${classItem.attendance}%` : 'đang cập nhật'}</strong>. Nên duy trì các hoạt động khởi động sôi nổi để giữ vững tinh thần học tập.
             </p>
           </div>
           <div className="flex items-start gap-2 p-3 bg-blue-50/50 rounded-xl border border-blue-100">
@@ -2648,7 +2692,7 @@ function StudentProfileView({
     <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6 space-y-6">
       <button
         onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-teal-700 mb-2 transition"
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-teal-700 mb-2 transition cursor-pointer"
       >
         <ArrowLeft className="size-3.5" /> Quay lại lớp {classItem.name}
       </button>
@@ -2673,7 +2717,7 @@ function StudentProfileView({
             </div>
           </div>
 
-          <Button variant="outline" size="sm" onClick={() => setEditModalOpen(true)} className="text-xs gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => setEditModalOpen(true)} className="text-xs gap-1.5 cursor-pointer">
             <Edit2 className="size-3.5" /> Sửa hồ sơ
           </Button>
         </CardContent>
@@ -2717,7 +2761,9 @@ function StudentProfileView({
           <CardContent className="p-4 space-y-3 text-xs">
             <div className="flex justify-between py-1 border-b border-slate-100">
               <span className="text-slate-500">Tỷ lệ chuyên cần:</span>
-              <span className="font-bold text-teal-700">{student.attendance || 96}%</span>
+              <span className="font-bold text-teal-700">
+                {student.attendance !== null && student.attendance !== undefined ? `${student.attendance}%` : '—'}
+              </span>
             </div>
             <div className="flex justify-between py-1 border-b border-slate-100">
               <span className="text-slate-500">Mức độ hoàn thành bài:</span>
@@ -2747,7 +2793,7 @@ function StudentProfileView({
             variant="outline"
             onClick={handleGenerateAIComment}
             disabled={generatingAI}
-            className="text-xs gap-1.5 text-teal-700 border-teal-200"
+            className="text-xs gap-1.5 text-teal-700 border-teal-200 cursor-pointer"
           >
             {generatingAI ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3.5 text-amber-500" />} Gợi ý từ AI
           </Button>
@@ -2767,7 +2813,7 @@ function StudentProfileView({
                 size="sm"
                 onClick={handleAddComment}
                 disabled={savingComment || !newComment.trim()}
-                className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold"
+                className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold cursor-pointer"
               >
                 {savingComment ? 'Đang lưu...' : 'Lưu nhận xét'}
               </Button>
@@ -2858,7 +2904,7 @@ function StudentProfileView({
               size="sm"
               onClick={handleSaveEdit}
               disabled={savingEdit || !editFullName.trim()}
-              className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs"
+              className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs cursor-pointer"
             >
               {savingEdit ? 'Đang lưu...' : 'Lưu hồ sơ'}
             </Button>

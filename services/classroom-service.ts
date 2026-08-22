@@ -23,7 +23,7 @@ export type ClassListResponse = {
   summary: {
     totalClasses: number;
     totalStudents: number;
-    avgAttendanceRate: number;
+    avgAttendanceRate: number | null;
   };
 };
 
@@ -35,8 +35,8 @@ export type ClassDashboardData = {
   room?: string;
   kpis: {
     studentCount: number;
-    attendanceRate: number;
-    averageScore: number;
+    attendanceRate: number | null;
+    averageScore: number | null;
     weeklyScheduleCount: number;
     preparedLessonPlanCount: number;
     needsSupportStudentCount: number;
@@ -71,14 +71,14 @@ export type ClassDashboardData = {
     id: string;
     name: string;
     subjectName: string;
-    score: number;
+    score: number | null;
     date: string;
   }>;
 };
 
 export type ClassAttendanceData = {
   summary: {
-    attendanceRate: number;
+    attendanceRate: number | null;
     presentCount: number;
     absentCount: number;
     excusedCount: number;
@@ -104,7 +104,7 @@ export type ClassAttendanceData = {
 
 export type ClassAssessmentData = {
   summary: {
-    avgScore: number;
+    avgScore: number | null;
     excellentCount: number;
     completedCount: number;
     needsSupportCount: number;
@@ -117,7 +117,7 @@ export type ClassAssessmentData = {
     subjectName: string;
     teacherName: string;
     studentCount: number;
-    averageScore?: number;
+    averageScore?: number | null;
   }>;
 };
 
@@ -235,7 +235,7 @@ export async function getClassesWithSummary(query?: {
         summary: data.summary || {
           totalClasses: data.items.length,
           totalStudents: data.items.reduce((acc: number, c: any) => acc + (c.studentCount || 0), 0),
-          avgAttendanceRate: 96,
+          avgAttendanceRate: null,
         },
       };
     }
@@ -245,13 +245,13 @@ export async function getClassesWithSummary(query?: {
       summary: {
         totalClasses: items.length,
         totalStudents: items.reduce((acc: number, c: any) => acc + (c.studentCount || 0), 0),
-        avgAttendanceRate: 96,
+        avgAttendanceRate: null,
       },
     };
   } catch {
     return {
       items: [],
-      summary: { totalClasses: 0, totalStudents: 0, avgAttendanceRate: 96 },
+      summary: { totalClasses: 0, totalStudents: 0, avgAttendanceRate: null },
     };
   }
 }

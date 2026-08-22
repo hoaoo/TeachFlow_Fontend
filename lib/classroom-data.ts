@@ -12,7 +12,7 @@ export type StudentRecord = {
   parentPhone?: string
   progress: number
   status: 'Tốt' | 'Khá' | 'Cần cố gắng' | string
-  attendance: number
+  attendance?: number | null
   note: string
   color: string
   enrollmentId?: string
@@ -31,8 +31,8 @@ export type ClassRecord = {
   room: string
   schedule: string
   studentCount: number
-  average: number
-  attendance: number
+  average?: number | null
+  attendance?: number | null
   teacher: string
   homeroomTeacherId?: string
   homeroomTeacher?: { id: string; fullName: string; phone?: string }
