@@ -827,6 +827,13 @@ export function ClassroomManager({
                 />
               </div>
             </div>
+            <div>
+              <Label className="text-xs font-semibold">Môn học cấu hình cho lớp</Label>
+              <select multiple value={formSubjectIds} onChange={(e) => setFormSubjectIds([...e.target.selectedOptions].map((option) => option.value))} className="mt-1 h-28 w-full rounded-md border border-slate-200 bg-white p-2 text-xs">
+                {allSubjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+              </select>
+              <p className="mt-1 text-[11px] text-slate-500">Giữ Ctrl (Windows) hoặc Command (macOS) để chọn nhiều môn.</p>
+            </div>
           </div>
 
           <DialogFooter className="gap-2">
