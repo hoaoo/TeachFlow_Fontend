@@ -1,60 +1,46 @@
 'use client'
 
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import {
-  ArrowLeft,
-  Bot,
-  Check,
-  ChevronDown,
-  Clock3,
-  Copy,
-  GripVertical,
-  Lightbulb,
-  MoreHorizontal,
-  Plus,
-  Printer,
-  Save,
-  Sparkles,
-  Trash2,
-  WandSparkles,
-  X,
-  Loader2,
-  FileDown,
-  FileType,
-  Paperclip,
-  Download,
-  FileText,
-  Film,
-  Image as ImageIcon,
-  Presentation,
-  Table as TableIcon,
-  UploadCloud,
-  File as FileIcon,
-  Link2,
+  ArrowLeft, Bot, Check, ChevronDown, Clock3, Copy, Edit2,
+  Eye, FileDown, FileText, Film, Image as ImageIcon,
+  Layers, Lightbulb, Link2, Loader2, MoreHorizontal, Paperclip,
+  Plus, Printer, Presentation, RefreshCw, Save, Search, Sparkles,
+  Table as TableIcon, Trash2, UploadCloud, UserCheck, WandSparkles,
+  X, AlertCircle, CheckCircle2, ChevronUp, History, BookOpen,
+  Calendar, MapPin, Download, ArrowUpDown, ShieldAlert, ArrowRight
 } from 'lucide-react'
 import {
-  getLessonPlans,
-  saveLessonPlan as apiSaveLessonPlan,
-  duplicateLessonPlan as apiDuplicateLessonPlan,
-  reorderActivities as apiReorderActivities,
-  type LessonPlan,
-  type Activity,
+  getLessonPlans, getLessonPlanById, createLessonPlan, updateLessonPlan,
+  deleteLessonPlan, duplicateLessonPlan, reorderActivities, saveActivityToLibrary,
+  getLessonPlanVersions, restoreLessonPlanVersion, linkLessonPlanSchedule,
+  unlinkLessonPlanSchedule, type LessonPlan, type Activity, type LessonPlanVersionRecord
 } from '@/services/lesson-service'
+import { getClasses, type ClassRecord } from '@/services/classroom-service'
+import { getMyTeachingContexts } from '@/services/teaching-assignment-service'
+import { getLibraryActivities, type LibraryActivity } from '@/services/activity-service'
+import { getSchedules, type ScheduleEntry } from '@/services/schedule-service'
 import {
-  getResources,
-  uploadResourceFile,
-  downloadResourceFile,
-  attachResourceToLessonPlan,
-  detachResourceFromLessonPlan,
-  type TeachingResource,
+  getResources, uploadResourceFile, downloadResourceFile,
+  attachResourceToLessonPlan, detachResourceFromLessonPlan,
+  type TeachingResource
 } from '@/services/resource-service'
-import { generateActivity, type GeneratedActivity } from '@/services/ai-service'
+import {
+  generateActivity, generateLessonPlan as aiGenerateLessonPlan,
+  type GeneratedActivity, type GeneratedLessonPlan
+} from '@/services/ai-service'
 import { exportService } from '@/services/export-service'
+import { useAuth } from '@/context/auth-context'
 import { toast } from 'sonner'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
+// ─── Starter Templates ───────────────────────────────────────────────────────
 const starterActivities: Activity[] = [
   {
-    id: 'warmup',
+    id: 'warmup-1',
     phase: 'Khởi động',
     title: 'Trò chơi: Ai nhanh hơn?',
     minutes: 5,
@@ -62,1309 +48,2319 @@ const starterActivities: Activity[] = [
     technique: 'Động não',
     competencies: 'Giao tiếp và hợp tác',
     qualities: 'Chăm chỉ',
-    objective: 'Tạo hứng thú và kết nối kiến thức đã học với bài mới.',
-    teacher:
-      'GV tổ chức trò chơi nhận diện các cặp phân số bằng nhau. Đặt câu hỏi gợi mở và dẫn dắt vào bài.',
-    students: 'HS tham gia trò chơi theo nhóm, suy nghĩ nhanh và chia sẻ cách nhận biết của mình.',
+    equipment: 'Thẻ số, máy chiếu',
+    objective: 'Tạo không khí hào hứng và kết nối kiến thức đã học với bài mới.',
+    teacher: 'GV tổ chức trò chơi nhận diện các cặp phân số bằng nhau. Đặt câu hỏi gợi mở và dẫn dắt vào bài mới.',
+    students: 'HS tham gia trò chơi theo đội, suy nghĩ nhanh và giải thích cách nhận biết của nhóm mình.',
+    sortOrder: 0,
   },
   {
-    id: 'explore',
+    id: 'explore-1',
     phase: 'Khám phá',
-    title: 'Tìm hiểu phân số bằng nhau',
+    title: 'Hình thành kiến thức mới',
     minutes: 15,
     method: 'Trực quan – thảo luận nhóm',
     technique: 'Mảnh ghép',
     competencies: 'Tư duy và lập luận toán học',
     qualities: 'Trung thực',
-    objective: 'HS hình thành quy tắc tạo phân số bằng nhau.',
-    teacher: 'GV giao nhiệm vụ với các băng giấy, theo dõi nhóm và đặt câu hỏi: Em nhận thấy điều gì?',
-    students:
-      'HS gấp, tô màu băng giấy; thảo luận và trình bày phát hiện bằng ngôn ngữ của mình.',
+    equipment: 'Băng giấy, thước kẻ',
+    objective: 'Học sinh phát hiện và phát biểu được quy tắc tạo phân số bằng nhau.',
+    teacher: 'GV phát băng giấy chia phần, quan sát các nhóm thảo luận và đặt câu hỏi gợi mở: Em nhận thấy điều gì?',
+    students: 'HS gấp và tô màu các băng giấy; thảo luận nhóm đôi và rút ra quy tắc bằng ngôn ngữ của mình.',
+    sortOrder: 1,
   },
   {
-    id: 'practice',
+    id: 'practice-1',
     phase: 'Luyện tập',
-    title: 'Thử thách phân số',
+    title: 'Thực hành bài tập',
     minutes: 12,
-    method: 'Luyện tập cá nhân',
+    method: 'Luyện tập cá nhân & cặp đôi',
     technique: 'Khăn trải bàn',
-    competencies: 'Giải quyết vấn đề',
+    competencies: 'Giải quyết vấn đề toán học',
     qualities: 'Trách nhiệm',
-    objective: 'Củng cố quy tắc qua các bài tập từ nhận biết đến vận dụng.',
-    teacher: 'GV phát phiếu 3 mức độ, hỗ trợ nhóm cần giúp đỡ và tổ chức chữa bài nhanh.',
-    students: 'HS hoàn thành phiếu, đổi bài kiểm tra theo cặp và giải thích cách làm.',
+    equipment: 'Phiếu học tập số 1',
+    objective: 'Củng cố quy tắc qua các bài tập từ nhận biết đến thông hiểu.',
+    teacher: 'GV phát phiếu bài tập phân hóa, theo dõi và hỗ trợ học sinh gặp khó khăn.',
+    students: 'HS hoàn thành phiếu bài tập, đổi bài chấm chéo theo cặp và chia sẻ cách giải.',
+    sortOrder: 2,
   },
   {
-    id: 'apply',
+    id: 'apply-1',
     phase: 'Vận dụng',
-    title: 'Phân số quanh em',
+    title: 'Vận dụng vào thực tế',
     minutes: 8,
     method: 'Dự án nhỏ',
-    technique: 'Trình bày một phút',
-    competencies: 'Vận dụng kiến thức',
+    technique: 'Trình bày 1 phút',
+    competencies: 'Vận dụng kiến thức vào thực tiễn',
     qualities: 'Trách nhiệm',
-    objective: 'Vận dụng phân số bằng nhau để mô tả tình huống thực tế.',
-    teacher: 'GV yêu cầu HS tìm một ví dụ trong đời sống và mời đại diện chia sẻ.',
-    students: 'HS tạo ví dụ minh họa, trình bày ngắn gọn và nhận xét sản phẩm của bạn.',
+    equipment: 'Bảng phụ nhóm',
+    objective: 'Vận dụng kiến thức phân số bằng nhau để giải quyết tình huống thực tế.',
+    teacher: 'GV nêu tình huống chia bánh/trái cây thực tế và mời đại diện 2 nhóm trình bày.',
+    students: 'HS thảo luận nhóm nhanh, đưa ra giải pháp và trình bày ngắn gọn trước lớp.',
+    sortOrder: 3,
   },
 ]
 
 const emptyActivity = (index: number): Activity => ({
-  id: `activity-${Date.now()}-${index}`,
-  phase: 'Hoạt động mới',
-  title: 'Tên hoạt động mới',
+  id: `act-${Date.now()}-${index}`,
+  phase: 'Khởi động',
+  title: 'Hoạt động mới',
   minutes: 5,
   method: 'Thảo luận nhóm',
   technique: 'Động não',
   competencies: 'Giao tiếp và hợp tác',
   qualities: 'Chăm chỉ',
+  equipment: '',
   objective: '',
   teacher: '',
   students: '',
+  sortOrder: index,
 })
 
-function getResourceFileIcon(type?: string, ext?: string) {
-  if (type === 'VIDEO' || ext === 'MP4') return <Film className="size-4 text-purple-600" />
-  if (type === 'IMAGE' || ['PNG', 'JPG', 'JPEG', 'WEBP'].includes(ext || ''))
-    return <ImageIcon className="size-4 text-emerald-600" />
-  if (type === 'PRESENTATION' || ['PPT', 'PPTX'].includes(ext || ''))
-    return <Presentation className="size-4 text-orange-600" />
-  if (type === 'SPREADSHEET' || ['XLS', 'XLSX'].includes(ext || ''))
-    return <TableIcon className="size-4 text-green-600" />
-  return <FileText className="size-4 text-blue-600" />
+export function computeLessonStatus(status?: string): { label: string; tone: 'slate' | 'blue' | 'teal' } {
+  if (status === 'COMPLETED') return { label: 'Đã hoàn thành', tone: 'blue' }
+  if (status === 'TAUGHT') return { label: 'Đã sử dụng', tone: 'teal' }
+  return { label: 'Bản nháp', tone: 'slate' }
 }
 
-export function LessonView({ onNavigate }: { onNavigate: (view: 'Giáo án') => void }) {
+// ─── Main LessonView Component ────────────────────────────────────────────────
+export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void }) {
+  const { user } = useAuth()
+
+  // Navigation mode: 'list' (List of lesson plans) | 'editor' (Single lesson plan editor)
+  const [viewMode, setViewMode] = useState<'list' | 'editor'>('list')
+  const [editorSubTab, setEditorSubTab] = useState<'edit' | 'preview'>('edit')
+
+  // List State
+  const [plans, setPlans] = useState<LessonPlan[]>([])
+  const [classes, setClasses] = useState<ClassRecord[]>([])
+  const [loadingList, setLoadingList] = useState(true)
+  const [listError, setListError] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterClassId, setFilterClassId] = useState('')
+  const [filterSubject, setFilterSubject] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+
+  // Current Lesson Plan under edit
   const [lesson, setLesson] = useState<LessonPlan>({
     title: 'Phân số bằng nhau',
+    topic: 'Chủ đề: Phân số',
     subject: 'Toán',
     grade: 'Lớp 4A',
-    date: '2026-08-21',
+    date: new Date().toISOString().split('T')[0],
     duration: 40,
     objective: 'Nhận biết được các phân số bằng nhau và vận dụng để giải quyết bài toán thực tế.',
+    specificCompetencies: 'Năng lực tư duy và lập luận toán học; Năng lực giải quyết vấn đề toán học.',
+    generalCompetencies: 'Năng lực tự chủ và tự học; Năng lực giao tiếp và hợp tác.',
+    qualities: 'Chăm chỉ, trung thực, trách nhiệm.',
+    teachingEquipment: 'Bộ đồ dùng học Toán 4, máy chiếu, phiếu học tập.',
+    postLessonAdjustment: '',
+    notes: '',
+    status: 'DRAFT',
     version: 1,
     activities: starterActivities,
     resources: [],
+    schedules: [],
   })
-  const [selectedId, setSelectedId] = useState('warmup')
-  const [aiOpen, setAiOpen] = useState(true)
-  const [preview, setPreview] = useState(false)
-  const [saved, setSaved] = useState('Đã lưu lúc 09:42')
-  const [notice, setNotice] = useState('')
-  const [dragId, setDragId] = useState<string | null>(null)
-  const [suggestion, setSuggestion] = useState('')
-  const [prompt, setPrompt] = useState('')
-  const [targetField, setTargetField] = useState<'teacher' | 'students'>('teacher')
-  const [aiLoading, setAiLoading] = useState(false)
-  const [lastGeneratedAct, setLastGeneratedAct] = useState<GeneratedActivity | null>(null)
-  const [exportOpen, setExportOpen] = useState(false)
+
+  const [selectedActivityId, setSelectedActivityId] = useState<string>(starterActivities[0]?.id || 'warmup-1')
+  const [autosaveStatus, setAutosaveStatus] = useState<string>('Đã lưu')
+  const [isAutosaving, setIsAutosaving] = useState(false)
+
+  // Dialog States
+  const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [duplicateTarget, setDuplicateTarget] = useState<LessonPlan | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<LessonPlan | null>(null)
+  const [linkScheduleTarget, setLinkScheduleTarget] = useState<LessonPlan | null>(null)
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false)
+  const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
+  const [aiDraftOpen, setAiDraftOpen] = useState(false)
+  const [libraryPickerOpen, setLibraryPickerOpen] = useState(false)
+  const [resourceModalOpen, setResourceModalOpen] = useState(false)
   const [exportingType, setExportingType] = useState<'docx' | 'pdf' | null>(null)
 
-  // Resource Attachment State
-  const [resourceModalOpen, setResourceModalOpen] = useState(false)
-  const [availableResources, setAvailableResources] = useState<TeachingResource[]>([])
-  const [resourceTab, setResourceTab] = useState<'library' | 'upload'>('library')
-  const [newFile, setNewFile] = useState<File | null>(null)
-  const [newFileName, setNewFileName] = useState('')
-  const [newFileDesc, setNewFileDesc] = useState('')
-  const [resourceLoading, setResourceLoading] = useState(false)
-  const [resourceDragActive, setResourceDragActive] = useState(false)
-  const resourceFileInputRef = useRef<HTMLInputElement>(null)
+  const reqSeqRef = useRef(0)
+  const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const isDirtyRef = useRef(false)
 
-  const handleExport = async (type: 'docx' | 'pdf') => {
+  // Load lesson plan list
+  const loadPlans = useCallback(async () => {
+    if (!user) { setPlans([]); setLoadingList(false); return }
+    const seq = ++reqSeqRef.current
+    setLoadingList(true)
+    setListError(null)
     try {
-      setExportingType(type)
-      setExportOpen(false)
-      let planToExport = lesson
-      if (!planToExport.id) {
-        toast.info('Đang lưu giáo án trước khi xuất...')
-        planToExport = await apiSaveLessonPlan(lesson)
-        setLesson(planToExport)
+      const data = await getLessonPlans({
+        classroomId: filterClassId || undefined,
+        status: filterStatus || undefined,
+        search: searchQuery.trim() || undefined,
+      })
+      if (seq === reqSeqRef.current) {
+        setPlans(Array.isArray(data) ? data : [])
       }
-
-      toast.info(`Đang tạo file ${type === 'docx' ? 'Word (.docx)' : 'PDF (.pdf)'}...`)
-      if (type === 'docx') {
-        await exportService.exportLessonPlanDocx(planToExport.id!, planToExport.title)
-      } else {
-        await exportService.exportLessonPlanPdf(planToExport.id!, planToExport.title)
-      }
-      toast.success(`Đã xuất ${type === 'docx' ? 'Word' : 'PDF'} thành công!`)
     } catch (err: any) {
-      toast.error(`Lỗi khi xuất tài liệu: ${err.message || 'Vui lòng thử lại'}`)
+      if (seq === reqSeqRef.current) {
+        setListError(err?.message || 'Không thể tải danh sách giáo án lúc này')
+        setPlans([])
+      }
+    } finally {
+      if (seq === reqSeqRef.current) {
+        setLoadingList(false)
+      }
+    }
+  }, [user, filterClassId, filterStatus, searchQuery])
+
+  useEffect(() => {
+    loadPlans()
+  }, [loadPlans])
+
+  useEffect(() => {
+    getClasses().then(setClasses).catch(() => setClasses([]))
+  }, [])
+
+  // Open single lesson plan into editor
+  const handleOpenEditor = async (id: string) => {
+    try {
+      toast.info('Đang tải chi tiết giáo án...')
+      const fullPlan = await getLessonPlanById(id)
+      setLesson(fullPlan)
+      if (fullPlan.activities && fullPlan.activities.length > 0) {
+        setSelectedActivityId(fullPlan.activities[0].id)
+      }
+      setViewMode('editor')
+      setEditorSubTab('edit')
+      setAutosaveStatus(`Đã tải phiên bản v${fullPlan.version || 1}`)
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi tải giáo án')
+    }
+  }
+
+  // Autosave mechanism
+  const triggerAutosave = useCallback((updatedLesson: LessonPlan) => {
+    if (!updatedLesson.id) return
+    isDirtyRef.current = true
+    setAutosaveStatus('Đang lưu...')
+
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current)
+    }
+
+    autosaveTimerRef.current = setTimeout(async () => {
+      if (!isDirtyRef.current) return
+      setIsAutosaving(true)
+      try {
+        const saved = await updateLessonPlan(updatedLesson.id!, {
+          title: updatedLesson.title,
+          topic: updatedLesson.topic,
+          subject: updatedLesson.subject,
+          grade: updatedLesson.grade,
+          date: updatedLesson.date,
+          duration: updatedLesson.duration,
+          objective: updatedLesson.objective,
+          specificCompetencies: updatedLesson.specificCompetencies,
+          generalCompetencies: updatedLesson.generalCompetencies,
+          qualities: updatedLesson.qualities,
+          teachingEquipment: updatedLesson.teachingEquipment,
+          postLessonAdjustment: updatedLesson.postLessonAdjustment,
+          notes: updatedLesson.notes,
+          status: updatedLesson.status,
+          version: updatedLesson.version,
+          activities: updatedLesson.activities,
+        })
+        isDirtyRef.current = false
+        setLesson(saved)
+        const timeStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        setAutosaveStatus(`Đã lưu tự động lúc ${timeStr} (v${saved.version || 1})`)
+      } catch (err: any) {
+        setAutosaveStatus('Lưu thất bại (vui lòng thử lại)')
+        toast.error(err?.message || 'Lỗi lưu tự động giáo án')
+      } finally {
+        setIsAutosaving(false)
+      }
+    }, 1500)
+  }, [])
+
+  // Update top-level lesson field
+  const updateLessonField = (key: keyof LessonPlan, value: any) => {
+    setLesson((prev) => {
+      const next = { ...prev, [key]: value }
+      triggerAutosave(next)
+      return next
+    })
+  }
+
+  // Update activity field
+  const updateActivityField = (activityId: string, key: keyof Activity, value: any) => {
+    setLesson((prev) => {
+      const nextActivities = prev.activities.map((a) =>
+        a.id === activityId ? { ...a, [key]: value } : a
+      )
+      const next = { ...prev, activities: nextActivities }
+      triggerAutosave(next)
+      return next
+    })
+  }
+
+  // Add new activity
+  const handleAddActivity = (phase: string = 'Hoạt động mới') => {
+    const newAct = emptyActivity(lesson.activities.length)
+    newAct.phase = phase
+    setLesson((prev) => {
+      const next = { ...prev, activities: [...prev.activities, newAct] }
+      triggerAutosave(next)
+      return next
+    })
+    setSelectedActivityId(newAct.id)
+    toast.success('Đã thêm hoạt động mới')
+  }
+
+  // Duplicate activity
+  const handleDuplicateActivity = (activityId: string) => {
+    const idx = lesson.activities.findIndex((a) => a.id === activityId)
+    if (idx === -1) return
+    const src = lesson.activities[idx]
+    const clone: Activity = {
+      ...src,
+      id: `act-${Date.now()}`,
+      title: `${src.title} (Bản sao)`,
+      sortOrder: idx + 1,
+    }
+    const nextList = [...lesson.activities]
+    nextList.splice(idx + 1, 0, clone)
+    nextList.forEach((a, i) => { a.sortOrder = i })
+    setLesson((prev) => {
+      const next = { ...prev, activities: nextList }
+      triggerAutosave(next)
+      return next
+    })
+    setSelectedActivityId(clone.id)
+    toast.success('Đã nhân bản hoạt động')
+  }
+
+  // Remove activity
+  const handleRemoveActivity = (activityId: string) => {
+    if (lesson.activities.length <= 1) {
+      toast.error('Giáo án cần tối thiểu 1 hoạt động')
+      return
+    }
+    const nextList = lesson.activities.filter((a) => a.id !== activityId)
+    nextList.forEach((a, i) => { a.sortOrder = i })
+    setLesson((prev) => {
+      const next = { ...prev, activities: nextList }
+      triggerAutosave(next)
+      return next
+    })
+    setSelectedActivityId(nextList[0]?.id || '')
+    toast.success('Đã xóa hoạt động')
+  }
+
+  // Move activity up/down
+  const handleMoveActivity = (activityId: string, dir: -1 | 1) => {
+    const idx = lesson.activities.findIndex((a) => a.id === activityId)
+    if (idx === -1) return
+    const targetIdx = idx + dir
+    if (targetIdx < 0 || targetIdx >= lesson.activities.length) return
+    const nextList = [...lesson.activities]
+    const [moved] = nextList.splice(idx, 1)
+    nextList.splice(targetIdx, 0, moved)
+    nextList.forEach((a, i) => { a.sortOrder = i })
+    setLesson((prev) => {
+      const next = { ...prev, activities: nextList }
+      triggerAutosave(next)
+      return next
+    })
+    if (lesson.id) {
+      reorderActivities(lesson.id, nextList.map((a) => a.id)).catch(() => {})
+    }
+  }
+
+  // Save single activity to personal library
+  const handleSaveToLibrary = async (act: Activity) => {
+    if (!lesson.id) {
+      toast.error('Vui lòng lưu giáo án trước khi lưu hoạt động vào thư viện')
+      return
+    }
+    try {
+      await saveActivityToLibrary(lesson.id, act.id, {
+        title: act.title,
+        typeName: act.phase,
+        subject: lesson.subject,
+        grade: lesson.grade,
+      })
+      toast.success(`Đã lưu "${act.title}" vào thư viện hoạt động cá nhân`)
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi lưu hoạt động vào thư viện')
+    }
+  }
+
+  // Export handlers
+  const handleExport = async (type: 'docx' | 'pdf', targetPlan: LessonPlan = lesson) => {
+    if (!targetPlan.id) {
+      toast.error('Vui lòng lưu giáo án trước khi xuất file')
+      return
+    }
+    setExportingType(type)
+    try {
+      toast.info(`Đang tạo file ${type === 'docx' ? 'Microsoft Word (.docx)' : 'PDF'}...`)
+      if (type === 'docx') {
+        await exportService.exportLessonPlanDocx(targetPlan.id, targetPlan.title)
+      } else {
+        await exportService.exportLessonPlanPdf(targetPlan.id, targetPlan.title)
+      }
+      toast.success(`Xuất ${type === 'docx' ? 'Word' : 'PDF'} thành công!`)
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi xuất tài liệu')
     } finally {
       setExportingType(null)
     }
   }
 
-  useEffect(() => {
-    let alive = true
-    getLessonPlans().then((plans) => {
-      if (alive && plans.length > 0) {
-        setLesson(plans[0])
-        if (plans[0].activities?.length) {
-          setSelectedId(plans[0].activities[0].id)
-        }
-      }
-    })
-    return () => {
-      alive = false
-    }
-  }, [])
-
-  // Load available resources when modal opens
-  useEffect(() => {
-    if (resourceModalOpen) {
-      getResources().then(setAvailableResources)
-    }
-  }, [resourceModalOpen])
-
-  const selected =
-    lesson.activities.find((activity) => activity.id === selectedId) ??
-    lesson.activities[0] ??
+  const selectedActivity =
+    lesson.activities.find((a) => a.id === selectedActivityId) ||
+    lesson.activities[0] ||
     emptyActivity(0)
+
   const totalMinutes = useMemo(
-    () =>
-      lesson.activities.reduce(
-        (sum, activity) => sum + Number(activity.minutes || 0),
-        0,
-      ),
-    [lesson.activities],
+    () => lesson.activities.reduce((sum, a) => sum + (Number(a.minutes) || 0), 0),
+    [lesson.activities]
   )
 
-  const flash = (message: string) => {
-    setNotice(message)
-    window.setTimeout(() => setNotice(''), 2600)
-  }
-
-  const updateLesson = (key: keyof LessonPlan, value: string | number) =>
-    setLesson((current) => ({ ...current, [key]: value }))
-
-  const updateActivity = (key: keyof Activity, value: string | number) =>
-    setLesson((current) => ({
-      ...current,
-      activities: current.activities.map((activity) =>
-        activity.id === selectedId ? { ...activity, [key]: value } : activity,
-      ),
-    }))
-
-  const add = () => {
-    const fresh = emptyActivity(lesson.activities.length)
-    setLesson((current) => ({ ...current, activities: [...current.activities, fresh] }))
-    setSelectedId(fresh.id)
-    flash('Đã thêm hoạt động mới')
-  }
-
-  const duplicate = () => {
-    const index = lesson.activities.findIndex((activity) => activity.id === selectedId)
-    if (index === -1) return
-    const clone = {
-      ...lesson.activities[index],
-      id: `activity-${Date.now()}`,
-      title: `${lesson.activities[index].title} (Bản sao)`,
-    }
-    const next = [...lesson.activities]
-    next.splice(index + 1, 0, clone)
-    setLesson((current) => ({ ...current, activities: next }))
-    setSelectedId(clone.id)
-    flash('Đã nhân bản hoạt động')
-  }
-
-  const remove = () => {
-    if (lesson.activities.length <= 1) {
-      flash('Giáo án cần ít nhất 1 hoạt động')
-      return
-    }
-    const next = lesson.activities.filter((activity) => activity.id !== selectedId)
-    setLesson((current) => ({ ...current, activities: next }))
-    setSelectedId(next[0].id)
-    flash('Đã xóa hoạt động')
-  }
-
-  const move = async (sourceId: string, targetId: string) => {
-    if (sourceId === targetId) return
-    const fromIndex = lesson.activities.findIndex((activity) => activity.id === sourceId)
-    const toIndex = lesson.activities.findIndex((activity) => activity.id === targetId)
-    if (fromIndex === -1 || toIndex === -1) return
-    const next = [...lesson.activities]
-    const [item] = next.splice(fromIndex, 1)
-    next.splice(toIndex, 0, item)
-    setLesson((current) => ({ ...current, activities: next }))
-
-    // Persist reorder to backend if saved
-    if (lesson.id) {
-      try {
-        await apiReorderActivities(
-          lesson.id,
-          next.map((a) => a.id),
-        )
-      } catch (err) {
-        console.error('Failed to persist reorder', err)
-      }
-    }
-  }
-
-  const save = async () => {
-    try {
-      const savedPlan = await apiSaveLessonPlan(lesson)
-      setLesson(savedPlan)
-      const now = new Date()
-      setSaved(`Đã lưu lúc ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`)
-      flash('Đã lưu giáo án thành công!')
-    } catch (err: any) {
-      flash('Lỗi khi lưu giáo án: ' + (err.message || 'Thử lại sau'))
-    }
-  }
-
-  // Attached Resources Handlers
-  const handleAttachResource = async (res: TeachingResource) => {
-    try {
-      setResourceLoading(true)
-      let planId = lesson.id
-      if (!planId) {
-        const savedPlan = await apiSaveLessonPlan(lesson)
-        planId = savedPlan.id
-        setLesson(savedPlan)
-      }
-
-      const attached = await attachResourceToLessonPlan(planId!, res.id)
-      setLesson((prev) => ({
-        ...prev,
-        resources: [
-          attached,
-          ...(prev.resources || []).filter((r: any) => r.id !== res.id),
-        ],
-      }))
-      toast.success(`Đã gắn tài nguyên "${res.name}" vào giáo án!`)
-      setResourceModalOpen(false)
-    } catch (err: any) {
-      toast.error(`Lỗi đính kèm: ${err.message || 'Vui lòng thử lại'}`)
-    } finally {
-      setResourceLoading(false)
-    }
-  }
-
-  const handleDetachResource = async (resId: string) => {
-    try {
-      if (lesson.id) {
-        await detachResourceFromLessonPlan(lesson.id, resId)
-      }
-      setLesson((prev) => ({
-        ...prev,
-        resources: (prev.resources || []).filter((r: any) => r.id !== resId),
-      }))
-      toast.success('Đã gỡ tài nguyên khỏi giáo án')
-    } catch (err: any) {
-      toast.error(`Lỗi gỡ tài nguyên: ${err.message || 'Vui lòng thử lại'}`)
-    }
-  }
-
-  const handleDownloadResource = async (res: any) => {
-    try {
-      toast.info(`Đang tải xuống: ${res.name}...`)
-      await downloadResourceFile(res.id, res.originalFileName || res.name)
-      toast.success('Tải xuống hoàn tất!')
-    } catch (err: any) {
-      toast.error(`Lỗi tải xuống: ${err.message || 'Vui lòng thử lại'}`)
-    }
-  }
-
-  const handleUploadAndAttach = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newFile) {
-      toast.error('Vui lòng chọn tập tin để tải lên')
-      return
-    }
-
-    try {
-      setResourceLoading(true)
-      const formData = new FormData()
-      formData.append('file', newFile)
-      if (newFileName.trim()) formData.append('name', newFileName.trim())
-      if (newFileDesc.trim()) formData.append('description', newFileDesc.trim())
-
-      toast.info('Đang tải lên tập tin học liệu...')
-      const uploaded = await uploadResourceFile(formData)
-
-      let planId = lesson.id
-      if (!planId) {
-        const savedPlan = await apiSaveLessonPlan(lesson)
-        planId = savedPlan.id
-        setLesson(savedPlan)
-      }
-
-      const attached = await attachResourceToLessonPlan(planId!, uploaded.id)
-      setLesson((prev) => ({
-        ...prev,
-        resources: [
-          attached,
-          ...(prev.resources || []).filter((r: any) => r.id !== uploaded.id),
-        ],
-      }))
-
-      toast.success(`Đã tải lên và gắn "${uploaded.name}" vào giáo án thành công!`)
-      setResourceModalOpen(false)
-      setNewFile(null)
-      setNewFileName('')
-      setNewFileDesc('')
-    } catch (err: any) {
-      toast.error(`Lỗi tải lên và gắn tệp: ${err.message || 'Vui lòng thử lại'}`)
-    } finally {
-      setResourceLoading(false)
-    }
-  }
-
-  const runAi = async (action: string) => {
-    try {
-      setAiLoading(true)
-      const activityType = selected.phase.includes('Khởi động')
-        ? 'WARM_UP'
-        : selected.phase.includes('Khám phá')
-        ? 'EXPLORE'
-        : selected.phase.includes('Luyện tập')
-        ? 'PRACTICE'
-        : 'APPLICATION'
-
-      const act = await generateActivity({
-        grade: 4,
-        subject: lesson.subject || 'Toán',
-        lessonTitle: lesson.title,
-        activityType,
-        durationMinutes: selected.minutes || 5,
-        requirement: action,
-      })
-
-      setLastGeneratedAct(act)
-
-      if (targetField === 'teacher') {
-        setSuggestion(act.teacherActivity || act.objective)
-      } else {
-        setSuggestion(act.studentActivity || act.objective)
-      }
-      flash('Trợ lý AI đã tạo gợi ý mới!')
-    } catch (err: any) {
-      toast.error('Lỗi trợ lý AI: ' + (err.message || 'Không thể kết nối Gemini'))
-    } finally {
-      setAiLoading(false)
-    }
-  }
-
-  const sendPrompt = async () => {
-    if (!prompt.trim()) return
-    await runAi(prompt.trim())
-    setPrompt('')
-  }
-
-  const insertSuggestion = () => {
-    if (!suggestion) return
-    updateActivity(targetField, `${selected[targetField]}\n\n${suggestion}`.trim())
-    flash('Đã chèn nội dung AI vào hoạt động!')
-    setSuggestion('')
-    setLastGeneratedAct(null)
-  }
-
-  const applyFullGeneratedAct = () => {
-    if (!lastGeneratedAct) return
-    setLesson((current) => ({
-      ...current,
-      activities: current.activities.map((act) =>
-        act.id === selectedId
-          ? {
-              ...act,
-              title: lastGeneratedAct.title || act.title,
-              minutes: lastGeneratedAct.durationMinutes || act.minutes,
-              objective: lastGeneratedAct.objective || act.objective,
-              method: lastGeneratedAct.methods?.join(', ') || act.method,
-              technique: lastGeneratedAct.techniques?.join(', ') || act.technique,
-              teacher: lastGeneratedAct.teacherActivity || act.teacher,
-              students: lastGeneratedAct.studentActivity || act.students,
-            }
-          : act,
-      ),
-    }))
-    flash('Đã áp dụng toàn bộ hoạt động do AI tạo!')
-    setSuggestion('')
-    setLastGeneratedAct(null)
-  }
-
-  return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
-      {notice && (
-        <div
-          role="status"
-          className="fixed right-5 top-5 z-50 rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-lg"
-        >
-          {notice}
-        </div>
-      )}
-      <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => onNavigate('Giáo án')}
-            aria-label="Quay lại danh sách giáo án"
-            className="grid size-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-          >
-            <ArrowLeft className="size-4" />
-          </button>
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RENDER: LIST VIEW
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (viewMode === 'list') {
+    return (
+      <div className="mx-auto max-w-6xl flex flex-col gap-6">
+        {/* Header */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-md bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">
-                Lớp 4
-              </span>
-              <span className="text-xs text-slate-400">·</span>
-              <span className="text-xs text-slate-500">Môn {lesson.subject}</span>
-              <span className="text-xs text-slate-400">·</span>
-              <span className="text-xs text-slate-500">v{lesson.version || 1}</span>
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-teal-600">
+              <BookOpen className="size-4" /> Kế hoạch bài dạy
             </div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+              Giáo án giảng dạy
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Quản lý, biên soạn cấu trúc KHBD chuẩn GDVN, tích hợp Lịch dạy và Trợ lý AI.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Button
+              variant="outline"
+              onClick={() => setAiDraftOpen(true)}
+              className="border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 gap-1.5 shadow-2xs font-semibold"
+            >
+              <Sparkles className="size-4 text-violet-600" /> Tạo bản nháp bằng AI
+            </Button>
+            <Button
+              onClick={() => setCreateModalOpen(true)}
+              className="bg-teal-600 hover:bg-teal-700 gap-1.5 shadow-sm font-semibold"
+            >
+              <Plus className="size-4" /> Tạo giáo án mới
+            </Button>
+          </div>
+        </div>
+
+        {/* Search & Filter Bar */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <input
-              value={lesson.title}
-              onChange={(event) => updateLesson('title', event.target.value)}
-              className="mt-1 border-0 bg-transparent text-xl font-bold text-slate-900 outline-none hover:bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 rounded px-1"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Tìm theo tên bài, chủ đề, môn học, lớp..."
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-xs sm:text-sm outline-none focus:border-teal-400 shadow-2xs"
             />
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="mr-1 text-xs text-slate-400">{saved}</span>
-          <button
-            onClick={save}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:border-teal-300"
-          >
-            <Save className="size-4" /> Lưu bản nháp
-          </button>
-          <button
-            onClick={() => setPreview(true)}
-            className="inline-flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-700 hover:bg-teal-100"
-          >
-            Xem trước
-          </button>
-
-          {/* Export Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setExportOpen(!exportOpen)}
-              disabled={!!exportingType}
-              className="inline-flex items-center gap-2 rounded-xl border border-teal-300 bg-teal-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-50"
-            >
-              {exportingType ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <FileDown className="size-4" />
-              )}
-              <span>{exportingType ? 'Đang xuất...' : 'Xuất'}</span>
-              <ChevronDown className="size-3.5" />
-            </button>
-
-            {exportOpen && (
-              <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
-                <button
-                  onClick={() => handleExport('docx')}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-teal-50 hover:text-teal-700"
-                >
-                  <FileType className="size-4 text-blue-600" />
-                  <span>Xuất Word (.docx)</span>
-                </button>
-                <button
-                  onClick={() => handleExport('pdf')}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-teal-50 hover:text-teal-700"
-                >
-                  <FileType className="size-4 text-rose-600" />
-                  <span>Xuất PDF (.pdf)</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={() => {
-              setPreview(true)
-              setTimeout(() => window.print(), 300)
-            }}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            <Printer className="size-4" /> In
-          </button>
-        </div>
-      </div>
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="flex flex-col gap-6 lg:col-span-2">
-          {/* General Info */}
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="font-semibold text-slate-900">Thông tin chung</h2>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {[
-                ['Môn học', 'subject'],
-                ['Lớp', 'grade'],
-                ['Ngày dạy', 'date'],
-              ].map(([label, key]) => (
-                <label key={key}>
-                  <span className="mb-1.5 block text-xs font-medium text-slate-600">{label}</span>
-                  <input
-                    type={key === 'date' ? 'date' : 'text'}
-                    value={lesson[key as 'subject' | 'grade' | 'date'] as string}
-                    onChange={(event) =>
-                      updateLesson(key as keyof LessonPlan, event.target.value)
-                    }
-                    className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-teal-400"
-                  />
-                </label>
-              ))}
-              <label>
-                <span className="mb-1.5 block text-xs font-medium text-slate-600">
-                  Thời lượng dự kiến
-                </span>
-                <div className="relative">
-                  <Clock3 className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="number"
-                    value={totalMinutes}
-                    readOnly
-                    className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm text-slate-600 outline-none"
-                  />
-                </div>
-              </label>
-              <label className="sm:col-span-2 lg:col-span-4">
-                <span className="mb-1.5 block text-xs font-medium text-slate-600">
-                  Mục tiêu bài học
-                </span>
-                <textarea
-                  value={lesson.objective}
-                  onChange={(event) => updateLesson('objective', event.target.value)}
-                  rows={2}
-                  className="w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm leading-6 outline-none focus:border-teal-400"
-                />
-              </label>
-            </div>
-          </section>
-
-          {/* Activities List */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-semibold text-slate-900">Tiến trình dạy học</h2>
-              <p className="mt-1 text-xs text-slate-400">Kéo thả để sắp xếp các hoạt động</p>
-            </div>
-            <button
-              onClick={add}
-              className="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-medium text-teal-700 shadow-sm ring-1 ring-slate-200 hover:ring-teal-300"
-            >
-              <Plus className="size-4" /> Thêm hoạt động
-            </button>
-          </div>
-          <div className="flex flex-col gap-4">
-            {lesson.activities.map((activity, index) => (
-              <ActivityCard
-                key={activity.id}
-                activity={activity}
-                index={index}
-                selected={activity.id === selectedId}
-                onSelect={() => setSelectedId(activity.id)}
-                onDragStart={() => setDragId(activity.id)}
-                onDrop={() => {
-                  if (dragId) move(dragId, activity.id)
-                  setDragId(null)
-                }}
-                onChange={updateActivity}
-                onDuplicate={duplicate}
-                onDelete={remove}
-              />
-            ))}
-          </div>
-
-          {/* Attached Resources Section */}
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Paperclip className="size-4 text-teal-600" />
-                <h2 className="font-semibold text-slate-900">Tài nguyên đính kèm</h2>
-                <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">
-                  {lesson.resources?.length || 0}
-                </span>
-              </div>
+            {searchQuery && (
               <button
-                onClick={() => setResourceModalOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-100"
-              >
-                <Plus className="size-3.5" /> Thêm tài nguyên
-              </button>
-            </div>
-
-            {(!lesson.resources || lesson.resources.length === 0) ? (
-              <div className="py-6 text-center text-xs text-slate-400">
-                <Paperclip className="mx-auto mb-2 size-6 text-slate-300" />
-                Chưa có tài nguyên nào được đính kèm. Nhấn "+ Thêm tài nguyên" để liên kết bài giảng, phiếu bài tập hoặc học liệu số.
-              </div>
-            ) : (
-              <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
-                {lesson.resources.map((res: any) => (
-                  <div
-                    key={res.id}
-                    className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <span className="grid size-8 place-items-center rounded-lg bg-white shadow-xs shrink-0">
-                        {getResourceFileIcon(res.resourceType, res.extension)}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-slate-800 truncate">{res.name}</p>
-                        <p className="text-[11px] text-slate-400">
-                          {res.formattedSize || '0 KB'} · {res.extension || 'DOC'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 ml-2">
-                      <button
-                        onClick={() => handleDownloadResource(res)}
-                        title="Tải xuống tệp tin"
-                        className="grid size-7 place-items-center rounded text-slate-400 hover:bg-white hover:text-teal-700"
-                      >
-                        <Download className="size-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDetachResource(res.id)}
-                        title="Gỡ khỏi giáo án"
-                        className="grid size-7 place-items-center rounded text-slate-400 hover:bg-white hover:text-rose-600"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
-
-        {aiOpen ? (
-          <aside className="sticky top-5 flex flex-col gap-4 rounded-2xl border border-teal-100 bg-white p-4 shadow-sm print:hidden">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <span className="grid size-10 place-items-center rounded-xl bg-teal-100 text-teal-700">
-                  <Sparkles className="size-5" />
-                </span>
-                <div>
-                  <h2 className="font-semibold text-slate-900">Trợ lý AI · Gemini</h2>
-                  <p className="text-xs text-teal-600">Đang hỗ trợ: {selected.phase}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setAiOpen(false)}
-                aria-label="Thu gọn trợ lý AI"
-                className="text-slate-400 hover:text-slate-700"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
                 <X className="size-4" />
               </button>
-            </div>
-            <div className="rounded-xl bg-slate-50 p-3">
-              <p className="text-xs font-medium text-slate-500">Hoạt động đang chọn</p>
-              <p className="mt-1 text-sm font-semibold text-slate-800">{selected.title}</p>
-            </div>
-            <div className="flex flex-col gap-2">
-              {[
-                'Gợi ý hoạt động',
-                'Viết hoạt động giáo viên',
-                'Viết hoạt động học sinh',
-                'Điều chỉnh phù hợp lớp 4',
-              ].map((action) => (
-                <button
-                  key={action}
-                  disabled={aiLoading}
-                  onClick={() => runAi(action)}
-                  className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-left text-xs font-medium text-slate-600 transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700 disabled:opacity-50"
-                >
-                  <WandSparkles className="size-3.5" />
-                  {action}
-                </button>
-              ))}
-            </div>
-            <div>
-              <div className="mb-1 flex items-center justify-between">
-                <label className="text-xs font-medium text-slate-600">Chèn vào</label>
-                <select
-                  value={targetField}
-                  onChange={(event) =>
-                    setTargetField(event.target.value as 'teacher' | 'students')
-                  }
-                  className="rounded border-0 bg-transparent text-xs font-medium text-teal-700 outline-none"
-                >
-                  <option value="teacher">Hoạt động giáo viên</option>
-                  <option value="students">Hoạt động học sinh</option>
-                </select>
-              </div>
-              <textarea
-                value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-                    event.preventDefault()
-                    sendPrompt()
-                  }
-                }}
-                rows={3}
-                placeholder="Ví dụ: Gợi ý câu hỏi phân hóa cho học sinh..."
-                className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-xs leading-5 outline-none focus:border-teal-400"
-              />
-              <button
-                disabled={aiLoading || !prompt.trim()}
-                onClick={sendPrompt}
-                className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-50"
-              >
-                {aiLoading ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <Bot className="size-3.5" />
-                )}
-                {aiLoading ? 'Đang tạo nội dung...' : 'Hỏi trợ lý AI'}
-              </button>
-            </div>
-            {suggestion && (
-              <div className="rounded-xl border border-teal-200 bg-teal-50 p-3">
-                <div className="flex gap-2">
-                  <Lightbulb className="mt-0.5 size-4 shrink-0 text-teal-700" />
-                  <p className="whitespace-pre-line text-xs leading-5 text-slate-700">
-                    {suggestion}
-                  </p>
-                </div>
-                <div className="mt-3 flex flex-col gap-1.5">
-                  <button
-                    onClick={insertSuggestion}
-                    className="w-full rounded-lg bg-teal-600 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-700"
-                  >
-                    Chèn vào {targetField === 'teacher' ? 'Hoạt động GV' : 'Hoạt động HS'}
-                  </button>
-                  {lastGeneratedAct && (
-                    <button
-                      onClick={applyFullGeneratedAct}
-                      className="w-full rounded-lg border border-teal-300 bg-white px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50"
-                    >
-                      Áp dụng toàn bộ hoạt động
-                    </button>
-                  )}
-                </div>
-              </div>
             )}
-          </aside>
-        ) : (
-          <button
-            onClick={() => setAiOpen(true)}
-            className="fixed bottom-5 right-5 z-20 inline-flex items-center gap-2 rounded-full bg-teal-600 px-4 py-3 text-sm font-semibold text-white shadow-lg print:hidden"
+          </div>
+
+          {/* Filter by class */}
+          <select
+            aria-label="Lọc theo lớp"
+            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs sm:text-sm font-medium text-slate-700 shadow-2xs"
+            value={filterClassId}
+            onChange={(e) => setFilterClassId(e.target.value)}
           >
-            <Sparkles className="size-4" /> Mở trợ lý AI
-          </button>
+            <option value="">Tất cả lớp</option>
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+
+          {/* Filter by status */}
+          <select
+            aria-label="Lọc theo trạng thái"
+            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs sm:text-sm font-medium text-slate-700 shadow-2xs"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+          >
+            <option value="">Tất cả trạng thái</option>
+            <option value="DRAFT">Bản nháp</option>
+            <option value="COMPLETED">Đã hoàn thành</option>
+            <option value="TAUGHT">Đã sử dụng</option>
+          </select>
+        </div>
+
+        {/* Content list */}
+        {loadingList ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-400">
+            <Loader2 className="size-8 animate-spin text-teal-600" />
+            <span className="text-sm font-medium">Đang tải danh sách giáo án...</span>
+          </div>
+        ) : listError ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-8 text-center shadow-xs">
+            <AlertCircle className="mx-auto size-8 text-rose-500 mb-2" />
+            <p className="text-sm font-semibold text-rose-900">{listError}</p>
+            <Button onClick={loadPlans} size="sm" className="mt-3 bg-rose-600 hover:bg-rose-700 text-white">
+              Thử lại
+            </Button>
+          </div>
+        ) : plans.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4 text-slate-400 rounded-2xl border border-dashed border-slate-200 bg-white p-8">
+            <div className="grid size-14 place-items-center rounded-2xl bg-teal-50 text-teal-600">
+              <BookOpen className="size-7" />
+            </div>
+            <div className="text-center">
+              <p className="font-semibold text-slate-800 text-base">Chưa có giáo án nào</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Bắt đầu soạn giáo án mới hoặc dùng Trợ lý AI để tạo bản nháp nhanh.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button onClick={() => setAiDraftOpen(true)} variant="outline" className="border-violet-200 text-violet-700">
+                <Sparkles className="size-4" /> Soạn với AI
+              </Button>
+              <Button onClick={() => setCreateModalOpen(true)} className="bg-teal-600 hover:bg-teal-700">
+                <Plus className="size-4" /> Tạo giáo án
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-3.5">
+            {plans.map((p) => {
+              const statusInfo = computeLessonStatus(p.status)
+              const hasLinkedSchedule = p.schedules && p.schedules.length > 0
+              return (
+                <div
+                  key={p.id}
+                  className="group relative flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs hover:shadow-md hover:border-slate-300 transition-all"
+                >
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => handleOpenEditor(p.id!)}
+                        className="text-left font-bold text-slate-900 hover:text-teal-700 text-base truncate transition"
+                      >
+                        {p.title}
+                      </button>
+                      <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                        {p.subject} · {p.grade}
+                      </span>
+                      <span
+                        className={`rounded-lg px-2.5 py-0.5 text-[11px] font-semibold border ${
+                          statusInfo.tone === 'blue'
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : statusInfo.tone === 'teal'
+                              ? 'bg-teal-50 text-teal-700 border-teal-200'
+                              : 'bg-slate-100 text-slate-600 border-slate-200'
+                        }`}
+                      >
+                        {statusInfo.label}
+                      </span>
+                      <span className="text-[11px] text-slate-400 font-mono">
+                        v{p.version || 1}
+                      </span>
+                    </div>
+
+                    <div className="mt-1.5 flex flex-wrap items-center gap-3.5 text-xs text-slate-500">
+                      <span>⏱ {p.duration || 40} phút</span>
+                      <span>📋 {p.activitiesCount ?? p.activities?.length ?? 0} hoạt động</span>
+                      {p.date && (
+                        <span>📅 Ngày dạy: {new Date(p.date + 'T00:00:00').toLocaleDateString('vi-VN')}</span>
+                      )}
+                      {hasLinkedSchedule ? (
+                        <span className="inline-flex items-center gap-1 text-teal-700 font-medium bg-teal-50 border border-teal-200 rounded-md px-1.5 py-0.5 text-[11px]">
+                          <Calendar className="size-3" /> Đã gắn lịch ({p.schedules![0].plannedDate ? new Date(p.schedules![0].plannedDate).toLocaleDateString('vi-VN') : ''} {p.schedules![0].startTime || ''})
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 italic">Chưa gắn lịch dạy</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleOpenEditor(p.id!)}
+                      className="text-xs h-8 gap-1 hover:text-teal-700 font-semibold"
+                    >
+                      <Edit2 className="size-3.5" /> Chỉnh sửa
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setLinkScheduleTarget(p)}
+                      className="text-xs h-8 gap-1"
+                      title="Gắn hoặc đổi lịch dạy"
+                    >
+                      <Link2 className="size-3.5" /> Lịch dạy
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleExport('docx', p)}
+                      disabled={exportingType !== null}
+                      className="text-xs h-8 gap-1"
+                      title="Xuất Microsoft Word (.docx)"
+                    >
+                      <FileDown className="size-3.5" /> Xuất Word
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setDuplicateTarget(p)}
+                      className="text-xs h-8 px-2"
+                      title="Nhân bản giáo án"
+                    >
+                      <Copy className="size-3.5" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setDeleteTarget(p)}
+                      className="text-xs h-8 px-2 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                      title="Xóa giáo án"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         )}
+
+        {/* Dialogs */}
+        <CreateLessonPlanDialog
+          open={createModalOpen}
+          classes={classes}
+          onClose={() => setCreateModalOpen(false)}
+          onCreated={(created) => {
+            loadPlans()
+            handleOpenEditor(created.id!)
+          }}
+        />
+
+        <DuplicateLessonPlanDialog
+          target={duplicateTarget}
+          classes={classes}
+          onClose={() => setDuplicateTarget(null)}
+          onDuplicated={(dup) => {
+            loadPlans()
+            handleOpenEditor(dup.id!)
+          }}
+        />
+
+        <DeleteLessonPlanDialog
+          target={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onDeleted={() => {
+            setDeleteTarget(null)
+            loadPlans()
+          }}
+        />
+
+        <LinkScheduleModal
+          target={linkScheduleTarget}
+          onClose={() => setLinkScheduleTarget(null)}
+          onUpdated={loadPlans}
+        />
+
+        <AiFullDraftModal
+          open={aiDraftOpen}
+          classes={classes}
+          onClose={() => setAiDraftOpen(false)}
+          onCreated={(created) => {
+            loadPlans()
+            handleOpenEditor(created.id!)
+          }}
+        />
+      </div>
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RENDER: EDITOR / PREVIEW VIEW
+  // ═══════════════════════════════════════════════════════════════════════════
+  const statusInfo = computeLessonStatus(lesson.status)
+
+  return (
+    <div className="mx-auto max-w-6xl flex flex-col gap-6">
+      {/* Top action header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setViewMode('list')
+              loadPlans()
+            }}
+            className="gap-1.5 text-slate-600 hover:text-slate-900"
+          >
+            <ArrowLeft className="size-4" /> Danh sách
+          </Button>
+          <div className="h-4 w-px bg-slate-200" />
+          <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+            {isAutosaving ? (
+              <Loader2 className="size-3.5 animate-spin text-teal-600" />
+            ) : (
+              <CheckCircle2 className="size-3.5 text-teal-600" />
+            )}
+            <span className="text-slate-500 font-mono text-[11px]">{autosaveStatus}</span>
+          </span>
+        </div>
+
+        {/* Status switcher & Tab toggle */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Status selector */}
+          <select
+            aria-label="Trạng thái giáo án"
+            value={lesson.status}
+            onChange={(e) => updateLessonField('status', e.target.value)}
+            className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 shadow-2xs"
+          >
+            <option value="DRAFT">📝 Bản nháp</option>
+            <option value="COMPLETED">✅ Đã hoàn thành</option>
+            <option value="TAUGHT">🎓 Đã sử dụng</option>
+          </select>
+
+          {/* Sub tab toggle */}
+          <div className="flex rounded-xl bg-slate-100 p-1 gap-1">
+            <button
+              onClick={() => setEditorSubTab('edit')}
+              className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${
+                editorSubTab === 'edit' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'
+              }`}
+            >
+              Chỉnh sửa
+            </button>
+            <button
+              onClick={() => setEditorSubTab('preview')}
+              className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${
+                editorSubTab === 'preview' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'
+              }`}
+            >
+              Xem trước
+            </button>
+          </div>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setVersionHistoryOpen(true)}
+            className="text-xs h-8 gap-1"
+          >
+            <History className="size-3.5" /> Lịch sử (v{lesson.version || 1})
+          </Button>
+
+          <Button
+            size="sm"
+            onClick={() => handleExport('docx')}
+            disabled={exportingType !== null}
+            className="bg-teal-600 hover:bg-teal-700 text-xs h-8 gap-1 font-semibold"
+          >
+            <FileDown className="size-3.5" /> Xuất Word
+          </Button>
+        </div>
       </div>
 
-      {/* Resource Selection / Upload Modal */}
-      {resourceModalOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
-        >
-          <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-teal-600">
-                  Học liệu bài dạy
-                </p>
-                <h2 className="mt-1 text-base font-semibold text-slate-900">
-                  Đính kèm tài nguyên vào giáo án
-                </h2>
+      {/* Mode A: Document Preview */}
+      {editorSubTab === 'preview' ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 sm:p-12 shadow-sm flex flex-col gap-6 text-slate-800 font-sans">
+          {/* Header */}
+          <div className="text-center pb-6 border-b border-slate-200">
+            <h2 className="text-xl font-bold tracking-tight uppercase text-slate-900">
+              Kế hoạch bài dạy
+            </h2>
+            <h3 className="text-lg font-bold text-teal-800 mt-1">
+              {lesson.title}
+            </h3>
+            {lesson.topic && <p className="text-sm font-medium text-slate-600 mt-0.5">{lesson.topic}</p>}
+            <div className="flex justify-center gap-6 text-xs text-slate-500 mt-3 font-medium">
+              <span>Môn: <strong className="text-slate-800">{lesson.subject}</strong></span>
+              <span>Lớp: <strong className="text-slate-800">{lesson.grade}</strong></span>
+              <span>Thời lượng: <strong className="text-slate-800">{totalMinutes} phút ({lesson.activities.length} hoạt động)</strong></span>
+              <span>Ngày dạy: <strong className="text-slate-800">{lesson.date ? new Date(lesson.date + 'T00:00:00').toLocaleDateString('vi-VN') : '—'}</strong></span>
+            </div>
+          </div>
+
+          {/* I. Yêu cầu cần đạt */}
+          <div className="flex flex-col gap-2">
+            <h4 className="font-bold text-sm text-slate-900 uppercase">I. Yêu cầu cần đạt</h4>
+            <div className="pl-4 space-y-1.5 text-xs text-slate-700 leading-relaxed">
+              {lesson.objective && (
+                <p><strong>1. Mục tiêu chung:</strong> {lesson.objective}</p>
+              )}
+              {lesson.specificCompetencies && (
+                <p><strong>2. Năng lực đặc thù:</strong> {lesson.specificCompetencies}</p>
+              )}
+              {lesson.generalCompetencies && (
+                <p><strong>3. Năng lực chung:</strong> {lesson.generalCompetencies}</p>
+              )}
+              {lesson.qualities && (
+                <p><strong>4. Phẩm chất:</strong> {lesson.qualities}</p>
+              )}
+            </div>
+          </div>
+
+          {/* II. Đồ dùng dạy học */}
+          <div className="flex flex-col gap-2">
+            <h4 className="font-bold text-sm text-slate-900 uppercase">II. Đồ dùng dạy học</h4>
+            <p className="pl-4 text-xs text-slate-700 leading-relaxed">
+              {lesson.teachingEquipment || 'Giáo viên và học sinh chuẩn bị đầy đủ sách giáo khoa, vở ghi và đồ dùng học tập theo môn học.'}
+            </p>
+          </div>
+
+          {/* III. Các hoạt động dạy học */}
+          <div className="flex flex-col gap-3">
+            <h4 className="font-bold text-sm text-slate-900 uppercase">III. Các hoạt động dạy học</h4>
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full text-xs text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold">
+                    <th className="p-3 w-1/2 border-r border-slate-200">Hoạt động của Giáo viên</th>
+                    <th className="p-3 w-1/2">Hoạt động của Học sinh</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {lesson.activities.map((act, i) => (
+                    <tr key={act.id} className="align-top">
+                      <td className="p-3 border-r border-slate-200 space-y-1">
+                        <p className="font-bold text-teal-800">
+                          {i + 1}. {act.phase}: {act.title} ({act.minutes} phút)
+                        </p>
+                        {act.objective && (
+                          <p className="text-slate-500 italic">🎯 {act.objective}</p>
+                        )}
+                        <p className="text-slate-800 whitespace-pre-line mt-1">{act.teacher || '—'}</p>
+                      </td>
+                      <td className="p-3 space-y-1">
+                        <p className="font-bold text-slate-700">&nbsp;</p>
+                        {act.equipment && (
+                          <p className="text-slate-500 italic">📦 Đồ dùng: {act.equipment}</p>
+                        )}
+                        <p className="text-slate-800 whitespace-pre-line mt-1">{act.students || '—'}</p>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* IV. Điều chỉnh sau bài dạy */}
+          <div className="flex flex-col gap-2">
+            <h4 className="font-bold text-sm text-slate-900 uppercase">IV. Điều chỉnh sau bài dạy</h4>
+            <p className="pl-4 text-xs text-slate-700 leading-relaxed italic">
+              {lesson.postLessonAdjustment || 'Học sinh nắm được kiến thức trọng tâm của bài; không có điều chỉnh phát sinh.'}
+            </p>
+          </div>
+        </div>
+      ) : (
+        /* Mode B: Full Interactive KHBD Editor */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left Sidebar: Activity Tabs */}
+          <div className="lg:col-span-4 flex flex-col gap-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-sm text-slate-900">Hoạt động dạy học</h3>
+                <span className="text-xs font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md">
+                  Tổng: {totalMinutes} phút
+                </span>
               </div>
-              <button
-                onClick={() => setResourceModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 text-lg"
-              >
-                <X className="size-5" />
-              </button>
-            </div>
 
-            {/* Tabs */}
-            <div className="mt-4 flex gap-2 border-b border-slate-100 pb-2">
-              <button
-                onClick={() => setResourceTab('library')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                  resourceTab === 'library'
-                    ? 'bg-teal-50 text-teal-700 font-semibold'
-                    : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                Chọn từ kho học liệu ({availableResources.length})
-              </button>
-              <button
-                onClick={() => setResourceTab('upload')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                  resourceTab === 'upload'
-                    ? 'bg-teal-50 text-teal-700 font-semibold'
-                    : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                Tải lên tệp mới ngay
-              </button>
-            </div>
-
-            {resourceTab === 'library' ? (
-              <div className="mt-4">
-                {availableResources.length === 0 ? (
-                  <div className="py-8 text-center text-xs text-slate-400">
-                    Kho học liệu của bạn đang trống. Hãy chọn tab "Tải lên tệp mới ngay" để thêm tệp.
-                  </div>
-                ) : (
-                  <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
-                    {availableResources.map((res) => {
-                      const isAttached = (lesson.resources || []).some(
-                        (r: any) => r.id === res.id,
-                      )
-                      return (
-                        <div
-                          key={res.id}
-                          className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs"
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            <span className="grid size-8 place-items-center rounded-lg bg-white shadow-xs shrink-0">
-                              {getResourceFileIcon(res.resourceType, res.extension)}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <p className="font-semibold text-slate-800 truncate">{res.name}</p>
-                              <p className="text-[11px] text-slate-400">
-                                {res.formattedSize || '0 KB'} · {res.originalFileName || res.subtitle}
-                              </p>
-                            </div>
-                          </div>
-
-                          {isAttached ? (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-teal-100 px-2 py-1 text-[11px] font-semibold text-teal-800 ml-2">
-                              <Check className="size-3" /> Đã gắn
-                            </span>
-                          ) : (
-                            <button
-                              disabled={resourceLoading}
-                              onClick={() => handleAttachResource(res)}
-                              className="inline-flex items-center gap-1 rounded-lg bg-teal-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-50 ml-2"
-                            >
-                              <Plus className="size-3.5" /> Gắn vào bài
-                            </button>
-                          )}
+              {/* Activity buttons list */}
+              <div className="flex flex-col gap-2">
+                {lesson.activities.map((act, index) => {
+                  const isSelected = act.id === selectedActivityId
+                  return (
+                    <div
+                      key={act.id}
+                      onClick={() => setSelectedActivityId(act.id)}
+                      className={`group relative flex items-center justify-between p-3 rounded-xl border cursor-pointer transition ${
+                        isSelected
+                          ? 'border-teal-500 bg-teal-50/60 shadow-xs'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+                          <span className="rounded bg-slate-100 px-1.5 py-0.2">{act.phase}</span>
+                          <span>{act.minutes}p</span>
                         </div>
-                      )
-                    })}
-                  </div>
-                )}
+                        <p className={`font-semibold text-xs mt-0.5 truncate ${isSelected ? 'text-teal-900' : 'text-slate-800'}`}>
+                          {index + 1}. {act.title}
+                        </p>
+                      </div>
+
+                      {/* Reorder up/down & actions */}
+                      <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleMoveActivity(act.id, -1) }}
+                          disabled={index === 0}
+                          className="size-6 grid place-items-center rounded hover:bg-slate-100 disabled:opacity-30 text-slate-500"
+                          title="Di chuyển lên"
+                        >
+                          <ChevronUp className="size-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleMoveActivity(act.id, 1) }}
+                          disabled={index === lesson.activities.length - 1}
+                          className="size-6 grid place-items-center rounded hover:bg-slate-100 disabled:opacity-30 text-slate-500"
+                          title="Di chuyển xuống"
+                        >
+                          <ChevronDown className="size-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            ) : (
-              <form onSubmit={handleUploadAndAttach} className="mt-4 flex flex-col gap-3">
-                <div
-                  onDragEnter={(e) => {
-                    e.preventDefault()
-                    setResourceDragActive(true)
-                  }}
-                  onDragLeave={(e) => {
-                    e.preventDefault()
-                    setResourceDragActive(false)
-                  }}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault()
-                    setResourceDragActive(false)
-                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                      const file = e.dataTransfer.files[0]
-                      setNewFile(file)
-                      if (!newFileName) setNewFileName(file.name.replace(/\.[^.]+$/, ''))
-                    }
-                  }}
-                  onClick={() => resourceFileInputRef.current?.click()}
-                  className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-5 text-center cursor-pointer transition ${
-                    resourceDragActive
-                      ? 'border-teal-500 bg-teal-50/50'
-                      : newFile
-                      ? 'border-teal-400 bg-teal-50/30'
-                      : 'border-slate-200 hover:border-teal-400'
-                  }`}
+
+              {/* Bottom activity actions */}
+              <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col gap-2">
+                <Button
+                  onClick={() => handleAddActivity()}
+                  size="sm"
+                  variant="outline"
+                  className="w-full text-xs font-semibold gap-1.5"
                 >
-                  <input
-                    ref={resourceFileInputRef}
-                    type="file"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        const file = e.target.files[0]
-                        setNewFile(file)
-                        if (!newFileName) setNewFileName(file.name.replace(/\.[^.]+$/, ''))
-                      }
-                    }}
-                    accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.mp4"
-                    className="hidden"
-                  />
-
-                  {newFile ? (
-                    <div className="flex flex-col items-center gap-1">
-                      <span className="grid size-10 place-items-center rounded-lg bg-teal-100 text-teal-700">
-                        <FileIcon className="size-5" />
-                      </span>
-                      <p className="font-semibold text-xs text-slate-800">{newFile.name}</p>
-                      <p className="text-[11px] text-slate-400">
-                        {(newFile.size / (1024 * 1024)).toFixed(2)} MB · Nhấn để đổi tệp khác
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-1">
-                      <UploadCloud className="size-6 text-slate-400" />
-                      <p className="text-xs font-semibold text-slate-700">
-                        Kéo thả tập tin vào đây hoặc <span className="text-teal-600 underline">duyệt tệp</span>
-                      </p>
-                      <p className="text-[10px] text-slate-400">
-                        PDF, Word, PPTX, Excel, PNG, JPG, MP4 (Tối đa 25MB)
-                      </p>
-                    </div>
-                  )}
+                  <Plus className="size-3.5" /> Thêm hoạt động
+                </Button>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    onClick={() => setLibraryPickerOpen(true)}
+                    size="sm"
+                    variant="outline"
+                    className="text-[11px] gap-1 bg-slate-50"
+                  >
+                    <BookOpen className="size-3" /> Thư viện HĐ
+                  </Button>
+                  <Button
+                    onClick={() => setAiAssistantOpen(true)}
+                    size="sm"
+                    variant="outline"
+                    className="text-[11px] gap-1 bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"
+                  >
+                    <Sparkles className="size-3 text-violet-600" /> AI Gợi ý
+                  </Button>
                 </div>
+              </div>
+            </div>
 
+            {/* Linked Schedule Info Box */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                  <Calendar className="size-3.5 text-teal-600" /> Lịch dạy liên kết
+                </h4>
+                <button
+                  onClick={() => setLinkScheduleTarget(lesson)}
+                  className="text-xs text-teal-600 hover:underline font-semibold"
+                >
+                  {lesson.schedules && lesson.schedules.length > 0 ? 'Đổi lịch' : '+ Gắn lịch'}
+                </button>
+              </div>
+
+              {lesson.schedules && lesson.schedules.length > 0 ? (
+                <div className="space-y-2">
+                  {lesson.schedules.map((s) => (
+                    <div key={s.id} className="rounded-xl bg-teal-50/70 p-2.5 border border-teal-100 text-xs">
+                      <p className="font-bold text-teal-900">{s.title}</p>
+                      <p className="text-teal-700 mt-0.5">
+                        📅 {s.plannedDate ? new Date(s.plannedDate).toLocaleDateString('vi-VN') : ''} ({s.startTime || '07:00'} - {s.endTime || '07:45'})
+                      </p>
+                      <p className="text-slate-500 mt-0.5 text-[11px]">Lớp: {s.classroom?.name || lesson.grade}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400">
+                  Chưa liên kết với tiết nào trong Lịch dạy.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Right Area: Form & Active Activity Editor */}
+          <div className="lg:col-span-8 flex flex-col gap-6">
+            {/* Section 1: General Info */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs flex flex-col gap-4">
+              <h3 className="font-bold text-sm text-slate-900 border-b border-slate-100 pb-2">
+                Thông tin chung giáo án
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="sm:col-span-2">
+                  <Label className="text-xs font-semibold">Tên bài học *</Label>
+                  <Input
+                    className="mt-1 font-semibold"
+                    value={lesson.title}
+                    onChange={(e) => updateLessonField('title', e.target.value)}
+                    placeholder="VD: Tiết 1: Phân số bằng nhau"
+                  />
+                </div>
                 <div>
-                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
-                    Tên hiển thị học liệu
-                  </label>
-                  <input
-                    value={newFileName}
-                    onChange={(e) => setNewFileName(e.target.value)}
-                    placeholder="Ví dụ: Phiếu hoạt động nhóm..."
-                    className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-teal-400"
+                  <Label className="text-xs font-semibold">Chủ đề</Label>
+                  <Input
+                    className="mt-1"
+                    value={lesson.topic || ''}
+                    onChange={(e) => updateLessonField('topic', e.target.value)}
+                    placeholder="VD: Chủ đề 1: Phân số và các phép tính"
                   />
                 </div>
-
-                <div className="mt-2 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setResourceModalOpen(false)}
-                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600"
-                  >
-                    Hủy
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={resourceLoading || !newFile}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
-                  >
-                    {resourceLoading ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <UploadCloud className="size-3.5" />
-                    )}
-                    Tải lên & Đính kèm
-                  </button>
+                <div>
+                  <Label className="text-xs font-semibold">Ngày dự kiến dạy</Label>
+                  <Input
+                    type="date"
+                    className="mt-1"
+                    value={lesson.date || ''}
+                    onChange={(e) => updateLessonField('date', e.target.value)}
+                  />
                 </div>
-              </form>
+                <div>
+                  <Label className="text-xs font-semibold">Môn học</Label>
+                  <Input
+                    className="mt-1"
+                    value={lesson.subject}
+                    onChange={(e) => updateLessonField('subject', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">Lớp học</Label>
+                  <Input
+                    className="mt-1"
+                    value={lesson.grade}
+                    onChange={(e) => updateLessonField('grade', e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Requirements (I. Yêu cầu cần đạt) */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs flex flex-col gap-4">
+              <h3 className="font-bold text-sm text-slate-900 border-b border-slate-100 pb-2">
+                I. Yêu cầu cần đạt
+              </h3>
+
+              <div className="grid gap-3.5 text-xs">
+                <div>
+                  <Label className="text-xs font-semibold">1. Mục tiêu chung của bài học</Label>
+                  <textarea
+                    rows={2}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-background px-3 py-2 text-xs focus:outline-none focus:border-teal-400"
+                    placeholder="Nhận biết được kiến thức trọng tâm..."
+                    value={lesson.objective}
+                    onChange={(e) => updateLessonField('objective', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">2. Năng lực đặc thù</Label>
+                  <textarea
+                    rows={2}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-background px-3 py-2 text-xs focus:outline-none focus:border-teal-400"
+                    placeholder="Năng lực tư duy và lập luận toán học, mô hình hóa toán học..."
+                    value={lesson.specificCompetencies || ''}
+                    onChange={(e) => updateLessonField('specificCompetencies', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">3. Năng lực chung</Label>
+                  <textarea
+                    rows={2}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-background px-3 py-2 text-xs focus:outline-none focus:border-teal-400"
+                    placeholder="Tự chủ và tự học, giao tiếp và hợp tác, giải quyết vấn đề..."
+                    value={lesson.generalCompetencies || ''}
+                    onChange={(e) => updateLessonField('generalCompetencies', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">4. Phẩm chất chủ yếu</Label>
+                  <Input
+                    className="mt-1"
+                    placeholder="Chăm chỉ, trung thực, trách nhiệm, yêu nước..."
+                    value={lesson.qualities || ''}
+                    onChange={(e) => updateLessonField('qualities', e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Equipment (II. Đồ dùng dạy học) */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs flex flex-col gap-4">
+              <h3 className="font-bold text-sm text-slate-900 border-b border-slate-100 pb-2">
+                II. Đồ dùng dạy học
+              </h3>
+              <textarea
+                rows={2}
+                className="w-full rounded-lg border border-slate-200 bg-background px-3 py-2 text-xs focus:outline-none focus:border-teal-400"
+                placeholder="GV chuẩn bị: Máy chiếu, bài giảng điện tử, phiếu học tập...&#10;HS chuẩn bị: SGK, vở ghi, đồ dùng học tập..."
+                value={lesson.teachingEquipment || ''}
+                onChange={(e) => updateLessonField('teachingEquipment', e.target.value)}
+              />
+            </div>
+
+            {/* Section 4: Current Selected Activity Editor */}
+            {selectedActivity && (
+              <div className="rounded-2xl border-2 border-teal-500/40 bg-white p-5 shadow-sm flex flex-col gap-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-lg bg-teal-600 text-white px-2 py-0.5 text-xs font-bold">
+                      {selectedActivity.phase}
+                    </span>
+                    <h3 className="font-bold text-sm text-slate-900 truncate">
+                      {selectedActivity.title}
+                    </h3>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleSaveToLibrary(selectedActivity)}
+                      className="text-xs h-7 gap-1"
+                    >
+                      <BookOpen className="size-3" /> Lưu vào thư viện
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDuplicateActivity(selectedActivity.id)}
+                      className="text-xs h-7 gap-1"
+                    >
+                      <Copy className="size-3" /> Nhân bản
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleRemoveActivity(selectedActivity.id)}
+                      className="text-xs h-7 text-rose-600 hover:bg-rose-50"
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Activity fields */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
+                    <Label className="text-xs font-semibold">Tên hoạt động *</Label>
+                    <Input
+                      className="mt-1"
+                      value={selectedActivity.title}
+                      onChange={(e) => updateActivityField(selectedActivity.id, 'title', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold">Thời lượng (phút) *</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      className="mt-1"
+                      value={selectedActivity.minutes}
+                      onChange={(e) => updateActivityField(selectedActivity.id, 'minutes', parseInt(e.target.value, 10) || 5)}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <Label className="text-xs font-semibold">Phương pháp dạy học</Label>
+                    <Input
+                      className="mt-1"
+                      value={selectedActivity.method}
+                      onChange={(e) => updateActivityField(selectedActivity.id, 'method', e.target.value)}
+                      placeholder="VD: Trực quan, thảo luận nhóm, giải quyết vấn đề..."
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold">Kĩ thuật dạy học</Label>
+                    <Input
+                      className="mt-1"
+                      value={selectedActivity.technique}
+                      onChange={(e) => updateActivityField(selectedActivity.id, 'technique', e.target.value)}
+                      placeholder="VD: Động não, khăn trải bàn, mảnh ghép..."
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold">Mục tiêu hoạt động</Label>
+                    <Input
+                      className="mt-1"
+                      value={selectedActivity.objective}
+                      onChange={(e) => updateActivityField(selectedActivity.id, 'objective', e.target.value)}
+                      placeholder="Mục tiêu cụ thể học sinh cần đạt trong hoạt động này..."
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold">Đồ dùng / Thiết bị</Label>
+                    <Input
+                      className="mt-1"
+                      value={selectedActivity.equipment || ''}
+                      onChange={(e) => updateActivityField(selectedActivity.id, 'equipment', e.target.value)}
+                      placeholder="VD: Thẻ số, phiếu học tập, bảng phụ..."
+                    />
+                  </div>
+                </div>
+
+                {/* 2-Column: Teacher vs Student activity */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 flex flex-col gap-2">
+                    <Label className="text-xs font-bold text-teal-800 flex items-center gap-1">
+                      Hoạt động của Giáo viên
+                    </Label>
+                    <textarea
+                      rows={6}
+                      className="w-full rounded-lg border border-slate-200 bg-white p-3 text-xs focus:outline-none focus:border-teal-400 leading-relaxed placeholder:text-slate-400"
+                      placeholder="Mô tả chi tiết các bước chuyển giao nhiệm vụ, hướng dẫn, gợi mở và tổng kết..."
+                      value={selectedActivity.teacher}
+                      onChange={(e) => updateActivityField(selectedActivity.id, 'teacher', e.target.value)}
+                    />
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 flex flex-col gap-2">
+                    <Label className="text-xs font-bold text-blue-800 flex items-center gap-1">
+                      Hoạt động của Học sinh
+                    </Label>
+                    <textarea
+                      rows={6}
+                      className="w-full rounded-lg border border-slate-200 bg-white p-3 text-xs focus:outline-none focus:border-blue-400 leading-relaxed placeholder:text-slate-400"
+                      placeholder="Mô tả cụ thể hành động của học sinh (nghe, thảo luận, thực hành, trình bày, nhận xét)..."
+                      value={selectedActivity.students}
+                      onChange={(e) => updateActivityField(selectedActivity.id, 'students', e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
             )}
 
-            <div className="mt-4 flex justify-end border-t border-slate-100 pt-3">
-              <button
-                onClick={() => setResourceModalOpen(false)}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600"
-              >
-                Đóng
-              </button>
+            {/* Section 5: Post-lesson Adjustments & Notes */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs flex flex-col gap-4">
+              <h3 className="font-bold text-sm text-slate-900 border-b border-slate-100 pb-2">
+                IV. Điều chỉnh sau bài dạy & Ghi chú
+              </h3>
+              <div className="grid gap-3.5 text-xs">
+                <div>
+                  <Label className="text-xs font-semibold">Điều chỉnh sau tiết dạy</Label>
+                  <textarea
+                    rows={2}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-background px-3 py-2 text-xs focus:outline-none focus:border-teal-400"
+                    placeholder="Ghi nhận những điểm học sinh nắm tốt, nội dung cần khắc sâu hoặc điều chỉnh thời lượng..."
+                    value={lesson.postLessonAdjustment || ''}
+                    onChange={(e) => updateLessonField('postLessonAdjustment', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">Ghi chú thêm</Label>
+                  <textarea
+                    rows={2}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-background px-3 py-2 text-xs focus:outline-none focus:border-teal-400"
+                    placeholder="Dặn dò học sinh, chuẩn bị bài tiếp theo..."
+                    value={lesson.notes || ''}
+                    onChange={(e) => updateLessonField('notes', e.target.value)}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {preview && (
-        <Preview
-          lesson={lesson}
-          onClose={() => setPreview(false)}
-          onExport={handleExport}
-          exportingType={exportingType}
-        />
-      )}
+      {/* Version History Dialog */}
+      <VersionHistoryDialog
+        open={versionHistoryOpen}
+        lessonPlanId={lesson.id}
+        onClose={() => setVersionHistoryOpen(false)}
+        onRestored={(restored) => {
+          setLesson(restored)
+          setVersionHistoryOpen(false)
+          toast.success('Đã khôi phục phiên bản thành công')
+        }}
+      />
+
+      {/* Activity Library Picker Dialog */}
+      <ActivityLibraryPickerDialog
+        open={libraryPickerOpen}
+        onClose={() => setLibraryPickerOpen(false)}
+        onSelect={(libAct) => {
+          const newAct: Activity = {
+            id: `act-${Date.now()}`,
+            phase: libAct.type || 'Hoạt động',
+            title: libAct.title,
+            minutes: 10,
+            method: libAct.type === 'Trò chơi' ? 'Trò chơi học tập' : 'Thảo luận nhóm',
+            technique: 'Động não',
+            competencies: 'Giao tiếp và hợp tác',
+            qualities: 'Chăm chỉ',
+            equipment: '',
+            objective: libAct.description || `Thực hiện hoạt động ${libAct.title}`,
+            teacher: libAct.description || `GV tổ chức ${libAct.title}`,
+            students: `HS tham gia ${libAct.title}`,
+            sortOrder: lesson.activities.length,
+          }
+          setLesson((prev) => {
+            const next = { ...prev, activities: [...prev.activities, newAct] }
+            triggerAutosave(next)
+            return next
+          })
+          setSelectedActivityId(newAct.id)
+          setLibraryPickerOpen(false)
+          toast.success(`Đã thêm "${libAct.title}" vào giáo án`)
+        }}
+      />
+
+      {/* AI Assistant Modal for Activities */}
+      <AiActivityAssistantModal
+        open={aiAssistantOpen}
+        lesson={lesson}
+        onClose={() => setAiAssistantOpen(false)}
+        onInsertNew={(genAct) => {
+          const newAct: Activity = {
+            id: `act-${Date.now()}`,
+            phase: genAct.activityType || 'Khám phá',
+            title: genAct.title,
+            minutes: genAct.durationMinutes || 10,
+            method: (genAct.methods || []).join(', ') || 'Thảo luận nhóm',
+            technique: (genAct.techniques || []).join(', ') || 'Động não',
+            competencies: (genAct.competencies || []).join(', '),
+            qualities: (genAct.qualities || []).join(', '),
+            equipment: '',
+            objective: genAct.objective,
+            teacher: genAct.teacherActivity,
+            students: genAct.studentActivity,
+            sortOrder: lesson.activities.length,
+          }
+          setLesson((prev) => {
+            const next = { ...prev, activities: [...prev.activities, newAct] }
+            triggerAutosave(next)
+            return next
+          })
+          setSelectedActivityId(newAct.id)
+          setAiAssistantOpen(false)
+          toast.success('Đã chèn hoạt động từ AI vào giáo án')
+        }}
+        onReplaceCurrent={(genAct) => {
+          if (!selectedActivity) return
+          setLesson((prev) => {
+            const nextActivities = prev.activities.map((a) =>
+              a.id === selectedActivityId
+                ? {
+                    ...a,
+                    title: genAct.title,
+                    minutes: genAct.durationMinutes || a.minutes,
+                    method: (genAct.methods || []).join(', ') || a.method,
+                    technique: (genAct.techniques || []).join(', ') || a.technique,
+                    competencies: (genAct.competencies || []).join(', ') || a.competencies,
+                    qualities: (genAct.qualities || []).join(', ') || a.qualities,
+                    objective: genAct.objective || a.objective,
+                    teacher: genAct.teacherActivity,
+                    students: genAct.studentActivity,
+                  }
+                : a
+            )
+            const next = { ...prev, activities: nextActivities }
+            triggerAutosave(next)
+            return next
+          })
+          setAiAssistantOpen(false)
+          toast.success('Đã cập nhật hoạt động với nội dung từ AI')
+        }}
+      />
     </div>
   )
 }
 
-function ActivityCard({
-  activity,
-  index,
-  selected,
-  onSelect,
-  onDragStart,
-  onDrop,
-  onChange,
-  onDuplicate,
-  onDelete,
+// ─── Modal Dialog: Create Lesson Plan ─────────────────────────────────────────
+function CreateLessonPlanDialog({
+  open,
+  classes,
+  onClose,
+  onCreated,
 }: {
-  activity: Activity
-  index: number
-  selected: boolean
-  onSelect: () => void
-  onDragStart: () => void
-  onDrop: () => void
-  onChange: (key: keyof Activity, value: string | number) => void
-  onDuplicate: () => void
-  onDelete: () => void
+  open: boolean
+  classes: ClassRecord[]
+  onClose: () => void
+  onCreated: (plan: LessonPlan) => void
 }) {
+  const [title, setTitle] = useState('')
+  const [subject, setSubject] = useState('Toán')
+  const [classroomId, setClassroomId] = useState('')
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [duration, setDuration] = useState(40)
+  const [topic, setTopic] = useState('')
+  const [objective, setObjective] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setTitle('')
+      setSubject('Toán')
+      setClassroomId(classes[0]?.id || '')
+      setDate(new Date().toISOString().split('T')[0])
+      setDuration(40)
+      setTopic('')
+      setObjective('')
+    }
+  }, [open, classes])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!title.trim()) { toast.error('Vui lòng nhập tên bài học'); return }
+    setSubmitting(true)
+    try {
+      const cls = classes.find((c) => c.id === classroomId)
+      const created = await createLessonPlan({
+        title: title.trim(),
+        subject,
+        grade: cls?.name || 'Lớp 4A',
+        classroomId: classroomId || undefined,
+        date,
+        duration,
+        topic: topic.trim() || undefined,
+        objective: objective.trim() || undefined,
+        activities: starterActivities,
+        status: 'DRAFT',
+      })
+      toast.success('Đã tạo giáo án mới thành công')
+      onCreated(created)
+      onClose()
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi tạo giáo án')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
-    <article
-      draggable
-      onDragStart={onDragStart}
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={onDrop}
-      onClick={onSelect}
-      className={`rounded-2xl border bg-white shadow-sm transition ${
-        selected ? 'border-teal-300 ring-2 ring-teal-100' : 'border-slate-200'
-      }`}
-    >
-      <div className="flex items-center gap-3 border-b border-slate-100 p-4">
-        <button
-          aria-label={`Kéo ${activity.phase}`}
-          className="cursor-grab text-slate-300 hover:text-teal-600"
-        >
-          <GripVertical className="size-5" />
-        </button>
-        <span className="rounded-lg bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700">
-          {index + 1}
-        </span>
-        <input
-          value={activity.phase}
-          onChange={(event) => onChange('phase', event.target.value)}
-          onClick={(event) => event.stopPropagation()}
-          className="w-28 border-0 bg-transparent text-xs font-semibold uppercase tracking-wide text-teal-700 outline-none"
-        />
-        <input
-          value={activity.title}
-          onChange={(event) => onChange('title', event.target.value)}
-          onClick={(event) => event.stopPropagation()}
-          className="min-w-0 flex-1 border-0 bg-transparent text-sm font-semibold text-slate-900 outline-none focus:ring-1 focus:ring-teal-200"
-        />
-        <span className="flex items-center gap-1 text-xs text-slate-400">
-          <Clock3 className="size-3.5" />
-          <input
-            type="number"
-            value={activity.minutes}
-            onChange={(event) => onChange('minutes', Number(event.target.value))}
-            onClick={(event) => event.stopPropagation()}
-            className="w-8 border-0 bg-transparent text-right outline-none"
-          />{' '}
-          phút
-        </span>
-        <button
-          onClick={(event) => {
-            event.stopPropagation()
-            onDuplicate()
-          }}
-          aria-label="Nhân bản hoạt động"
-          className="text-slate-400 hover:text-teal-600"
-        >
-          <Copy className="size-4" />
-        </button>
-        <button
-          onClick={(event) => {
-            event.stopPropagation()
-            onDelete()
-          }}
-          aria-label="Xóa hoạt động"
-          className="text-slate-400 hover:text-rose-600"
-        >
-          <Trash2 className="size-4" />
-        </button>
-      </div>
-      <div className="grid gap-4 p-4 sm:grid-cols-2">
-        <label>
-          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Phương pháp
-          </span>
-          <input
-            value={activity.method}
-            onChange={(event) => onChange('method', event.target.value)}
-            className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-xs outline-none focus:border-teal-400"
-          />
-        </label>
-        <label>
-          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Kỹ thuật
-          </span>
-          <input
-            value={activity.technique}
-            onChange={(event) => onChange('technique', event.target.value)}
-            className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-xs outline-none focus:border-teal-400"
-          />
-        </label>
-        <label>
-          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Năng lực
-          </span>
-          <input
-            value={activity.competencies}
-            onChange={(event) => onChange('competencies', event.target.value)}
-            className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-xs outline-none focus:border-teal-400"
-          />
-        </label>
-        <label>
-          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Phẩm chất
-          </span>
-          <input
-            value={activity.qualities}
-            onChange={(event) => onChange('qualities', event.target.value)}
-            className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-xs outline-none focus:border-teal-400"
-          />
-        </label>
-        <label className="sm:col-span-2">
-          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Mục tiêu hoạt động
-          </span>
-          <input
-            value={activity.objective}
-            onChange={(event) => onChange('objective', event.target.value)}
-            className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-xs outline-none focus:border-teal-400"
-          />
-        </label>
-      </div>
-      <div className="grid border-t border-slate-100 sm:grid-cols-2">
-        <div className="border-b border-slate-100 p-4 sm:border-b-0 sm:border-r">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-700">Hoạt động giáo viên</span>
-            <span className="rounded bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-700">
-              GV
-            </span>
+    <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle>Tạo giáo án mới</DialogTitle>
+          <DialogDescription>
+            Khởi tạo kế hoạch bài dạy mới theo cấu trúc chuẩn GDVN.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="grid gap-3.5 py-2 text-xs">
+          <div>
+            <Label className="text-xs font-semibold">Tên bài học *</Label>
+            <Input
+              className="mt-1 text-xs"
+              placeholder="VD: Tiết 1: Phân số bằng nhau"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+            />
           </div>
-          <textarea
-            value={activity.teacher}
-            onFocus={onSelect}
-            onChange={(event) => onChange('teacher', event.target.value)}
-            rows={5}
-            className="w-full resize-y rounded-lg border border-slate-200 bg-slate-50/50 px-2.5 py-2 text-xs leading-5 text-slate-700 outline-none focus:border-teal-400 focus:bg-white"
-          />
-        </div>
-        <div className="p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-700">Hoạt động học sinh</span>
-            <span className="rounded bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
-              HS
-            </span>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs font-semibold">Môn học *</Label>
+              <select
+                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-xs"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+              >
+                <option value="Toán">Toán</option>
+                <option value="Tiếng Việt">Tiếng Việt</option>
+                <option value="Khoa học">Khoa học</option>
+                <option value="Lịch sử & Địa lí">Lịch sử & Địa lí</option>
+                <option value="Đạo đức">Đạo đức</option>
+                <option value="Tin học">Tin học</option>
+                <option value="Công nghệ">Công nghệ</option>
+                <option value="Hoạt động trải nghiệm">Hoạt động trải nghiệm</option>
+              </select>
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Lớp *</Label>
+              <select
+                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-xs"
+                value={classroomId}
+                onChange={(e) => setClassroomId(e.target.value)}
+              >
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
-          <textarea
-            value={activity.students}
-            onFocus={onSelect}
-            onChange={(event) => onChange('students', event.target.value)}
-            rows={5}
-            className="w-full resize-y rounded-lg border border-orange-100 bg-white px-2.5 py-2 text-xs leading-5 text-slate-700 outline-none focus:border-orange-400"
-          />
-        </div>
-      </div>
-    </article>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs font-semibold">Ngày dự kiến dạy</Label>
+              <Input
+                type="date"
+                className="mt-1 text-xs"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Thời lượng (phút)</Label>
+              <Input
+                type="number"
+                min={15}
+                max={180}
+                className="mt-1 text-xs"
+                value={duration}
+                onChange={(e) => setDuration(parseInt(e.target.value, 10) || 40)}
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs font-semibold">Chủ đề</Label>
+            <Input
+              className="mt-1 text-xs"
+              placeholder="VD: Chủ đề 1: Phân số và các phép tính"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <Label className="text-xs font-semibold">Mục tiêu cơ bản</Label>
+            <textarea
+              rows={2}
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-background px-3 py-2 text-xs focus:outline-none focus:border-teal-400"
+              placeholder="Học sinh nhận biết và vận dụng..."
+              value={objective}
+              onChange={(e) => setObjective(e.target.value)}
+            />
+          </div>
+
+          <DialogFooter className="mt-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
+              Hủy
+            </Button>
+            <Button type="submit" disabled={submitting} className="bg-teal-600 hover:bg-teal-700 font-semibold">
+              {submitting && <Loader2 className="size-3.5 animate-spin mr-1" />}
+              Tạo giáo án
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 
-function Preview({
-  lesson,
+// ─── Modal Dialog: Duplicate Lesson Plan ──────────────────────────────────────
+function DuplicateLessonPlanDialog({
+  target,
+  classes,
   onClose,
-  onExport,
-  exportingType,
+  onDuplicated,
 }: {
-  lesson: LessonPlan
+  target: LessonPlan | null
+  classes: ClassRecord[]
   onClose: () => void
-  onExport?: (type: 'docx' | 'pdf') => void
-  exportingType?: 'docx' | 'pdf' | null
+  onDuplicated: (plan: LessonPlan) => void
 }) {
+  const [title, setTitle] = useState('')
+  const [classroomId, setClassroomId] = useState('')
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (target) {
+      setTitle(`${target.title} (Bản sao)`)
+      setClassroomId(target.classroomId || classes[0]?.id || '')
+      setDate(new Date().toISOString().split('T')[0])
+    }
+  }, [target, classes])
+
+  if (!target) return null
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmitting(true)
+    try {
+      const dup = await duplicateLessonPlan(target.id!, {
+        title: title.trim() || undefined,
+        classroomId: classroomId || undefined,
+        date: date || undefined,
+      })
+      toast.success('Đã nhân bản giáo án thành công')
+      onDuplicated(dup)
+      onClose()
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi nhân bản giáo án')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-4 sm:p-8 print:static print:bg-white print:p-0">
-      <div className="mx-auto max-w-4xl rounded-2xl bg-white shadow-xl print:max-w-none print:shadow-none">
-        <div className="flex items-center justify-between border-b border-slate-200 p-5 print:hidden">
+    <Dialog open={!!target} onOpenChange={(val) => !val && onClose()}>
+      <DialogContent className="sm:max-w-[460px]">
+        <DialogHeader>
+          <DialogTitle>Nhân bản giáo án</DialogTitle>
+          <DialogDescription>
+            Sao chép toàn bộ nội dung giáo án và hoạt động sang lớp hoặc ngày dạy mới.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="grid gap-3.5 py-2 text-xs">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-teal-600">
-              Xem trước giáo án
-            </p>
-            <h2 className="mt-1 font-semibold text-slate-900">Bản in sẵn sàng</h2>
-          </div>
-          <div className="flex items-center gap-2">
-            {onExport && (
-              <>
-                <button
-                  onClick={() => onExport('docx')}
-                  disabled={!!exportingType}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  <FileType className="size-3.5 text-blue-600" />
-                  <span>Xuất Word</span>
-                </button>
-                <button
-                  onClick={() => onExport('pdf')}
-                  disabled={!!exportingType}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  <FileType className="size-3.5 text-rose-600" />
-                  <span>Xuất PDF</span>
-                </button>
-              </>
-            )}
-            <button
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-700"
-            >
-              <Printer className="size-3.5" /> In
-            </button>
-            <button
-              onClick={onClose}
-              aria-label="Đóng xem trước"
-              className="grid size-9 place-items-center rounded-lg text-slate-400 hover:bg-slate-50"
-            >
-              <X />
-            </button>
-          </div>
-        </div>
-        <div className="p-6 sm:p-10">
-          <div className="text-center">
-            <p className="text-sm font-semibold uppercase tracking-widest text-slate-500">
-              KẾ HOẠCH BÀI DẠY
-            </p>
-            <h1 className="mt-3 text-2xl font-bold text-slate-900">{lesson.title}</h1>
-            <p className="mt-2 text-sm text-slate-500">
-              {lesson.subject} · {lesson.grade} · Ngày {lesson.date}
-            </p>
-          </div>
-          <div className="mt-8 rounded-xl bg-slate-50 p-4 text-sm leading-6">
-            <b>Mục tiêu:</b> {lesson.objective}
-          </div>
-          <div className="mt-8 flex flex-col gap-6">
-            {lesson.activities.map((activity, index) => (
-              <section key={activity.id} className="break-inside-avoid">
-                <div className="flex items-center justify-between border-b-2 border-teal-600 pb-2">
-                  <h3 className="font-bold text-slate-900">
-                    {index + 1}. {activity.phase}: {activity.title}
-                  </h3>
-                  <span className="text-sm text-slate-500">{activity.minutes} phút</span>
-                </div>
-                <p className="mt-2 text-xs text-slate-500">
-                  Phương pháp: {activity.method} · Kỹ thuật: {activity.technique} · Năng lực:{' '}
-                  {activity.competencies} · Phẩm chất: {activity.qualities}
-                </p>
-                <p className="mt-2 text-sm">
-                  <b>Mục tiêu:</b> {activity.objective}
-                </p>
-                <div className="mt-3 grid grid-cols-2 border border-slate-300 text-sm">
-                  <div className="border-r border-slate-300 p-3">
-                    <b className="mb-2 block">Hoạt động giáo viên</b>
-                    {activity.teacher}
-                  </div>
-                  <div className="p-3">
-                    <b className="mb-2 block">Hoạt động học sinh</b>
-                    {activity.students}
-                  </div>
-                </div>
-              </section>
-            ))}
+            <Label className="text-xs font-semibold">Tên giáo án mới</Label>
+            <Input
+              className="mt-1"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+            />
           </div>
 
-          {/* Attached Resources in Preview */}
-          {lesson.resources && lesson.resources.length > 0 && (
-            <div className="mt-8 border-t border-slate-200 pt-6">
-              <h3 className="font-bold text-slate-900 text-sm mb-3">V. TÀI NGUYÊN VÀ HỌC LIỆU ĐÍNH KÈM</h3>
-              <ul className="list-disc pl-5 text-xs text-slate-600 space-y-1">
-                {lesson.resources.map((r: any) => (
-                  <li key={r.id}>
-                    <b>{r.name}</b> ({r.formattedSize || '0 KB'}) · {r.originalFileName || ''}
-                  </li>
-                ))}
-              </ul>
+          <div>
+            <Label className="text-xs font-semibold">Lớp học mới</Label>
+            <select
+              className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-xs"
+              value={classroomId}
+              onChange={(e) => setClassroomId(e.target.value)}
+            >
+              {classes.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <Label className="text-xs font-semibold">Ngày dạy mới</Label>
+            <Input
+              type="date"
+              className="mt-1"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </div>
+
+          <DialogFooter className="mt-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
+              Hủy
+            </Button>
+            <Button type="submit" disabled={submitting} className="bg-teal-600 hover:bg-teal-700 font-semibold">
+              {submitting && <Loader2 className="size-3.5 animate-spin mr-1" />}
+              Xác nhận nhân bản
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Modal Dialog: Delete Lesson Plan ─────────────────────────────────────────
+function DeleteLessonPlanDialog({
+  target,
+  onClose,
+  onDeleted,
+}: {
+  target: LessonPlan | null
+  onClose: () => void
+  onDeleted: () => void
+}) {
+  const [submitting, setSubmitting] = useState(false)
+  if (!target) return null
+
+  const handleDelete = async () => {
+    setSubmitting(true)
+    try {
+      await deleteLessonPlan(target.id!)
+      toast.success('Đã xóa giáo án thành công')
+      onDeleted()
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi xóa giáo án')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={!!target} onOpenChange={(val) => !val && onClose()}>
+      <DialogContent className="sm:max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>Xác nhận xóa giáo án</DialogTitle>
+          <DialogDescription>
+            Bạn có chắc chắn muốn xóa giáo án "{target.title}"?
+          </DialogDescription>
+        </DialogHeader>
+
+        <p className="text-xs text-slate-500 my-2">
+          Lịch dạy đã liên kết sẽ tự động chuyển về trạng thái Chưa có giáo án mà không bị ảnh hưởng.
+        </p>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={submitting}>Hủy</Button>
+          <Button variant="destructive" onClick={handleDelete} disabled={submitting}>
+            {submitting && <Loader2 className="size-3.5 animate-spin mr-1" />}
+            Xác nhận xóa
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Modal Dialog: Link Schedule ──────────────────────────────────────────────
+function LinkScheduleModal({
+  target,
+  onClose,
+  onUpdated,
+}: {
+  target: LessonPlan | null
+  onClose: () => void
+  onUpdated: () => void
+}) {
+  const [schedules, setSchedules] = useState<ScheduleEntry[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (target) {
+      setLoading(true)
+      getSchedules({ classroomId: target.classroomId || undefined })
+        .then(setSchedules)
+        .catch(() => setSchedules([]))
+        .finally(() => setLoading(false))
+    }
+  }, [target])
+
+  if (!target) return null
+
+  const handleLink = async (schedId: string) => {
+    try {
+      await linkLessonPlanSchedule(target.id!, schedId)
+      toast.success('Đã liên kết giáo án với lịch dạy thành công')
+      onUpdated()
+      onClose()
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi liên kết lịch dạy')
+    }
+  }
+
+  const handleUnlink = async (schedId: string) => {
+    try {
+      await unlinkLessonPlanSchedule(target.id!, schedId)
+      toast.success('Đã gỡ liên kết lịch dạy')
+      onUpdated()
+      onClose()
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi gỡ liên kết')
+    }
+  }
+
+  return (
+    <Dialog open={!!target} onOpenChange={(val) => !val && onClose()}>
+      <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Gắn giáo án vào Lịch dạy</DialogTitle>
+          <DialogDescription>
+            Chọn tiết dạy trong lịch để liên kết với giáo án "{target.title}".
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto divide-y divide-slate-100 min-h-[200px] my-2">
+          {loading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="size-6 animate-spin text-teal-600" />
+            </div>
+          ) : schedules.length === 0 ? (
+            <div className="py-10 text-center text-xs text-slate-400">
+              Không tìm thấy tiết dạy nào khả dụng cho lớp này trong lịch.
+            </div>
+          ) : (
+            schedules.map((s) => {
+              const isLinked = s.lessonPlanId === target.id
+              return (
+                <div key={s.id} className="flex items-center justify-between p-3 text-xs hover:bg-slate-50 rounded-xl transition">
+                  <div>
+                    <p className="font-semibold text-slate-900">{s.title}</p>
+                    <p className="text-slate-500 mt-0.5">
+                      📅 {s.plannedDate ? new Date(s.plannedDate).toLocaleDateString('vi-VN') : ''} ({s.startTime || '07:00'} - {s.endTime || '07:45'}) · {s.classroom?.name}
+                    </p>
+                  </div>
+                  {isLinked ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleUnlink(s.id)}
+                      className="text-xs text-rose-600 border-rose-200 hover:bg-rose-50"
+                    >
+                      Gỡ liên kết
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      onClick={() => handleLink(s.id)}
+                      className="text-xs bg-teal-600 hover:bg-teal-700"
+                    >
+                      Gắn giáo án
+                    </Button>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={onClose}>Đóng</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Modal Dialog: Version History ────────────────────────────────────────────
+function VersionHistoryDialog({
+  open,
+  lessonPlanId,
+  onClose,
+  onRestored,
+}: {
+  open: boolean
+  lessonPlanId?: string
+  onClose: () => void
+  onRestored: (plan: LessonPlan) => void
+}) {
+  const [versions, setVersions] = useState<LessonPlanVersionRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [restoringId, setRestoringId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (open && lessonPlanId) {
+      setLoading(true)
+      getLessonPlanVersions(lessonPlanId)
+        .then(setVersions)
+        .catch(() => setVersions([]))
+        .finally(() => setLoading(false))
+    }
+  }, [open, lessonPlanId])
+
+  const handleRestore = async (versionId: string) => {
+    if (!lessonPlanId) return
+    setRestoringId(versionId)
+    try {
+      const restored = await restoreLessonPlanVersion(lessonPlanId, versionId)
+      onRestored(restored)
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi khôi phục phiên bản')
+    } finally {
+      setRestoringId(null)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
+      <DialogContent className="sm:max-w-[480px] max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Lịch sử phiên bản giáo án</DialogTitle>
+          <DialogDescription>
+            Các mốc lưu snapshot tự động và hoàn thành giáo án.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto divide-y divide-slate-100 min-h-[220px] my-2">
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="size-6 animate-spin text-teal-600" />
+            </div>
+          ) : versions.length === 0 ? (
+            <div className="py-12 text-center text-xs text-slate-400">
+              Chưa có phiên bản lịch sử nào được ghi lại.
+            </div>
+          ) : (
+            versions.map((v) => (
+              <div key={v.id} className="flex items-center justify-between p-3 text-xs hover:bg-slate-50 rounded-xl transition">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded">
+                      Phiên bản v{v.versionNumber}
+                    </span>
+                    <span className="text-slate-400 text-[11px]">
+                      {new Date(v.createdAt).toLocaleString('vi-VN')}
+                    </span>
+                  </div>
+                  <p className="text-slate-600 mt-1">{v.changeSummary || v.title}</p>
+                </div>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={restoringId !== null}
+                  onClick={() => handleRestore(v.id)}
+                  className="text-xs shrink-0"
+                >
+                  {restoringId === v.id ? (
+                    <Loader2 className="size-3 animate-spin mr-1" />
+                  ) : (
+                    <RefreshCw className="size-3 mr-1" />
+                  )}
+                  Khôi phục
+                </Button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={onClose}>Đóng</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Modal Dialog: Activity Library Picker ────────────────────────────────────
+function ActivityLibraryPickerDialog({
+  open,
+  onClose,
+  onSelect,
+}: {
+  open: boolean
+  onClose: () => void
+  onSelect: (act: LibraryActivity) => void
+}) {
+  const [activities, setActivities] = useState<LibraryActivity[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    if (open) {
+      setLoading(true)
+      getLibraryActivities()
+        .then(setActivities)
+        .catch(() => setActivities([]))
+        .finally(() => setLoading(false))
+    }
+  }, [open])
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return activities
+    const q = search.toLowerCase()
+    return activities.filter((a) =>
+      `${a.title} ${a.subject} ${a.grade} ${a.type}`.toLowerCase().includes(q)
+    )
+  }, [activities, search])
+
+  return (
+    <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
+      <DialogContent className="sm:max-w-[540px] max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Thư viện hoạt động dạy học</DialogTitle>
+          <DialogDescription>
+            Chọn hoạt động mẫu để chèn bản sao vào giáo án của bạn.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="relative my-2">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Tìm theo tên trò chơi, khởi động, môn học..."
+            className="pl-9 text-xs"
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto divide-y divide-slate-100 min-h-[240px]">
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="size-6 animate-spin text-teal-600" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="py-12 text-center text-xs text-slate-400">
+              Không tìm thấy hoạt động nào phù hợp.
+            </div>
+          ) : (
+            filtered.map((a) => (
+              <div
+                key={a.id}
+                onClick={() => onSelect(a)}
+                className="group flex items-center justify-between p-3 hover:bg-teal-50/60 cursor-pointer rounded-xl transition"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                      {a.type}
+                    </span>
+                    <p className="text-xs font-semibold text-slate-900 group-hover:text-teal-700 truncate">
+                      {a.title}
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {a.subject} · {a.grade} {a.description ? `· ${a.description}` : ''}
+                  </p>
+                </div>
+                <Button size="sm" variant="ghost" className="text-xs text-teal-600 shrink-0">
+                  Chèn vào
+                </Button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={onClose}>Đóng</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Modal Dialog: AI Activity Assistant ──────────────────────────────────────
+function AiActivityAssistantModal({
+  open,
+  lesson,
+  onClose,
+  onInsertNew,
+  onReplaceCurrent,
+}: {
+  open: boolean
+  lesson: LessonPlan
+  onClose: () => void
+  onInsertNew: (act: GeneratedActivity) => void
+  onReplaceCurrent: (act: GeneratedActivity) => void
+}) {
+  const [phase, setPhase] = useState('Khởi động')
+  const [requirement, setRequirement] = useState('')
+  const [duration, setDuration] = useState(5)
+  const [loading, setLoading] = useState(false)
+  const [generated, setGenerated] = useState<GeneratedActivity | null>(null)
+
+  useEffect(() => {
+    if (open) {
+      setPhase('Khởi động')
+      setRequirement('')
+      setDuration(5)
+      setGenerated(null)
+    }
+  }, [open])
+
+  const handleGenerate = async () => {
+    setLoading(true)
+    setGenerated(null)
+    try {
+      const gradeNum = parseInt(lesson.grade.replace(/\D/g, ''), 10) || 4
+      const result = await generateActivity({
+        grade: gradeNum,
+        subject: lesson.subject || 'Toán',
+        lessonTitle: lesson.title,
+        activityType: phase,
+        durationMinutes: duration,
+        requirement: requirement.trim() || undefined,
+      })
+      setGenerated(result)
+      toast.success('AI đã tạo hoạt động thành công! Xem trước bên dưới.')
+    } catch (err: any) {
+      toast.error(err?.message || 'Không thể tạo hoạt động bằng AI lúc này')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
+      <DialogContent className="sm:max-w-[560px] max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-violet-900">
+            <Sparkles className="size-4 text-violet-600" /> Trợ lý AI thiết kế hoạt động
+          </DialogTitle>
+          <DialogDescription>
+            Gợi ý hoạt động dạy học tương tác theo bối cảnh môn {lesson.subject} {lesson.grade}.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-3 py-2 text-xs">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs font-semibold">Loại hoạt động</Label>
+              <select
+                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-xs"
+                value={phase}
+                onChange={(e) => setPhase(e.target.value)}
+              >
+                <option value="Khởi động">Khởi động (Trò chơi, tạo hứng thú)</option>
+                <option value="Khám phá">Khám phá / Hình thành kiến thức</option>
+                <option value="Luyện tập">Luyện tập / Thực hành</option>
+                <option value="Vận dụng">Vận dụng / Mở rộng</option>
+              </select>
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Thời lượng (phút)</Label>
+              <Input
+                type="number"
+                min={2}
+                max={30}
+                className="mt-1 text-xs"
+                value={duration}
+                onChange={(e) => setDuration(parseInt(e.target.value, 10) || 5)}
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs font-semibold">Yêu cầu đặc biệt (tùy chọn)</Label>
+            <Input
+              className="mt-1 text-xs"
+              placeholder="VD: Dùng phương pháp khăn trải bàn, tích hợp trò chơi vận động..."
+              value={requirement}
+              onChange={(e) => setRequirement(e.target.value)}
+            />
+          </div>
+
+          <Button
+            onClick={handleGenerate}
+            disabled={loading}
+            className="bg-violet-600 hover:bg-violet-700 text-white font-semibold gap-1.5 mt-1"
+          >
+            {loading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <WandSparkles className="size-4" />
+            )}
+            {loading ? 'AI đang tư duy và biên soạn...' : 'Tạo hoạt động với AI'}
+          </Button>
+
+          {/* Preview Box */}
+          {generated && (
+            <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50/50 p-4 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm text-violet-900">{generated.title}</span>
+                <span className="text-xs text-violet-700 font-medium">{generated.durationMinutes} phút</span>
+              </div>
+              <p className="text-xs text-slate-700 leading-relaxed">
+                🎯 <strong>Mục tiêu:</strong> {generated.objective}
+              </p>
+              <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                <div className="bg-white p-2.5 rounded-lg border border-violet-100">
+                  <strong className="text-teal-800 block mb-1">Hoạt động Giáo viên:</strong>
+                  <p className="text-slate-700 leading-relaxed">{generated.teacherActivity}</p>
+                </div>
+                <div className="bg-white p-2.5 rounded-lg border border-violet-100">
+                  <strong className="text-blue-800 block mb-1">Hoạt động Học sinh:</strong>
+                  <p className="text-slate-700 leading-relaxed">{generated.studentActivity}</p>
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-violet-200/80">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onReplaceCurrent(generated)}
+                  className="text-xs h-8 border-violet-300"
+                >
+                  Thay thế hoạt động hiện tại
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => onInsertNew(generated)}
+                  className="text-xs h-8 bg-violet-600 hover:bg-violet-700 text-white font-semibold"
+                >
+                  Chèn làm hoạt động mới
+                </Button>
+              </div>
             </div>
           )}
         </div>
-      </div>
-    </div>
+
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={onClose}>Đóng</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Modal Dialog: AI Full Draft Generator ────────────────────────────────────
+function AiFullDraftModal({
+  open,
+  classes,
+  onClose,
+  onCreated,
+}: {
+  open: boolean
+  classes: ClassRecord[]
+  onClose: () => void
+  onCreated: (plan: LessonPlan) => void
+}) {
+  const [title, setTitle] = useState('')
+  const [subject, setSubject] = useState('Toán')
+  const [classroomId, setClassroomId] = useState('')
+  const [requirements, setRequirements] = useState('')
+  const [generating, setGenerating] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setTitle('')
+      setSubject('Toán')
+      setClassroomId(classes[0]?.id || '')
+      setRequirements('')
+    }
+  }, [open, classes])
+
+  const handleGenerateFullDraft = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!title.trim()) { toast.error('Vui lòng nhập tên bài học'); return }
+    setGenerating(true)
+    try {
+      const cls = classes.find((c) => c.id === classroomId)
+      const gradeNum = parseInt(cls?.name?.replace(/\D/g, '') || '4', 10) || 4
+
+      toast.info('AI đang tạo toàn bộ bản nháp kế hoạch bài dạy...')
+      const aiPlan: GeneratedLessonPlan = await aiGenerateLessonPlan({
+        grade: gradeNum,
+        subject,
+        lessonTitle: title.trim(),
+        durationMinutes: 40,
+        requirements: requirements.trim() || undefined,
+      })
+
+      const activities: Activity[] = (aiPlan.activities || []).map((a, i) => ({
+        id: `act-${Date.now()}-${i}`,
+        phase: a.activityType || (i === 0 ? 'Khởi động' : i === 1 ? 'Khám phá' : i === 2 ? 'Luyện tập' : 'Vận dụng'),
+        title: a.title,
+        minutes: a.durationMinutes || 10,
+        method: (a.methods || []).join(', ') || 'Thảo luận nhóm',
+        technique: (a.techniques || []).join(', ') || 'Động não',
+        competencies: (a.competencies || []).join(', '),
+        qualities: (a.qualities || []).join(', '),
+        equipment: '',
+        objective: a.objective,
+        teacher: a.teacherActivity,
+        students: a.studentActivity,
+        sortOrder: i,
+      }))
+
+      const created = await createLessonPlan({
+        title: title.trim(),
+        subject,
+        grade: cls?.name || 'Lớp 4A',
+        classroomId: classroomId || undefined,
+        duration: 40,
+        objective: aiPlan.objectives,
+        teachingEquipment: aiPlan.teachingEquipment,
+        status: 'DRAFT',
+        activities: activities.length > 0 ? activities : starterActivities,
+      })
+
+      toast.success('AI đã tạo bản nháp giáo án hoàn chỉnh!')
+      onCreated(created)
+      onClose()
+    } catch (err: any) {
+      toast.error(err?.message || 'Không thể tạo bản nháp giáo án lúc này')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-violet-900">
+            <Sparkles className="size-4 text-violet-600" /> Tạo toàn bộ bản nháp KHBD bằng AI
+          </DialogTitle>
+          <DialogDescription>
+            AI sẽ tự động soạn đầy đủ 4 bước (Khởi động, Khám phá, Luyện tập, Vận dụng) và mục tiêu chuẩn.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleGenerateFullDraft} className="grid gap-3.5 py-2 text-xs">
+          <div>
+            <Label className="text-xs font-semibold">Tên bài học *</Label>
+            <Input
+              className="mt-1 text-xs"
+              placeholder="VD: Tiết 1: Hình bình hành"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs font-semibold">Môn học *</Label>
+              <select
+                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-xs"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+              >
+                <option value="Toán">Toán</option>
+                <option value="Tiếng Việt">Tiếng Việt</option>
+                <option value="Khoa học">Khoa học</option>
+                <option value="Lịch sử & Địa lí">Lịch sử & Địa lí</option>
+                <option value="Tin học">Tin học</option>
+              </select>
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Lớp học *</Label>
+              <select
+                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-xs"
+                value={classroomId}
+                onChange={(e) => setClassroomId(e.target.value)}
+              >
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs font-semibold">Yêu cầu sư phạm (tùy chọn)</Label>
+            <textarea
+              rows={2}
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-background px-3 py-2 text-xs focus:outline-none focus:border-violet-400"
+              placeholder="VD: Tăng cường hoạt động trải nghiệm thực hành cắt ghép hình..."
+              value={requirements}
+              onChange={(e) => setRequirements(e.target.value)}
+            />
+          </div>
+
+          <DialogFooter className="mt-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={generating}>
+              Hủy
+            </Button>
+            <Button
+              type="submit"
+              disabled={generating}
+              className="bg-violet-600 hover:bg-violet-700 text-white font-semibold gap-1.5"
+            >
+              {generating ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <WandSparkles className="size-4" />
+              )}
+              {generating ? 'AI đang biên soạn...' : 'Bắt đầu tạo với AI'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
