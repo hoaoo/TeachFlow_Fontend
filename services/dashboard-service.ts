@@ -96,3 +96,20 @@ export async function updateScheduleStatus(
   return await api.patch(`/schedules/${scheduleId}`, data);
 }
 
+export async function getDashboardSchedule(params: {
+  date?: string;
+  from?: string;
+  to?: string;
+}): Promise<DashboardLesson[]> {
+  try {
+    const query = new URLSearchParams();
+    if (params.date) query.set('date', params.date);
+    if (params.from) query.set('from', params.from);
+    if (params.to) query.set('to', params.to);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return await api.get<DashboardLesson[]>(`/dashboard/schedule${qs}`);
+  } catch {
+    return [];
+  }
+}
+

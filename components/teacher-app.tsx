@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bell, BookOpen, CalendarDays, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock3, Clock,
   FileText, Files, GraduationCap, Grid2X2, LayoutDashboard, Library, Menu, MoreHorizontal,
   Plus, Search, Settings, Sparkles, Users, X, ArrowUpRight, CircleHelp, School, Send,
-  SlidersHorizontal, Flame, UserRound, ChevronRight, BookMarked, LogIn, LogOut, KeyRound,
+  SlidersHorizontal, Flame, UserRound, ChevronRight, ChevronLeft, Calendar, BookMarked, LogIn, LogOut, KeyRound,
   Loader2, Copy, BookmarkPlus, HelpCircle, Gamepad2, FileQuestion, MessageSquarePlus, Shield,
   Edit2, Trash2
 } from 'lucide-react'
@@ -27,6 +27,7 @@ import { WorksheetManager } from '@/components/worksheet-manager'
 import { NotificationDropdown } from '@/components/notification-dropdown'
 import {
   getDashboardData,
+  getDashboardSchedule as apiGetDashboardSchedule,
   toggleTask as apiToggleTask,
   createTask as apiCreateTask,
   deleteTask as apiDeleteTask,
@@ -332,9 +333,70 @@ function Header({
 
 function PageTitle({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description?: string; action?: React.ReactNode }) { return <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div>{eyebrow && <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-teal-600">{eyebrow}</p>}<h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">{title}</h1>{description && <p className="mt-2 text-sm text-slate-500">{description}</p>}</div>{action}</div> }
 
+function formatYYYYMMDD(d: Date): string {
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function parseYYYYMMDD(str: string): Date {
+  if (!str) return new Date()
+  const parts = str.split('-').map(Number)
+  if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) return new Date()
+  return new Date(parts[0], parts[1] - 1, parts[2])
+}
+
+function getMonday(d: Date): Date {
+  const date = new Date(d)
+  const day = date.getDay()
+  const diff = date.getDate() - day + (day === 0 ? -6 : 1)
+  const mon = new Date(date)
+  mon.setDate(diff)
+  return mon
+}
+
+function getSunday(monday: Date): Date {
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  return sunday
+}
+
+function formatVietnameseDate(d: Date): string {
+  const weekdays = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy']
+  const dayName = weekdays[d.getDay()]
+  const day = d.getDate()
+  const month = d.getMonth() + 1
+  const year = d.getFullYear()
+  return `${dayName}, ${day} tháng ${month}, ${year}`
+}
+
+function formatVietnameseWeek(monday: Date, sunday: Date): string {
+  const monDay = monday.getDate()
+  const monMonth = monday.getMonth() + 1
+  const sunDay = sunday.getDate()
+  const sunMonth = sunday.getMonth() + 1
+  const year = sunday.getFullYear()
+
+  if (monMonth === sunMonth) {
+    return `${monDay} - ${sunDay} tháng ${monMonth}, ${year}`
+  } else {
+    return `${monDay}/${monMonth} - ${sunDay}/${sunMonth}, ${year}`
+  }
+}
+
+function formatVietnameseDayShort(dateStr: string): string {
+  const d = parseYYYYMMDD(dateStr)
+  const weekdays = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy']
+  const dayName = weekdays[d.getDay()]
+  const day = String(d.getDate()).padStart(2, '0')
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  return `${dayName}, ${day}/${month}`
+}
+
 function computeScheduleStatus(
   lesson: DashboardLesson,
-  currentHHMMSS: string,
+  nowTime: Date,
 ): { label: string; tone: 'teal' | 'blue' | 'slate' | 'red'; code: string } {
   if (lesson.isManualStatus) {
     if (lesson.status === 'CANCELLED') return { label: 'Đã hủy', tone: 'red', code: 'CANCELLED' }
@@ -343,16 +405,29 @@ function computeScheduleStatus(
     if (lesson.status === 'PLANNED' || lesson.status === 'NOT_STARTED') return { label: 'Chưa bắt đầu', tone: 'slate', code: 'PLANNED' }
   }
 
-  const currentHHMM = currentHHMMSS.slice(0, 5)
-  const start = lesson.startTime || '07:00'
-  const end = lesson.endTime || '07:45'
-
   if (lesson.status === 'CANCELLED') {
     return { label: 'Đã hủy', tone: 'red', code: 'CANCELLED' }
   }
-  if (currentHHMM < start) {
+
+  const lessonDateStr = lesson.plannedDate || formatYYYYMMDD(nowTime)
+  const startStr = lesson.startTime || '07:00'
+  const endStr = lesson.endTime || '07:45'
+
+  const [y, m, d] = lessonDateStr.split('-').map(Number)
+  const [sh, sm] = startStr.split(':').map(Number)
+  const [eh, em] = endStr.split(':').map(Number)
+
+  if (isNaN(y) || isNaN(m) || isNaN(d) || isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) {
     return { label: 'Chưa bắt đầu', tone: 'slate', code: 'PLANNED' }
-  } else if (currentHHMM >= start && currentHHMM <= end) {
+  }
+
+  const slotStart = new Date(y, m - 1, d, sh, sm, 0)
+  const slotEnd = new Date(y, m - 1, d, eh, em, 0)
+
+  const nowMs = nowTime.getTime()
+  if (nowMs < slotStart.getTime()) {
+    return { label: 'Chưa bắt đầu', tone: 'slate', code: 'PLANNED' }
+  } else if (nowMs >= slotStart.getTime() && nowMs <= slotEnd.getTime()) {
     return { label: 'Đang diễn ra', tone: 'teal', code: 'IN_PROGRESS' }
   } else {
     return { label: 'Đã hoàn thành', tone: 'blue', code: 'TAUGHT' }
@@ -362,13 +437,20 @@ function computeScheduleStatus(
 function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   const [data, setData] = useState<DashboardData | null>(null)
   const [tasksList, setTasksList] = useState<DashboardTask[]>([])
-  const [lessonsList, setLessonsList] = useState<DashboardLesson[]>([])
   const [loading, setLoading] = useState(true)
 
   // Real-time clock (HH:mm:ss in local time)
+  const [nowDate, setNowDate] = useState<Date>(() => new Date())
   const [currentTimeStr, setCurrentTimeStr] = useState<string>(() => {
     return new Date().toLocaleTimeString('vi-VN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
   })
+
+  // Schedule View State
+  const [scheduleViewMode, setScheduleViewMode] = useState<'day' | 'week'>('day')
+  const [selectedDate, setSelectedDate] = useState<string>(() => formatYYYYMMDD(new Date()))
+  const [scheduleLessons, setScheduleLessons] = useState<DashboardLesson[]>([])
+  const [loadingSchedule, setLoadingSchedule] = useState<boolean>(false)
+  const scheduleReqSeq = useRef(0)
 
   // Task creation modal
   const [taskModalOpen, setTaskModalOpen] = useState(false)
@@ -386,20 +468,23 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   const [editEndTime, setEditEndTime] = useState('07:45')
   const [savingStatus, setSavingStatus] = useState(false)
 
+  // Clock tick every second
   useEffect(() => {
     const timer = setInterval(() => {
-      setCurrentTimeStr(new Date().toLocaleTimeString('vi-VN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }))
+      const n = new Date()
+      setNowDate(n)
+      setCurrentTimeStr(n.toLocaleTimeString('vi-VN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }))
     }, 1000)
     return () => clearInterval(timer)
   }, [])
 
+  // Initial load dashboard stats & tasks
   useEffect(() => {
     let alive = true
     getDashboardData().then((res) => {
       if (alive && res) {
         setData(res)
         if (res.tasks) setTasksList(res.tasks)
-        if (res.lessons) setLessonsList(res.lessons)
       }
       if (alive) setLoading(false)
     }).catch(() => {
@@ -407,6 +492,79 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
     })
     return () => { alive = false }
   }, [])
+
+  // Date calculations
+  const todayStr = useMemo(() => formatYYYYMMDD(nowDate), [nowDate])
+  const isCurrentDate = selectedDate === todayStr
+
+  const selectedDateObj = useMemo(() => parseYYYYMMDD(selectedDate), [selectedDate])
+  const mondayObj = useMemo(() => getMonday(selectedDateObj), [selectedDateObj])
+  const sundayObj = useMemo(() => getSunday(mondayObj), [mondayObj])
+  const mondayStr = useMemo(() => formatYYYYMMDD(mondayObj), [mondayObj])
+  const sundayStr = useMemo(() => formatYYYYMMDD(sundayObj), [sundayObj])
+
+  const isCurrentWeek = useMemo(() => {
+    const curMonStr = formatYYYYMMDD(getMonday(new Date()))
+    return mondayStr === curMonStr
+  }, [mondayStr])
+
+  // Fetch schedule whenever viewMode or selectedDate changes
+  useEffect(() => {
+    const reqId = ++scheduleReqSeq.current
+    setLoadingSchedule(true)
+
+    if (scheduleViewMode === 'day') {
+      apiGetDashboardSchedule({ date: selectedDate })
+        .then((res) => {
+          if (reqId === scheduleReqSeq.current) {
+            setScheduleLessons(res)
+            setLoadingSchedule(false)
+          }
+        })
+        .catch(() => {
+          if (reqId === scheduleReqSeq.current) setLoadingSchedule(false)
+        })
+    } else {
+      apiGetDashboardSchedule({ from: mondayStr, to: sundayStr })
+        .then((res) => {
+          if (reqId === scheduleReqSeq.current) {
+            setScheduleLessons(res)
+            setLoadingSchedule(false)
+          }
+        })
+        .catch(() => {
+          if (reqId === scheduleReqSeq.current) setLoadingSchedule(false)
+        })
+    }
+  }, [scheduleViewMode, selectedDate, mondayStr, sundayStr])
+
+  const handlePrev = () => {
+    if (scheduleViewMode === 'day') {
+      const prev = new Date(selectedDateObj)
+      prev.setDate(prev.getDate() - 1)
+      setSelectedDate(formatYYYYMMDD(prev))
+    } else {
+      const prev = new Date(mondayObj)
+      prev.setDate(prev.getDate() - 7)
+      setSelectedDate(formatYYYYMMDD(prev))
+    }
+  }
+
+  const handleNext = () => {
+    if (scheduleViewMode === 'day') {
+      const next = new Date(selectedDateObj)
+      next.setDate(next.getDate() + 1)
+      setSelectedDate(formatYYYYMMDD(next))
+    } else {
+      const next = new Date(mondayObj)
+      next.setDate(next.getDate() + 7)
+      setSelectedDate(formatYYYYMMDD(next))
+    }
+  }
+
+  const handleToday = () => {
+    setSelectedDate(formatYYYYMMDD(new Date()))
+  }
 
   const toggle = async (index: number) => {
     const target = tasksList[index]
@@ -464,7 +622,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   const openStatusModal = (lesson: DashboardLesson, index: number) => {
     setSelectedLesson(lesson)
     setSelectedLessonIndex(index)
-    const statusInfo = computeScheduleStatus(lesson, currentTimeStr)
+    const statusInfo = computeScheduleStatus(lesson, nowDate)
     setEditStatus(lesson.isManualStatus && lesson.status ? lesson.status : statusInfo.code)
     setEditStartTime(lesson.startTime || '07:00')
     setEditEndTime(lesson.endTime || '07:45')
@@ -487,8 +645,8 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
           isManualStatus: true,
         })
       }
-      setLessonsList(prev => prev.map((item, idx) => {
-        if (idx === selectedLessonIndex) {
+      setScheduleLessons(prev => prev.map((item, idx) => {
+        if (idx === selectedLessonIndex || (selectedLesson.id && item.id === selectedLesson.id)) {
           return {
             ...item,
             status: editStatus,
@@ -508,6 +666,18 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
       setSavingStatus(false)
     }
   }
+
+  // Group lessons by plannedDate for week view
+  const groupedLessons = useMemo(() => {
+    if (scheduleViewMode !== 'week') return []
+    const map = new Map<string, DashboardLesson[]>()
+    for (const lesson of scheduleLessons) {
+      const d = lesson.plannedDate || 'Chưa định ngày'
+      if (!map.has(d)) map.set(d, [])
+      map.get(d)!.push(lesson)
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+  }, [scheduleViewMode, scheduleLessons])
 
   const completedTasksCount = tasksList.filter((t) => t.done).length
   const totalTasksCount = tasksList.length
@@ -535,7 +705,74 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
     )
   }
 
-  const overallPercent = data?.classProgress?.overallPercent || 0
+  const renderLessonItem = (lesson: DashboardLesson, i: number, globalIdx?: number) => {
+    const statusInfo = computeScheduleStatus(lesson, nowDate);
+    const idx = globalIdx !== undefined ? globalIdx : i;
+    return (
+      <div
+        key={lesson.id || lesson.title + idx}
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 p-4 last:border-0 hover:bg-slate-50/60 transition"
+      >
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className="w-24 shrink-0 text-center bg-slate-50 py-1.5 px-2 rounded-xl border border-slate-100">
+            <p className="text-xs font-bold text-slate-800 tracking-tight">
+              {lesson.startTime || '07:00'} - {lesson.endTime || '07:45'}
+            </p>
+            <p className="mt-0.5 text-[10px] font-medium text-slate-400">Tiết {i + 1}</p>
+          </div>
+
+          <div
+            className={`h-10 w-1 rounded-full shrink-0 ${
+              statusInfo.tone === 'teal'
+                ? 'bg-teal-500'
+                : statusInfo.tone === 'blue'
+                  ? 'bg-blue-500'
+                  : statusInfo.tone === 'red'
+                    ? 'bg-red-400'
+                    : 'bg-slate-300'
+            }`}
+          />
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-semibold text-sm text-slate-900 truncate">{lesson.title}</h3>
+              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                {lesson.subject}
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-slate-500 truncate">
+              {lesson.className}{lesson.gradeName ? ` (${lesson.gradeName})` : ''} · {lesson.room}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold border ${
+              statusInfo.tone === 'teal'
+                ? 'bg-teal-50 text-teal-700 border-teal-200'
+                : statusInfo.tone === 'blue'
+                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                  : statusInfo.tone === 'red'
+                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                    : 'bg-slate-100 text-slate-600 border-slate-200'
+            }`}
+          >
+            {statusInfo.tone === 'teal' && <span className="size-1.5 rounded-full bg-teal-500 animate-ping" />}
+            {statusInfo.label}
+          </span>
+
+          <button
+            onClick={() => openStatusModal(lesson, idx)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-teal-700 transition shadow-2xs"
+            title="Cập nhật trạng thái hoặc thời gian"
+          >
+            <Edit2 className="size-3" /> Cập nhật trạng thái
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col gap-8">
@@ -595,8 +832,8 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
       <section className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
         {/* Kế hoạch & Lịch dạy Card */}
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-100">
-          <div className="flex items-center justify-between border-b border-slate-100 p-5">
-            <div>
+          <div className="flex flex-col gap-3 border-b border-slate-100 p-5">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <h2 className="font-semibold text-slate-900 text-base">Kế hoạch & Lịch dạy</h2>
                 {/* Live Digital Clock */}
@@ -605,80 +842,132 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
                   <span>{currentTimeStr}</span>
                 </div>
               </div>
-              <p className="mt-1 text-xs text-slate-400">{data?.greeting?.date || "Hôm nay"}</p>
+              <button
+                onClick={() => onNavigate('Lịch dạy')}
+                className="text-sm font-medium text-teal-600 hover:text-teal-700 inline-flex items-center"
+              >
+                Xem lịch <ArrowUpRight className="ml-1 inline size-4" />
+              </button>
             </div>
-            <button onClick={() => onNavigate('Lịch dạy')} className="text-sm font-medium text-teal-600 hover:text-teal-700 inline-flex items-center">
-              Xem lịch <ArrowUpRight className="ml-1 inline size-4" />
-            </button>
+
+            {/* Control bar: [Ngày] [Tuần] ‹ Date Navigation › */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <div className="flex items-center rounded-xl bg-slate-100 p-1 text-xs font-medium">
+                <button
+                  type="button"
+                  onClick={() => setScheduleViewMode('day')}
+                  className={`rounded-lg px-3 py-1.5 transition ${
+                    scheduleViewMode === 'day'
+                      ? 'bg-white font-semibold text-slate-900 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Ngày
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScheduleViewMode('week')}
+                  className={`rounded-lg px-3 py-1.5 transition ${
+                    scheduleViewMode === 'week'
+                      ? 'bg-white font-semibold text-slate-900 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Tuần
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrev}
+                  className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition shadow-2xs"
+                  title={scheduleViewMode === 'day' ? 'Ngày trước' : 'Tuần trước'}
+                >
+                  <ChevronLeft className="size-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleToday}
+                  className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition shadow-2xs ${
+                    (scheduleViewMode === 'day' ? isCurrentDate : isCurrentWeek)
+                      ? 'border-teal-200 bg-teal-50 text-teal-700 font-semibold'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  {scheduleViewMode === 'day' ? 'Hôm nay' : 'Tuần này'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleNext}
+                  className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition shadow-2xs"
+                  title={scheduleViewMode === 'day' ? 'Ngày sau' : 'Tuần sau'}
+                >
+                  <ChevronRight className="size-4" />
+                </button>
+
+                <div className="relative flex items-center">
+                  <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-800 hover:bg-slate-50 transition shadow-2xs">
+                    <Calendar className="size-3.5 text-teal-600" />
+                    <span>
+                      {scheduleViewMode === 'day'
+                        ? formatVietnameseDate(selectedDateObj)
+                        : formatVietnameseWeek(mondayObj, sundayObj)}
+                    </span>
+                    <input
+                      type="date"
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      value={selectedDate}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setSelectedDate(e.target.value)
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
+
           <div className="flex flex-col">
-            {lessonsList.length > 0 ? (
-              lessonsList.map((lesson, i) => {
-                const statusInfo = computeScheduleStatus(lesson, currentTimeStr);
-                return (
-                  <div key={lesson.title + i} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 p-4 last:border-0 hover:bg-slate-50/60 transition">
-                    <div className="flex items-center gap-3.5 min-w-0">
-                      <div className="w-24 shrink-0 text-center bg-slate-50 py-1.5 px-2 rounded-xl border border-slate-100">
-                        <p className="text-xs font-bold text-slate-800 tracking-tight">
-                          {lesson.startTime || '07:00'} - {lesson.endTime || '07:45'}
-                        </p>
-                        <p className="mt-0.5 text-[10px] font-medium text-slate-400">Tiết {i + 1}</p>
-                      </div>
-
-                      <div
-                        className={`h-10 w-1 rounded-full shrink-0 ${
-                          statusInfo.tone === 'teal'
-                            ? 'bg-teal-500'
-                            : statusInfo.tone === 'blue'
-                              ? 'bg-blue-500'
-                              : statusInfo.tone === 'red'
-                                ? 'bg-red-400'
-                                : 'bg-slate-300'
-                        }`}
-                      />
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-semibold text-sm text-slate-900 truncate">{lesson.title}</h3>
-                          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">{lesson.subject}</span>
-                        </div>
-                        <p className="mt-0.5 text-xs text-slate-500 truncate">
-                          {lesson.className}{lesson.gradeName ? ` (${lesson.gradeName})` : ''} · {lesson.room}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold border ${
-                          statusInfo.tone === 'teal'
-                            ? 'bg-teal-50 text-teal-700 border-teal-200'
-                            : statusInfo.tone === 'blue'
-                              ? 'bg-blue-50 text-blue-700 border-blue-200'
-                              : statusInfo.tone === 'red'
-                                ? 'bg-rose-50 text-rose-700 border-rose-200'
-                                : 'bg-slate-100 text-slate-600 border-slate-200'
-                        }`}
-                      >
-                        {statusInfo.tone === 'teal' && <span className="size-1.5 rounded-full bg-teal-500 animate-ping" />}
-                        {statusInfo.label}
+            {loadingSchedule ? (
+              <div className="flex items-center justify-center py-12 gap-2 text-slate-400">
+                <Loader2 className="size-5 animate-spin text-teal-600" />
+                <span className="text-xs font-medium">Đang tải lịch dạy...</span>
+              </div>
+            ) : scheduleViewMode === 'day' ? (
+              scheduleLessons.length > 0 ? (
+                scheduleLessons.map((lesson, i) => renderLessonItem(lesson, i))
+              ) : (
+                <div className="p-8 text-center text-sm text-slate-400">
+                  Không có lịch dạy nào vào {formatVietnameseDate(selectedDateObj)}. Nhấn "Xem lịch" để lên lịch giảng dạy.
+                </div>
+              )
+            ) : (
+              groupedLessons.length > 0 ? (
+                groupedLessons.map(([dateStr, dayLessons]) => (
+                  <div key={dateStr} className="border-b border-slate-100 last:border-0">
+                    <div className="flex items-center justify-between bg-slate-50/80 px-5 py-2 border-y border-slate-100">
+                      <span className="text-xs font-semibold text-slate-800">
+                        {formatVietnameseDayShort(dateStr)}
                       </span>
-
-                      <button
-                        onClick={() => openStatusModal(lesson, i)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-teal-700 transition shadow-2xs"
-                        title="Cập nhật trạng thái hoặc thời gian"
-                      >
-                        <Edit2 className="size-3" /> Cập nhật trạng thái
-                      </button>
+                      <span className="text-[11px] font-medium text-slate-500">
+                        {dayLessons.length} tiết dạy
+                      </span>
+                    </div>
+                    <div>
+                      {dayLessons.map((lesson, i) => renderLessonItem(lesson, i))}
                     </div>
                   </div>
-                );
-              })
-            ) : (
-              <div className="p-8 text-center text-sm text-slate-400">
-                Chưa có lịch dạy nào. Nhấn "Xem lịch" để lên lịch giảng dạy.
-              </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-sm text-slate-400">
+                  Không có lịch dạy nào trong tuần {formatVietnameseWeek(mondayObj, sundayObj)}. Nhấn "Xem lịch" để lên lịch giảng dạy.
+                </div>
+              )
             )}
           </div>
         </div>
