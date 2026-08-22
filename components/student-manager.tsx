@@ -29,6 +29,7 @@ import {
   type SchoolYearOption,
   type GradeOption,
 } from '@/services/classroom-service'
+import { getStudentAcademicProfile, type StudentAcademicProfile } from '@/services/assessment-service'
 import { generateStudentComment } from '@/services/ai-service'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -1481,20 +1482,27 @@ function StudentTabAttendance({ studentId }: { studentId: string }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TAB 3: ĐÁNH GIÁ HỌC SINH
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 3: ĐÁNH GIÁ HỌC SINH (HỒ SƠ HỌC LỰC & SỔ ĐIỂM CÁ NHÂN)
 // ═══════════════════════════════════════════════════════════════════════════
 
 function StudentTabAssessments({ studentId }: { studentId: string }) {
+  const [profile, setProfile] = useState<StudentAcademicProfile | null>(null)
   const [data, setData] = useState<StudentAssessmentsResponse | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let isMounted = true
-    getStudentAssessments(studentId)
-      .then((res) => {
-        if (isMounted) setData(res)
+    Promise.all([
+      getStudentAcademicProfile(studentId).catch(() => null),
+      getStudentAssessments(studentId).catch(() => null),
+    ])
+      .then(([profRes, dataRes]) => {
+        if (isMounted) {
+          setProfile(profRes)
+          setData(dataRes)
+        }
       })
-      .catch(() => {})
       .finally(() => {
         if (isMounted) setLoading(false)
       })
@@ -1503,67 +1511,200 @@ function StudentTabAssessments({ studentId }: { studentId: string }) {
     }
   }, [studentId])
 
+  if (loading) {
+    return (
+      <div className="py-16 text-center text-slate-400">
+        <Loader2 className="size-6 animate-spin mx-auto text-teal-600 mb-2" />
+        <p className="text-xs">Đang tải hồ sơ đánh giá học tập...</p>
+      </div>
+    )
+  }
+
   return (
-    <Card className="border-slate-200 shadow-2xs">
-      <CardHeader className="p-4 sm:p-5 flex flex-row items-center justify-between border-b border-slate-100">
-        <div>
-          <CardTitle className="text-base font-bold text-slate-900">
-            Kết quả đánh giá & Nhận xét định kỳ ({data?.summary?.totalAssessments || 0} bài)
+    <div className="space-y-5">
+      {/* Overview Academic Card */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-slate-500">Điểm trung bình chung</p>
+              <p className="text-2xl font-extrabold text-teal-700 mt-0.5">
+                {profile?.overallAverageScore !== null && profile?.overallAverageScore !== undefined
+                  ? `${profile.overallAverageScore} đ`
+                  : '—'}
+              </p>
+            </div>
+            <div className="grid size-10 place-items-center rounded-xl bg-teal-50 text-teal-600">
+              <Award className="size-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-slate-500">Xếp loại học lực</p>
+              <div className="mt-1">
+                {profile?.overallClassification ? (
+                  <Badge
+                    variant="outline"
+                    className={`text-xs font-bold px-2.5 py-0.5 ${
+                      profile.overallClassification.code === 'EXCELLENT'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : profile.overallClassification.code === 'GOOD'
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : profile.overallClassification.code === 'COMPLETED'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : 'bg-rose-50 text-rose-700 border-rose-200'
+                    }`}
+                  >
+                    {profile.overallClassification.label}
+                  </Badge>
+                ) : (
+                  <span className="text-slate-400 text-xs font-medium">Chưa đủ dữ liệu</span>
+                )}
+              </div>
+            </div>
+            <div className="grid size-10 place-items-center rounded-xl bg-blue-50 text-blue-600">
+              <GraduationCap className="size-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-slate-500">Tổng số bài kiểm tra</p>
+              <p className="text-2xl font-extrabold text-slate-800 mt-0.5">
+                {data?.summary?.totalAssessments || 0} bài
+              </p>
+            </div>
+            <div className="grid size-10 place-items-center rounded-xl bg-purple-50 text-purple-600">
+              <BookOpen className="size-5" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Subject-by-Subject Transcript Cards */}
+      {profile?.subjects && profile.subjects.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <BarChart3 className="size-4 text-teal-600" /> Kết quả theo từng môn học
+          </h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {profile.subjects.map((sub) => (
+              <Card key={sub.subjectId} className="border-slate-200 shadow-2xs overflow-hidden">
+                <CardHeader className="p-3.5 bg-slate-50/80 border-b border-slate-100 flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-sm font-bold text-slate-900">{sub.subjectName}</CardTitle>
+                    <span className="text-[11px] text-slate-400">{sub.assessments.length} bài kiểm tra</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-base font-extrabold text-teal-700">
+                      {sub.averageScore !== null ? `${sub.averageScore} đ` : '—'}
+                    </span>
+                    {sub.classification && (
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] font-bold ${
+                          sub.classification.code === 'EXCELLENT'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : sub.classification.code === 'GOOD'
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : sub.classification.code === 'COMPLETED'
+                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : 'bg-rose-50 text-rose-700 border-rose-200'
+                        }`}
+                      >
+                        {sub.classification.label}
+                      </Badge>
+                    )}
+                  </div>
+                </CardHeader>
+
+                <CardContent className="p-0">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-50/40 text-[10px] text-slate-400 font-semibold border-b border-slate-100">
+                      <tr>
+                        <th className="py-2 px-3">Lần đánh giá</th>
+                        <th className="py-2 px-2 text-center">Hệ số</th>
+                        <th className="py-2 px-2 text-center">Điểm</th>
+                        <th className="py-2 px-3">Nhận xét</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {sub.assessments.map((a) => (
+                        <tr key={a.id} className="hover:bg-slate-50/50">
+                          <td className="py-2 px-3 font-medium text-slate-800">{a.title}</td>
+                          <td className="py-2 px-2 text-center">
+                            <span className="text-[10px] font-semibold text-slate-500 font-mono">x{a.weight}</span>
+                          </td>
+                          <td className="py-2 px-2 text-center font-bold text-teal-700">
+                            {a.score !== null && a.score !== undefined ? `${a.score}` : '—'}
+                          </td>
+                          <td className="py-2 px-3 text-slate-500 truncate max-w-[150px]">{a.comment || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Detailed Assessment Timeline */}
+      <Card className="border-slate-200 shadow-2xs">
+        <CardHeader className="p-4 border-b border-slate-100">
+          <CardTitle className="text-sm font-bold text-slate-900">
+            Chi tiết toàn bộ bài đánh giá & Nhận xét định kỳ ({data?.items?.length || 0} bài)
           </CardTitle>
           <CardDescription className="text-xs mt-0.5">
-            Điểm số và đánh giá mức độ đạt chuẩn theo Thông tư 27.
+            Tổng hợp kết quả đánh giá theo tiêu chuẩn Thông tư 27 của Bộ GD&ĐT.
           </CardDescription>
-        </div>
-        {data?.summary?.avgScore !== null && data?.summary?.avgScore !== undefined && (
-          <div className="text-right">
-            <span className="text-xs text-slate-400 block">Điểm TB</span>
-            <span className="text-lg font-extrabold text-teal-700">{data.summary.avgScore} đ</span>
-          </div>
-        )}
-      </CardHeader>
-      <CardContent className="p-0 overflow-x-auto">
-        {loading ? (
-          <div className="py-16 text-center text-slate-400">
-            <Loader2 className="size-6 animate-spin mx-auto text-teal-600 mb-2" />
-            <p className="text-xs">Đang tải kết quả đánh giá...</p>
-          </div>
-        ) : (data?.items || []).length === 0 ? (
-          <div className="py-16 text-center text-slate-400">
-            <BarChart3 className="size-8 mx-auto text-slate-300 mb-2" />
-            <p className="text-sm font-semibold text-slate-700">Chưa có dữ liệu đánh giá</p>
-          </div>
-        ) : (
-          <table className="w-full text-xs text-left">
-            <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
-              <tr>
-                <th className="py-3 px-4">Bài đánh giá</th>
-                <th className="py-3 px-3">Môn học</th>
-                <th className="py-3 px-3">Lớp</th>
-                <th className="py-3 px-3">Ngày</th>
-                <th className="py-3 px-3">Điểm số / Mức độ</th>
-                <th className="py-3 px-4">Nhận xét</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {data?.items.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                  <td className="py-3 px-4 font-bold text-slate-900">{item.name}</td>
-                  <td className="py-3 px-3 font-semibold text-teal-900">{item.subjectName}</td>
-                  <td className="py-3 px-3 text-slate-600">{item.className}</td>
-                  <td className="py-3 px-3 text-slate-600">{item.date}</td>
-                  <td className="py-3 px-3">
-                    <span className="font-extrabold text-teal-700">
-                      {typeof item.score === 'number' && item.score !== null ? `${item.score} đ` : 'Đạt'}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-slate-600">{item.comment || item.criterion || '—'}</td>
+        </CardHeader>
+        <CardContent className="p-0 overflow-x-auto">
+          {(!data?.items || data.items.length === 0) ? (
+            <div className="py-12 text-center text-slate-400">
+              <BarChart3 className="size-7 mx-auto text-slate-300 mb-1.5" />
+              <p className="text-xs font-semibold text-slate-600">Chưa có dữ liệu đánh giá chi tiết</p>
+            </div>
+          ) : (
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
+                <tr>
+                  <th className="py-3 px-4">Bài đánh giá</th>
+                  <th className="py-3 px-3">Môn học</th>
+                  <th className="py-3 px-3">Lớp</th>
+                  <th className="py-3 px-3">Ngày</th>
+                  <th className="py-3 px-3">Điểm số / Mức độ</th>
+                  <th className="py-3 px-4">Nhận xét của giáo viên</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </CardContent>
-    </Card>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data.items.map((item) => (
+                  <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-2.5 px-4 font-bold text-slate-900">{item.name}</td>
+                    <td className="py-2.5 px-3 font-semibold text-teal-900">{item.subjectName}</td>
+                    <td className="py-2.5 px-3 text-slate-600">{item.className}</td>
+                    <td className="py-2.5 px-3 text-slate-600">{item.date}</td>
+                    <td className="py-2.5 px-3">
+                      <span className="font-extrabold text-teal-700">
+                        {typeof item.score === 'number' && item.score !== null ? `${item.score} đ` : 'Đạt'}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-4 text-slate-600">{item.comment || item.criterion || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 

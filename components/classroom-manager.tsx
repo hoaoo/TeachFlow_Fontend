@@ -42,6 +42,18 @@ import {
   type TeachingAssignmentRecord,
   type SubjectOption,
 } from '@/services/teaching-assignment-service'
+import {
+  getGradebook,
+  saveAssessmentScores,
+  createAssessmentColumn,
+  updateAssessmentColumn,
+  deleteAssessmentColumn,
+  importGradebookScores,
+  exportGradebook,
+  type GradebookData,
+  type AssessmentColumn,
+  type StudentGradeRow,
+} from '@/services/assessment-service'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -2301,122 +2313,1082 @@ function TabAttendance({ classItem }: { classItem: ClassRecord }) {
 // TAB 5: ĐÁNH GIÁ CỦA LỚP
 // ═══════════════════════════════════════════════════════════════════════════
 
-function TabAssessments({ classItem }: { classItem: ClassRecord }) {
-  const [data, setData] = useState<ClassAssessmentData | null>(null)
-  const [loading, setLoading] = useState(true)
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 5: SỔ ĐIỂM & ĐÁNH GIÁ CỦA LỚP (GRADEBOOK)
+// ═══════════════════════════════════════════════════════════════════════════
 
-  const loadAssessments = useCallback(async () => {
+function TabAssessments({ classItem }: { classItem: ClassRecord }) {
+  const [gradebook, setGradebook] = useState<GradebookData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [subjects, setSubjects] = useState<SubjectOption[]>([])
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('ALL')
+  const [selectedSemester, setSelectedSemester] = useState<number>(1)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // Cell editing state: studentId -> assessmentId -> score (string for typing, or number | null)
+  const [localScores, setLocalScores] = useState<Record<string, Record<string, string | number | null>>>({})
+  const [dirtyCells, setDirtyCells] = useState<Set<string>>(new Set()) // `${studentId}_${assessmentId}`
+  const [saveStatus, setSaveStatus] = useState<'SAVED' | 'DIRTY' | 'SAVING' | 'ERROR'>('SAVED')
+
+  // Dialog states
+  const [createColOpen, setCreateColOpen] = useState(false)
+  const [newColTitle, setNewColTitle] = useState('')
+  const [newColSubjectId, setNewColSubjectId] = useState('')
+  const [newColSemester, setNewColSemester] = useState(1)
+  const [newColType, setNewColType] = useState('THUONG_XUYEN')
+  const [newColWeight, setNewColWeight] = useState(1)
+  const [newColDate, setNewColDate] = useState(new Date().toISOString().split('T')[0])
+  const [creatingCol, setCreatingCol] = useState(false)
+
+  // Single Column Scoring Modal
+  const [scoringColTarget, setScoringColTarget] = useState<AssessmentColumn | null>(null)
+  const [columnScoresState, setColumnScoresState] = useState<Record<string, { score: string; comment: string }>>({})
+  const [savingColumnScores, setSavingColumnScores] = useState(false)
+  const [aiGeneratingStudentId, setAiGeneratingStudentId] = useState<string | null>(null)
+
+  // Import Excel Modal
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  const [importTargetColId, setImportTargetColId] = useState<string>('')
+  const [importRawText, setImportRawText] = useState('')
+  const [importPreviewRows, setImportPreviewRows] = useState<Array<{ row: number; studentCode?: string; fullName?: string; score: number | null; comment?: string; valid: boolean; error?: string }>>([])
+  const [importingScores, setImportingScores] = useState(false)
+
+  // Load subjects
+  useEffect(() => {
+    getSubjects().then((list) => {
+      setSubjects(list)
+      if (list.length > 0 && !newColSubjectId) {
+        setNewColSubjectId(list[0].id)
+      }
+    }).catch(() => {})
+  }, [newColSubjectId])
+
+  // Load Gradebook data
+  const loadGradebookData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getClassAssessments(classItem.id)
-      setData(res)
+      const res = await getGradebook({
+        classroomId: classItem.id,
+        subjectId: selectedSubjectId !== 'ALL' ? selectedSubjectId : undefined,
+        semester: selectedSemester,
+        schoolYearId: classItem.schoolYearId,
+      })
+      setGradebook(res)
+
+      // Initialize local scores from response
+      const initialMap: Record<string, Record<string, string | number | null>> = {}
+      res.students.forEach((s) => {
+        initialMap[s.studentId] = {}
+        res.columns.forEach((c) => {
+          const item = s.scores[c.id]
+          initialMap[s.studentId][c.id] = item?.score !== undefined ? item.score : null
+        })
+      })
+      setLocalScores(initialMap)
+      setDirtyCells(new Set())
+      setSaveStatus('SAVED')
     } catch {
-      setData(null)
+      setGradebook(null)
+      toast.error('Không thể tải dữ liệu sổ điểm lớp')
     } finally {
       setLoading(false)
     }
-  }, [classItem.id])
+  }, [classItem.id, classItem.schoolYearId, selectedSubjectId, selectedSemester])
 
   useEffect(() => {
-    loadAssessments()
-  }, [loadAssessments])
+    loadGradebookData()
+  }, [loadGradebookData])
 
-  const summary = data?.summary || {
-    avgScore: classItem.average,
+  // Handle cell score changes
+  const handleScoreChange = (studentId: string, assessmentId: string, val: string) => {
+    setLocalScores((prev) => ({
+      ...prev,
+      [studentId]: {
+        ...(prev[studentId] || {}),
+        [assessmentId]: val,
+      },
+    }))
+
+    const key = `${studentId}_${assessmentId}`
+    setDirtyCells((prev) => {
+      const next = new Set(prev)
+      next.add(key)
+      return next
+    })
+    setSaveStatus('DIRTY')
+  }
+
+  // Batch Save all modified cell scores
+  const handleSaveAll = async () => {
+    if (!gradebook || dirtyCells.size === 0) return
+
+    setSaveStatus('SAVING')
+    try {
+      // Group dirty cells by assessment column
+      const scoresByCol: Record<string, Array<{ studentId: string; score: number | null }>> = {}
+
+      dirtyCells.forEach((key) => {
+        const [studentId, assessmentId] = key.split('_')
+        const rawVal = localScores[studentId]?.[assessmentId]
+
+        let parsedScore: number | null = null
+        if (rawVal !== null && rawVal !== undefined && rawVal !== '') {
+          const num = typeof rawVal === 'number' ? rawVal : parseFloat(String(rawVal).replace(',', '.'))
+          if (!isNaN(num) && num >= 0 && num <= 10) {
+            parsedScore = num
+          }
+        }
+
+        if (!scoresByCol[assessmentId]) {
+          scoresByCol[assessmentId] = []
+        }
+        scoresByCol[assessmentId].push({
+          studentId,
+          score: parsedScore,
+        })
+      })
+
+      // Send batch requests for each modified column
+      const promises = Object.entries(scoresByCol).map(([colId, items]) =>
+        saveAssessmentScores(colId, items)
+      )
+
+      await Promise.all(promises)
+      toast.success('Đã lưu toàn bộ điểm vào sổ điểm!')
+      setDirtyCells(new Set())
+      setSaveStatus('SAVED')
+      loadGradebookData()
+    } catch {
+      setSaveStatus('ERROR')
+      toast.error('Lưu điểm thất bại, vui lòng kiểm tra lại điểm số')
+    }
+  }
+
+  // Create new assessment column
+  const handleCreateColumn = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newColTitle.trim()) {
+      toast.error('Vui lòng nhập tên lần đánh giá')
+      return
+    }
+
+    setCreatingCol(true)
+    try {
+      await createAssessmentColumn({
+        title: newColTitle.trim(),
+        classroomId: classItem.id,
+        subjectId: newColSubjectId || undefined,
+        semester: newColSemester,
+        assessmentType: newColType,
+        weight: Number(newColWeight) || 1,
+        assessmentDate: newColDate,
+      })
+
+      toast.success(`Đã tạo cột điểm "${newColTitle.trim()}" thành công!`)
+      setCreateColOpen(false)
+      setNewColTitle('')
+      loadGradebookData()
+    } catch (err: any) {
+      toast.error(err?.message || 'Không thể tạo cột điểm mới')
+    } finally {
+      setCreatingCol(false)
+    }
+  }
+
+  // Delete an assessment column
+  const handleDeleteColumn = async (col: AssessmentColumn) => {
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa cột điểm "${col.title}"? Dữ liệu điểm của học sinh ở cột này sẽ bị xóa.`)) {
+      return
+    }
+
+    try {
+      await deleteAssessmentColumn(col.id)
+      toast.success(`Đã xóa cột điểm "${col.title}"`)
+      loadGradebookData()
+    } catch {
+      toast.error('Không thể xóa cột điểm')
+    }
+  }
+
+  // Open single column scoring modal
+  const handleOpenColumnModal = (col: AssessmentColumn) => {
+    setScoringColTarget(col)
+    const initialMap: Record<string, { score: string; comment: string }> = {}
+    gradebook?.students.forEach((s) => {
+      const item = s.scores[col.id]
+      initialMap[s.studentId] = {
+        score: item?.score !== null && item?.score !== undefined ? String(item.score) : '',
+        comment: item?.comment || '',
+      }
+    })
+    setColumnScoresState(initialMap)
+  }
+
+  // Save single column modal scores
+  const handleSaveColumnModalScores = async () => {
+    if (!scoringColTarget) return
+
+    setSavingColumnScores(true)
+    try {
+      const payload = Object.entries(columnScoresState).map(([studentId, data]) => {
+        let parsedScore: number | null = null
+        if (data.score.trim() !== '') {
+          const num = parseFloat(data.score.replace(',', '.'))
+          if (!isNaN(num) && num >= 0 && num <= 10) {
+            parsedScore = num
+          }
+        }
+        return {
+          studentId,
+          score: parsedScore,
+          comment: data.comment.trim() || undefined,
+        }
+      })
+
+      await saveAssessmentScores(scoringColTarget.id, payload)
+      toast.success(`Đã lưu điểm cho cột "${scoringColTarget.title}"`)
+      setScoringColTarget(null)
+      loadGradebookData()
+    } catch {
+      toast.error('Lưu điểm thất bại')
+    } finally {
+      setSavingColumnScores(false)
+    }
+  }
+
+  // AI Comment Suggestion for individual student in scoring modal
+  const handleAiComment = async (student: StudentGradeRow) => {
+    if (!scoringColTarget) return
+    setAiGeneratingStudentId(student.studentId)
+    try {
+      const currentScoreStr = columnScoresState[student.studentId]?.score
+      const currentScore = currentScoreStr ? parseFloat(currentScoreStr) : student.averageScore
+      const res = await generateStudentComment({
+        studentId: student.studentId,
+        subject: scoringColTarget.subjectName,
+        assessmentLevel: student.classification?.code || 'GOOD',
+        notes: `Học sinh đạt điểm ${currentScore || 8.0} trong bài ${scoringColTarget.title}`,
+      })
+
+      const commentText = res.overallAssessment || res.comments?.[0] || 'Hoàn thành tốt nhiệm vụ học tập.'
+
+      setColumnScoresState((prev) => ({
+        ...prev,
+        [student.studentId]: {
+          ...(prev[student.studentId] || { score: '' }),
+          comment: commentText,
+        },
+      }))
+      toast.success(`Đã sinh nhận xét AI cho ${student.fullName}`)
+    } catch {
+      toast.error('Không thể sinh nhận xét tự động')
+    } finally {
+      setAiGeneratingStudentId(null)
+    }
+  }
+
+  // Export Gradebook to Excel (CSV UTF-8 BOM)
+  const handleExportExcel = async () => {
+    try {
+      const data = await exportGradebook({
+        classroomId: classItem.id,
+        subjectId: selectedSubjectId !== 'ALL' ? selectedSubjectId : undefined,
+        semester: selectedSemester,
+        schoolYearId: classItem.schoolYearId,
+      })
+
+      // Convert rows to CSV with BOM for Vietnamese Excel compatibility
+      let csvContent = '\uFEFF' + data.headers.join(',') + '\n'
+      data.rows.forEach((row) => {
+        const escaped = row.map((val) => `"${String(val).replace(/"/g, '""')}"`)
+        csvContent += escaped.join(',') + '\n'
+      })
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `So_Diem_${classItem.name}_HK${selectedSemester}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('Đã xuất file sổ điểm thành công!')
+    } catch {
+      toast.error('Không thể xuất file sổ điểm')
+    }
+  }
+
+  // Parse Raw Text for Excel Import Preview
+  const handleParseImport = (text: string) => {
+    setImportRawText(text)
+    if (!text.trim() || !gradebook) {
+      setImportPreviewRows([])
+      return
+    }
+
+    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
+    const rows: Array<{ row: number; studentCode?: string; fullName?: string; score: number | null; comment?: string; valid: boolean; error?: string }> = []
+
+    lines.forEach((line, idx) => {
+      const parts = line.split(/[,\t|]/).map((p) => p.trim())
+      if (parts.length === 0) return
+
+      const firstPart = parts[0]
+      const secondPart = parts[1] || ''
+      const thirdPart = parts[2] || ''
+
+      let studentCode = ''
+      let fullName = ''
+      let scoreVal: number | null = null
+      let comment = ''
+
+      if (/^HS\d+/i.test(firstPart)) {
+        studentCode = firstPart
+        if (isNaN(Number(secondPart)) && secondPart) {
+          fullName = secondPart
+          if (thirdPart && !isNaN(Number(thirdPart.replace(',', '.')))) {
+            scoreVal = parseFloat(thirdPart.replace(',', '.'))
+          }
+          comment = parts[3] || ''
+        } else if (!isNaN(Number(secondPart.replace(',', '.')))) {
+          scoreVal = parseFloat(secondPart.replace(',', '.'))
+          comment = thirdPart
+        }
+      } else {
+        fullName = firstPart
+        if (!isNaN(Number(secondPart.replace(',', '.')))) {
+          scoreVal = parseFloat(secondPart.replace(',', '.'))
+        }
+        comment = thirdPart
+      }
+
+      let valid = true
+      let error = ''
+
+      if (scoreVal !== null && (scoreVal < 0 || scoreVal > 10)) {
+        valid = false
+        error = 'Điểm số phải từ 0 đến 10'
+      }
+
+      const match = gradebook.students.find(
+        (s) =>
+          (studentCode && s.studentCode?.toLowerCase() === studentCode.toLowerCase()) ||
+          (fullName && s.fullName.toLowerCase() === fullName.toLowerCase())
+      )
+
+      if (!match) {
+        valid = false
+        error = 'Không tìm thấy học sinh trong lớp'
+      }
+
+      rows.push({
+        row: idx + 1,
+        studentCode: studentCode || match?.studentCode,
+        fullName: fullName || match?.fullName,
+        score: scoreVal,
+        comment,
+        valid,
+        error,
+      })
+    })
+
+    setImportPreviewRows(rows)
+  }
+
+  // Commit Batch Import
+  const handleConfirmImport = async () => {
+    if (!importTargetColId || importPreviewRows.length === 0) {
+      toast.error('Vui lòng chọn cột điểm và dán dữ liệu hợp lệ')
+      return
+    }
+
+    setImportingScores(true)
+    try {
+      const validRows = importPreviewRows.filter((r) => r.valid)
+      const res = await importGradebookScores({
+        assessmentId: importTargetColId,
+        classroomId: classItem.id,
+        scores: validRows.map((r) => ({
+          studentCode: r.studentCode,
+          fullName: r.fullName,
+          score: r.score,
+          comment: r.comment,
+        })),
+      })
+
+      if (res.success) {
+        toast.success(`Đã import thành công điểm cho ${res.importedCount} học sinh!`)
+        setImportModalOpen(false)
+        setImportRawText('')
+        setImportPreviewRows([])
+        loadGradebookData()
+      } else {
+        toast.error(res.message || 'Import thất bại')
+      }
+    } catch {
+      toast.error('Lỗi trong quá trình import điểm')
+    } finally {
+      setImportingScores(false)
+    }
+  }
+
+  // Filter students by search
+  const filteredStudents = useMemo(() => {
+    if (!gradebook) return []
+    if (!searchQuery.trim()) return gradebook.students
+    const q = searchQuery.toLowerCase().trim()
+    return gradebook.students.filter(
+      (s) =>
+        s.fullName.toLowerCase().includes(q) ||
+        (s.studentCode && s.studentCode.toLowerCase().includes(q))
+    )
+  }, [gradebook, searchQuery])
+
+  const summary = gradebook?.summary || {
+    totalStudents: 0,
+    gradedStudents: 0,
+    classAverage: null,
     excellentCount: 0,
+    goodCount: 0,
     completedCount: 0,
     needsSupportCount: 0,
-    totalAssessments: 0,
+    incompleteCount: 0,
   }
+
+  const columns = gradebook?.columns || []
 
   return (
     <div className="space-y-5">
-      {/* Assessment Summary KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+      {/* Gradebook Header & Action Bar */}
+      <div className="flex flex-col gap-3.5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <GraduationCap className="size-5 text-teal-600" />
+            Sổ điểm điện tử · {classItem.name}
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Quản lý điểm số, tính điểm trung bình môn và xếp loại học lực theo Thông tư 27/TT22.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Save status indicator */}
+          {saveStatus === 'DIRTY' && (
+            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300 font-semibold animate-pulse">
+              <Clock className="size-3 mr-1" /> Có {dirtyCells.size} ô chưa lưu
+            </Badge>
+          )}
+          {saveStatus === 'SAVED' && dirtyCells.size === 0 && (
+            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 font-medium">
+              <CheckCircle2 className="size-3 mr-1" /> Đã lưu
+            </Badge>
+          )}
+          {saveStatus === 'SAVING' && (
+            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300 font-medium">
+              <Loader2 className="size-3 mr-1 animate-spin" /> Đang lưu...
+            </Badge>
+          )}
+
+          <Button
+            size="sm"
+            onClick={handleSaveAll}
+            disabled={dirtyCells.size === 0 || saveStatus === 'SAVING'}
+            className="bg-teal-600 text-white hover:bg-teal-700 font-semibold shadow-xs"
+          >
+            <Check className="size-3.5 mr-1.5" /> Lưu sổ điểm
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setCreateColOpen(true)}
+            className="border-slate-200 text-slate-700 hover:bg-slate-50 font-medium"
+          >
+            <Plus className="size-3.5 mr-1 text-teal-600" /> Tạo cột điểm
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              if (columns.length > 0) setImportTargetColId(columns[0].id)
+              setImportModalOpen(true)
+            }}
+            className="border-slate-200 text-slate-700 hover:bg-slate-50 font-medium"
+          >
+            <UploadCloud className="size-3.5 mr-1 text-blue-600" /> Import Excel
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleExportExcel}
+            className="border-slate-200 text-slate-700 hover:bg-slate-50 font-medium"
+          >
+            <Download className="size-3.5 mr-1 text-emerald-600" /> Xuất Excel
+          </Button>
+        </div>
+      </div>
+
+      {/* Grade Summary KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
         <Card className="border-slate-200 shadow-2xs">
-          <CardContent className="p-3.5 text-center">
+          <CardContent className="p-3 text-center">
             <p className="text-2xl font-extrabold text-teal-700">
-              {summary.avgScore !== null && summary.avgScore !== undefined ? `${summary.avgScore} đ` : '—'}
+              {summary.classAverage !== null ? `${summary.classAverage} đ` : '—'}
             </p>
-            <p className="text-[11px] text-slate-500 font-medium">Điểm trung bình</p>
+            <p className="text-[11px] text-slate-500 font-medium">Điểm TB lớp</p>
           </CardContent>
         </Card>
 
         <Card className="border-slate-200 shadow-2xs">
-          <CardContent className="p-3.5 text-center">
+          <CardContent className="p-3 text-center">
             <p className="text-2xl font-extrabold text-emerald-700">{summary.excellentCount}</p>
             <p className="text-[11px] text-slate-500 font-medium">Hoàn thành tốt</p>
           </CardContent>
         </Card>
 
         <Card className="border-slate-200 shadow-2xs">
-          <CardContent className="p-3.5 text-center">
-            <p className="text-2xl font-extrabold text-blue-700">{summary.completedCount}</p>
+          <CardContent className="p-3 text-center">
+            <p className="text-2xl font-extrabold text-blue-700">{summary.goodCount}</p>
             <p className="text-[11px] text-slate-500 font-medium">Hoàn thành</p>
           </CardContent>
         </Card>
 
         <Card className="border-slate-200 shadow-2xs">
-          <CardContent className="p-3.5 text-center">
+          <CardContent className="p-3 text-center">
+            <p className="text-2xl font-extrabold text-amber-700">{summary.completedCount}</p>
+            <p className="text-[11px] text-slate-500 font-medium">Đạt</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-3 text-center">
             <p className="text-2xl font-extrabold text-rose-700">{summary.needsSupportCount}</p>
-            <p className="text-[11px] text-slate-500 font-medium">Chưa hoàn thành</p>
+            <p className="text-[11px] text-slate-500 font-medium">Cần cố gắng</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-3 text-center">
+            <p className="text-2xl font-extrabold text-slate-400">{summary.incompleteCount}</p>
+            <p className="text-[11px] text-slate-500 font-medium">Chưa đủ dữ liệu</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Assessments List */}
-      <Card className="border-slate-200 shadow-2xs">
-        <CardHeader className="p-4 sm:p-5 border-b border-slate-100">
-          <CardTitle className="text-base font-bold text-slate-900">
-            Các bài đánh giá & Nhận xét định kỳ ({summary.totalAssessments} bài)
-          </CardTitle>
-          <CardDescription className="text-xs mt-0.5">
-            Tổng hợp kết quả đánh giá theo tiêu chí Thông tư 27 của Bộ GD&ĐT.
-          </CardDescription>
+      {/* Filter Bar */}
+      <div className="flex flex-wrap items-center gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+        <div className="flex items-center gap-2">
+          <Label className="text-xs font-semibold text-slate-600">Môn học:</Label>
+          <select
+            value={selectedSubjectId}
+            onChange={(e) => setSelectedSubjectId(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 focus:border-teal-500 focus:outline-hidden"
+          >
+            <option value="ALL">Tất cả môn học</option>
+            {subjects.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Label className="text-xs font-semibold text-slate-600">Học kỳ:</Label>
+          <select
+            value={selectedSemester}
+            onChange={(e) => setSelectedSemester(Number(e.target.value))}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 focus:border-teal-500 focus:outline-hidden"
+          >
+            <option value={1}>Học kỳ I</option>
+            <option value={2}>Học kỳ II</option>
+          </select>
+        </div>
+
+        <div className="relative ml-auto min-w-[200px]">
+          <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+          <Input
+            placeholder="Tìm theo tên / mã HS..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-8 pl-8 text-xs bg-slate-50 border-slate-200"
+          />
+        </div>
+      </div>
+
+      {/* Gradebook Matrix Table */}
+      <Card className="border-slate-200 shadow-2xs overflow-hidden">
+        <CardHeader className="p-4 border-b border-slate-100 flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-sm font-bold text-slate-900">
+              Ma trận Điểm số ({filteredStudents.length} học sinh · {columns.length} cột đánh giá)
+            </CardTitle>
+            <CardDescription className="text-[11px] mt-0.5">
+              Nhập trực tiếp điểm vào ô và bấm <b>Enter</b> hoặc <b>Tab</b> để di chuyển nhanh. Điểm số từ 0.0 đến 10.0.
+            </CardDescription>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={loadGradebookData}
+            title="Tải lại dữ liệu"
+            className="size-8 p-0 text-slate-500 hover:text-slate-800"
+          >
+            <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
         </CardHeader>
 
-        <CardContent className="p-0 overflow-x-auto">
+        <CardContent className="p-0">
           {loading ? (
-            <div className="py-16 text-center text-slate-400">
+            <div className="py-20 text-center text-slate-400">
               <Loader2 className="size-6 animate-spin mx-auto text-teal-600 mb-2" />
-              <p className="text-xs">Đang tải kết quả đánh giá...</p>
+              <p className="text-xs">Đang tải bảng điểm...</p>
             </div>
-          ) : (data?.assessments || []).length === 0 ? (
+          ) : filteredStudents.length === 0 ? (
             <div className="py-16 text-center text-slate-400">
-              <BarChart3 className="size-8 mx-auto text-slate-300 mb-2" />
-              <p className="text-sm font-semibold text-slate-700">Chưa có bài đánh giá nào cho lớp này</p>
+              <Users className="size-8 mx-auto text-slate-300 mb-2" />
+              <p className="text-sm font-semibold text-slate-700">Chưa có học sinh nào trong lớp học này</p>
             </div>
           ) : (
-            <table className="w-full text-xs text-left">
-              <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
-                <tr>
-                  <th className="py-3 px-4">Tên bài đánh giá</th>
-                  <th className="py-3 px-3">Môn học</th>
-                  <th className="py-3 px-3">Ngày đánh giá</th>
-                  <th className="py-3 px-3">Số HS đánh giá</th>
-                  <th className="py-3 px-4 text-right">Điểm TB</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {data?.assessments.map((a) => (
-                  <tr key={a.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-3 px-4 font-bold text-slate-900">{a.name}</td>
-                    <td className="py-3 px-3 font-semibold text-teal-900">{a.subjectName}</td>
-                    <td className="py-3 px-3 text-slate-600">{a.date}</td>
-                    <td className="py-3 px-3 text-slate-600">{a.studentCount} học sinh</td>
-                    <td className="py-3 px-4 text-right font-extrabold text-teal-700">
-                      {typeof a.averageScore === 'number' && a.averageScore !== null ? `${a.averageScore} đ` : '—'}
-                    </td>
+            <div className="overflow-x-auto max-w-full">
+              <table className="w-full text-xs text-left border-collapse">
+                <thead className="bg-slate-50/90 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                  <tr>
+                    {/* Sticky Left Columns */}
+                    <th className="sticky left-0 z-20 bg-slate-50 px-3 py-3 w-12 text-center border-r border-slate-200">
+                      STT
+                    </th>
+                    <th className="sticky left-12 z-20 bg-slate-50 px-3 py-3 w-24 border-r border-slate-200">
+                      Mã HS
+                    </th>
+                    <th className="sticky left-36 z-20 bg-slate-50 px-4 py-3 min-w-[160px] border-r border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.03)]">
+                      Họ và tên
+                    </th>
+
+                    {/* Dynamic Assessment Columns */}
+                    {columns.map((col, cIdx) => (
+                      <th key={col.id} className="px-3 py-2.5 min-w-[110px] text-center border-r border-slate-200 group relative">
+                        <div className="flex flex-col items-center">
+                          <div className="flex items-center gap-1">
+                            <span className="font-bold text-slate-900 truncate max-w-[100px]" title={col.title}>
+                              {col.title}
+                            </span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className="opacity-0 group-hover:opacity-100 size-4 p-0.5 rounded-sm hover:bg-slate-200 transition">
+                                  <MoreVertical className="size-3 text-slate-600" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="text-xs">
+                                <DropdownMenuItem onClick={() => handleOpenColumnModal(col)}>
+                                  <Edit2 className="size-3 mr-1.5 text-teal-600" /> Nhập điểm & Nhận xét cột này
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleDeleteColumn(col)} className="text-rose-600">
+                                  <Trash2 className="size-3 mr-1.5" /> Xóa cột điểm này
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <Badge variant="outline" className={`text-[9px] px-1 py-0 ${
+                              col.type === 'CUOI_KY' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                              col.type === 'GIUA_KY' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                              'bg-teal-50 text-teal-700 border-teal-200'
+                            }`}>
+                              {col.type === 'CUOI_KY' ? 'CK (x3)' : col.type === 'GIUA_KY' ? 'GK (x2)' : 'TX (x1)'}
+                            </Badge>
+                            <span className="text-[10px] text-slate-400">{col.date.slice(5)}</span>
+                          </div>
+                        </div>
+                      </th>
+                    ))}
+
+                    {/* If no columns */}
+                    {columns.length === 0 && (
+                      <th className="px-6 py-3 text-slate-400 italic text-center font-normal">
+                        Chưa có cột điểm nào. Bấm "+ Tạo cột điểm" để bắt đầu.
+                      </th>
+                    )}
+
+                    {/* Sticky Right Columns */}
+                    <th className="sticky right-28 z-20 bg-slate-50 px-3 py-3 w-28 text-right font-bold text-teal-800 border-l border-slate-200 shadow-[-2px_0_5px_rgba(0,0,0,0.03)]">
+                      Điểm TB
+                    </th>
+                    <th className="sticky right-0 z-20 bg-slate-50 px-3 py-3 w-28 text-center font-bold text-slate-800">
+                      Học lực
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100">
+                  {filteredStudents.map((student, rIdx) => (
+                    <tr key={student.studentId} className="hover:bg-slate-50/70 transition-colors">
+                      {/* Sticky STT */}
+                      <td className="sticky left-0 z-10 bg-white px-3 py-2 text-center text-slate-400 font-medium border-r border-slate-100">
+                        {rIdx + 1}
+                      </td>
+
+                      {/* Sticky Mã HS */}
+                      <td className="sticky left-12 z-10 bg-white px-3 py-2 font-mono text-[11px] text-slate-500 border-r border-slate-100">
+                        {student.studentCode || '—'}
+                      </td>
+
+                      {/* Sticky Họ tên */}
+                      <td className="sticky left-36 z-10 bg-white px-4 py-2 font-bold text-slate-900 border-r border-slate-100 shadow-[2px_0_5px_rgba(0,0,0,0.03)] truncate max-w-[180px]">
+                        {student.fullName}
+                      </td>
+
+                      {/* Dynamic Column Inputs */}
+                      {columns.map((col, cIdx) => {
+                        const cellKey = `${student.studentId}_${col.id}`
+                        const currentVal = localScores[student.studentId]?.[col.id]
+                        const isDirty = dirtyCells.has(cellKey)
+                        const displayVal = currentVal !== null && currentVal !== undefined ? currentVal : ''
+
+                        return (
+                          <td key={col.id} className={`px-2 py-1 text-center border-r border-slate-100 ${isDirty ? 'bg-amber-50/60' : ''}`}>
+                            <input
+                              id={`cell_${cIdx}_${rIdx}`}
+                              type="text"
+                              value={displayVal}
+                              onChange={(e) => handleScoreChange(student.studentId, col.id, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault()
+                                  const nextInput = document.getElementById(`cell_${cIdx}_${rIdx + 1}`)
+                                  if (nextInput) nextInput.focus()
+                                }
+                              }}
+                              placeholder="—"
+                              className={`w-14 h-7 text-center rounded font-semibold text-xs transition border focus:outline-hidden ${
+                                isDirty
+                                  ? 'border-amber-400 bg-amber-50 text-amber-900 ring-1 ring-amber-300'
+                                  : displayVal !== ''
+                                  ? 'border-slate-200 bg-slate-50/50 text-slate-900 hover:border-slate-300 focus:border-teal-500 focus:bg-white focus:ring-1 focus:ring-teal-500'
+                                  : 'border-dashed border-slate-200 bg-transparent text-slate-400 hover:border-slate-300 focus:border-teal-500 focus:bg-white focus:ring-1 focus:ring-teal-500'
+                              }`}
+                            />
+                          </td>
+                        )
+                      })}
+
+                      {columns.length === 0 && <td className="px-6 py-2 text-center text-slate-300">—</td>}
+
+                      {/* Sticky Điểm TB */}
+                      <td className="sticky right-28 z-10 bg-white px-3 py-2 text-right font-extrabold text-teal-700 border-l border-slate-100 shadow-[-2px_0_5px_rgba(0,0,0,0.03)]">
+                        {student.averageScore !== null ? `${student.averageScore}` : '—'}
+                      </td>
+
+                      {/* Sticky Học lực */}
+                      <td className="sticky right-0 z-10 bg-white px-3 py-2 text-center">
+                        {student.classification ? (
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] font-bold px-2 py-0.5 ${
+                              student.classification.code === 'EXCELLENT'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : student.classification.code === 'GOOD'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : student.classification.code === 'COMPLETED'
+                                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                : 'bg-rose-50 text-rose-700 border-rose-200'
+                            }`}
+                          >
+                            {student.classification.label}
+                          </Badge>
+                        ) : (
+                          <span className="text-slate-400 text-[11px]">Chưa đủ dữ liệu</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardContent>
       </Card>
+
+      {/* ── Dialog: Tạo cột điểm mới ── */}
+      <Dialog open={createColOpen} onOpenChange={setCreateColOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-slate-900">Tạo cột điểm / Lần đánh giá</DialogTitle>
+            <DialogDescription className="text-xs">
+              Thêm một cột đánh giá mới vào sổ điểm của lớp {classItem.name}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleCreateColumn} className="space-y-3.5 py-2">
+            <div>
+              <Label className="text-xs font-semibold">Tên lần đánh giá *</Label>
+              <Input
+                placeholder="Ví dụ: Kiểm tra 15 phút bài 3, Giữa kỳ I..."
+                value={newColTitle}
+                onChange={(e) => setNewColTitle(e.target.value)}
+                required
+                className="mt-1 text-xs"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold">Môn học</Label>
+                <select
+                  value={newColSubjectId}
+                  onChange={(e) => setNewColSubjectId(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 focus:border-teal-500 focus:outline-hidden"
+                >
+                  {subjects.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold">Học kỳ</Label>
+                <select
+                  value={newColSemester}
+                  onChange={(e) => setNewColSemester(Number(e.target.value))}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 focus:border-teal-500 focus:outline-hidden"
+                >
+                  <option value={1}>Học kỳ I</option>
+                  <option value={2}>Học kỳ II</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold">Loại đánh giá</Label>
+                <select
+                  value={newColType}
+                  onChange={(e) => {
+                    setNewColType(e.target.value)
+                    if (e.target.value === 'CUOI_KY') setNewColWeight(3)
+                    else if (e.target.value === 'GIUA_KY') setNewColWeight(2)
+                    else setNewColWeight(1)
+                  }}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 focus:border-teal-500 focus:outline-hidden"
+                >
+                  <option value="THUONG_XUYEN">Thường xuyên (TX)</option>
+                  <option value="GIUA_KY">Giữa học kỳ (GK)</option>
+                  <option value="CUOI_KY">Cuối học kỳ (CK)</option>
+                  <option value="OTHER">Khác</option>
+                </select>
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold">Hệ số tính điểm</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={newColWeight}
+                  onChange={(e) => setNewColWeight(Number(e.target.value))}
+                  className="mt-1 text-xs"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Ngày đánh giá</Label>
+              <Input
+                type="date"
+                value={newColDate}
+                onChange={(e) => setNewColDate(e.target.value)}
+                className="mt-1 text-xs"
+              />
+            </div>
+
+            <DialogFooter className="pt-3">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setCreateColOpen(false)}>
+                Hủy
+              </Button>
+              <Button type="submit" size="sm" disabled={creatingCol} className="bg-teal-600 text-white hover:bg-teal-700 font-semibold">
+                {creatingCol ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <Plus className="size-3.5 mr-1" />} Tạo cột điểm
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog: Chấm điểm & Nhận xét chi tiết theo Cột ── */}
+      <Dialog open={!!scoringColTarget} onOpenChange={(open) => !open && setScoringColTarget(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Edit2 className="size-4 text-teal-600" />
+              Nhập điểm chi tiết: {scoringColTarget?.title}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Môn: <b>{scoringColTarget?.subjectName}</b> · Hệ số: <b>{scoringColTarget?.weight}</b> · Lớp: <b>{classItem.name}</b>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto py-2 pr-1 space-y-2.5">
+            {gradebook?.students.map((s, idx) => (
+              <div key={s.studentId} className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                <div className="min-w-[180px]">
+                  <span className="text-slate-400 font-mono mr-1.5">#{idx + 1}</span>
+                  <b className="text-slate-900 font-semibold">{s.fullName}</b>
+                  <p className="text-[11px] text-slate-400 font-mono">{s.studentCode || '—'}</p>
+                </div>
+
+                <div className="w-24">
+                  <Label className="text-[10px] text-slate-500">Điểm số (0-10)</Label>
+                  <Input
+                    type="text"
+                    placeholder="—"
+                    value={columnScoresState[s.studentId]?.score || ''}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setColumnScoresState((prev) => ({
+                        ...prev,
+                        [s.studentId]: {
+                          ...(prev[s.studentId] || { comment: '' }),
+                          score: val,
+                        },
+                      }))
+                    }}
+                    className="h-8 text-center font-bold text-slate-900 bg-white"
+                  />
+                </div>
+
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <Label className="text-[10px] text-slate-500">Nhận xét của giáo viên</Label>
+                    <button
+                      type="button"
+                      onClick={() => handleAiComment(s)}
+                      disabled={aiGeneratingStudentId === s.studentId}
+                      className="text-[10px] text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1 cursor-pointer"
+                    >
+                      {aiGeneratingStudentId === s.studentId ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="size-3" />
+                      )}
+                      Gợi ý AI
+                    </button>
+                  </div>
+                  <Input
+                    placeholder="Nhập nhận xét hoặc dùng gợi ý AI..."
+                    value={columnScoresState[s.studentId]?.comment || ''}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setColumnScoresState((prev) => ({
+                        ...prev,
+                        [s.studentId]: {
+                          ...(prev[s.studentId] || { score: '' }),
+                          comment: val,
+                        },
+                      }))
+                    }}
+                    className="h-8 text-xs bg-white"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter className="pt-3 border-t border-slate-100">
+            <Button variant="ghost" size="sm" onClick={() => setScoringColTarget(null)}>
+              Hủy
+            </Button>
+            <Button size="sm" onClick={handleSaveColumnModalScores} disabled={savingColumnScores} className="bg-teal-600 text-white hover:bg-teal-700 font-semibold">
+              {savingColumnScores ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <Check className="size-3.5 mr-1" />} Lưu kết quả
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog: Import Điểm từ Excel ── */}
+      <Dialog open={importModalOpen} onOpenChange={setImportModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <UploadCloud className="size-4 text-blue-600" />
+              Import điểm từ Excel / Bảng tính
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Dán dữ liệu từ file Excel theo định dạng: <b>Mã HS / Họ tên, Điểm số, Nhận xét (tùy chọn)</b>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3.5 py-2">
+            <div>
+              <Label className="text-xs font-semibold">Chọn cột điểm cần nhập dữ liệu *</Label>
+              <select
+                value={importTargetColId}
+                onChange={(e) => setImportTargetColId(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 focus:border-teal-500 focus:outline-hidden"
+              >
+                {columns.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title} ({c.subjectName} · {c.type === 'CUOI_KY' ? 'Hệ số 3' : c.type === 'GIUA_KY' ? 'Hệ số 2' : 'Hệ số 1'})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Dán dữ liệu bảng tính vào đây:</Label>
+              <Textarea
+                rows={5}
+                placeholder="HS0001, 8.5, Làm bài tốt&#10;HS0002, 9.0, Xuất sắc&#10;Nguyễn Văn C, 7.5, Cần cố gắng hơn"
+                value={importRawText}
+                onChange={(e) => handleParseImport(e.target.value)}
+                className="mt-1 text-xs font-mono"
+              />
+            </div>
+
+            {/* Preview Box */}
+            {importPreviewRows.length > 0 && (
+              <div className="rounded-xl border border-slate-200 overflow-hidden text-xs">
+                <div className="bg-slate-100 px-3 py-2 font-bold text-slate-700 flex justify-between">
+                  <span>Bản xem trước ({importPreviewRows.length} dòng)</span>
+                  <span className="text-emerald-700">
+                    {importPreviewRows.filter((r) => r.valid).length} hợp lệ / {importPreviewRows.filter((r) => !r.valid).length} lỗi
+                  </span>
+                </div>
+                <div className="max-h-40 overflow-y-auto divide-y divide-slate-100">
+                  {importPreviewRows.map((r) => (
+                    <div key={r.row} className="px-3 py-1.5 flex items-center justify-between text-[11px]">
+                      <span className="font-medium text-slate-800">
+                        {r.studentCode || r.fullName} · Điểm: <b>{r.score !== null ? r.score : '—'}</b>
+                      </span>
+                      {r.valid ? (
+                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 text-[10px]">Hợp lệ</Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-rose-50 text-rose-700 text-[10px]">{r.error}</Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="pt-2">
+            <Button variant="ghost" size="sm" onClick={() => setImportModalOpen(false)}>
+              Hủy
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleConfirmImport}
+              disabled={importingScores || importPreviewRows.filter((r) => r.valid).length === 0}
+              className="bg-blue-600 text-white hover:bg-blue-700 font-semibold"
+            >
+              {importingScores ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <Check className="size-3.5 mr-1" />} Xác nhận Import
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB 6: GIÁO ÁN CỦA LỚP
