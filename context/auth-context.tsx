@@ -25,9 +25,10 @@ type AuthContextType = {
   user: UserProfile | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<UserProfile>;
+  register: (input: { fullName: string; email: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
-  refreshProfile: () => Promise<void>;
+  refreshProfile: () => Promise<UserProfile | null>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -36,7 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchProfile = useCallback(async () => {
+  const fetchProfile = useCallback(async (): Promise<UserProfile | null> => {
     const token = getAccessToken();
     if (!token) {
       // If no access token in memory/localStorage, attempt silent refresh using HttpOnly cookie
@@ -55,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const userProfile = await api.get<UserProfile>('/auth/me');
             setUser(userProfile);
             setIsLoading(false);
-            return;
+            return userProfile;
           }
         }
       } catch {
@@ -64,15 +65,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setUser(null);
       setIsLoading(false);
-      return;
+      return null;
     }
 
     try {
       const data = await api.get<UserProfile>('/auth/me');
       setUser(data);
+      return data;
     } catch {
       setUser(null);
       clearAuth();
+      return null;
     } finally {
       setIsLoading(false);
     }
@@ -100,26 +103,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [fetchProfile]);
 
-  const login = async (email: string, password: string) => {
-    setIsLoading(true);
-    try {
-      const data = await api.post<{
+  const login = async (email: string, password: string): Promise<UserProfile> => {
+    const data = await api.post<{
         user: any;
-        tokens?: { accessToken: string; refreshToken: string };
+        tokens?: { accessToken: string };
         accessToken?: string;
-        refreshToken?: string;
-      }>('/auth/login', { email, password });
+      }>('/auth/login', { email: email.trim().toLowerCase(), password });
 
       const token = data.accessToken || data.tokens?.accessToken;
       if (token) {
         setAccessToken(token);
       }
-      await fetchProfile();
+      const profile = await fetchProfile();
+      if (!profile) throw new Error('Không thể tải thông tin tài khoản sau đăng nhập.');
       // Notify data loaders (Dashboard, Sidebar, etc.) to reload after successful login
       notifyAuthStateChanged();
-    } finally {
-      setIsLoading(false);
-    }
+      return profile;
+  };
+
+  const register = async (input: { fullName: string; email: string; password: string }) => {
+    await api.post('/auth/register', {
+      fullName: input.fullName.trim(),
+      email: input.email.trim().toLowerCase(),
+      password: input.password,
+    });
   };
 
   const logout = async () => {
@@ -140,6 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         login,
+        register,
         logout,
         refreshProfile: fetchProfile,
       }}

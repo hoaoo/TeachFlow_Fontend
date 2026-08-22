@@ -126,6 +126,7 @@ export async function apiClient<T = any>(
       response.status === 401 &&
       !isRetry &&
       !endpoint.includes('/auth/login') &&
+      !endpoint.includes('/auth/register') &&
       !endpoint.includes('/auth/refresh') &&
       !endpoint.includes('/auth/logout')
     ) {
