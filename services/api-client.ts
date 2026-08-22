@@ -94,8 +94,10 @@ export async function apiClient<T = any>(
     ? Object.fromEntries(options.headers.entries())
     : (options.headers as Record<string, string>) || {};
 
+  const isFormData = options.body instanceof FormData;
+  const defaultHeaders: Record<string, string> = isFormData ? {} : { 'Content-Type': 'application/json' };
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...defaultHeaders,
     ...customHeaders,
   };
 
@@ -237,4 +239,35 @@ export const api = {
 
   delete: <T = any>(endpoint: string, headers?: HeadersInit) =>
     apiClient<T>(endpoint, { method: 'DELETE', headers }),
+
+  postForm: <T = any>(endpoint: string, formData: FormData, headers?: HeadersInit) =>
+    apiClient<T>(endpoint, {
+      method: 'POST',
+      body: formData,
+      headers,
+    }),
+
+  getBlob: async (endpoint: string, headers?: HeadersInit): Promise<Blob> => {
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${cleanEndpoint}`;
+    const token = getAccessToken();
+    const customHeaders = headers instanceof Headers
+      ? Object.fromEntries(headers.entries())
+      : (headers as Record<string, string>) || {};
+    const reqHeaders: Record<string, string> = {
+      ...customHeaders,
+    };
+    if (token && !reqHeaders['Authorization'] && !reqHeaders['authorization']) {
+      reqHeaders['Authorization'] = `Bearer ${token}`;
+    }
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: reqHeaders,
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      throw new ApiError(`Tải tệp thất bại: ${res.statusText}`, res.status);
+    }
+    return await res.blob();
+  },
 };

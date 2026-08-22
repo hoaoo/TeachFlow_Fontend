@@ -8,23 +8,19 @@ import {
   Plus, Printer, Presentation, RefreshCw, Save, Search, Sparkles,
   Table as TableIcon, Trash2, UploadCloud, UserCheck, WandSparkles,
   X, AlertCircle, CheckCircle2, ChevronUp, History, BookOpen,
-  Calendar, MapPin, Download, ArrowUpDown, ShieldAlert, ArrowRight
+  Calendar, MapPin, Download, ArrowUpDown, ShieldAlert, ArrowRight,
+  Upload, FileCheck, FileSpreadsheet, ExternalLink
 } from 'lucide-react'
 import {
   getLessonPlans, getLessonPlanById, createLessonPlan, updateLessonPlan,
   deleteLessonPlan, duplicateLessonPlan, reorderActivities, saveActivityToLibrary,
   getLessonPlanVersions, restoreLessonPlanVersion, linkLessonPlanSchedule,
-  unlinkLessonPlanSchedule, type LessonPlan, type Activity, type LessonPlanVersionRecord
+  unlinkLessonPlanSchedule, uploadLessonPlanFile, getLessonPlanFileUrl,
+  downloadLessonPlanFile, type LessonPlan, type Activity, type LessonPlanVersionRecord
 } from '@/services/lesson-service'
 import { getClasses, type ClassRecord } from '@/services/classroom-service'
-import { getMyTeachingContexts } from '@/services/teaching-assignment-service'
 import { getLibraryActivities, type LibraryActivity } from '@/services/activity-service'
 import { getSchedules, type ScheduleEntry } from '@/services/schedule-service'
-import {
-  getResources, uploadResourceFile, downloadResourceFile,
-  attachResourceToLessonPlan, detachResourceFromLessonPlan,
-  type TeachingResource
-} from '@/services/resource-service'
 import {
   generateActivity, generateLessonPlan as aiGenerateLessonPlan,
   type GeneratedActivity, type GeneratedLessonPlan
@@ -138,7 +134,6 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
   const [listError, setListError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterClassId, setFilterClassId] = useState('')
-  const [filterSubject, setFilterSubject] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
 
   // Current Lesson Plan under edit
@@ -157,6 +152,7 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
     postLessonAdjustment: '',
     notes: '',
     status: 'DRAFT',
+    sourceType: 'NATIVE',
     version: 1,
     activities: starterActivities,
     resources: [],
@@ -169,6 +165,8 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
 
   // Dialog States
   const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [uploadModalOpen, setUploadModalOpen] = useState(false)
+  const [pdfPreviewTarget, setPdfPreviewTarget] = useState<LessonPlan | null>(null)
   const [duplicateTarget, setDuplicateTarget] = useState<LessonPlan | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<LessonPlan | null>(null)
   const [linkScheduleTarget, setLinkScheduleTarget] = useState<LessonPlan | null>(null)
@@ -176,7 +174,6 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
   const [aiDraftOpen, setAiDraftOpen] = useState(false)
   const [libraryPickerOpen, setLibraryPickerOpen] = useState(false)
-  const [resourceModalOpen, setResourceModalOpen] = useState(false)
   const [exportingType, setExportingType] = useState<'docx' | 'pdf' | null>(null)
 
   const reqSeqRef = useRef(0)
@@ -235,9 +232,9 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
     }
   }
 
-  // Autosave mechanism
+  // Autosave mechanism (only for NATIVE lesson plans)
   const triggerAutosave = useCallback((updatedLesson: LessonPlan) => {
-    if (!updatedLesson.id) return
+    if (!updatedLesson.id || updatedLesson.sourceType === 'UPLOADED') return
     isDirtyRef.current = true
     setAutosaveStatus('Đang lưu...')
 
@@ -399,6 +396,19 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
       toast.error('Vui lòng lưu giáo án trước khi xuất file')
       return
     }
+
+    // If UPLOADED plan, download original file directly
+    if (targetPlan.sourceType === 'UPLOADED') {
+      try {
+        toast.info('Đang tải tệp giáo án gốc...')
+        await downloadLessonPlanFile(targetPlan.id, targetPlan.originalFileName || `${targetPlan.title}.docx`)
+        toast.success('Đã tải tệp thành công!')
+      } catch (err: any) {
+        toast.error(err?.message || 'Lỗi khi tải tệp giáo án')
+      }
+      return
+    }
+
     setExportingType(type)
     try {
       toast.info(`Đang tạo file ${type === 'docx' ? 'Microsoft Word (.docx)' : 'PDF'}...`)
@@ -441,7 +451,7 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
               Giáo án giảng dạy
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Quản lý, biên soạn cấu trúc KHBD chuẩn GDVN, tích hợp Lịch dạy và Trợ lý AI.
+              Quản lý, biên soạn cấu trúc KHBD chuẩn GDVN, tải lên giáo án DOCX/PDF, tích hợp Lịch dạy và Trợ lý AI.
             </p>
           </div>
 
@@ -454,10 +464,17 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
               <Sparkles className="size-4 text-violet-600" /> Tạo bản nháp bằng AI
             </Button>
             <Button
+              variant="outline"
+              onClick={() => setUploadModalOpen(true)}
+              className="border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 gap-1.5 shadow-2xs font-semibold"
+            >
+              <Upload className="size-4 text-teal-600" /> Tải giáo án lên
+            </Button>
+            <Button
               onClick={() => setCreateModalOpen(true)}
               className="bg-teal-600 hover:bg-teal-700 gap-1.5 shadow-sm font-semibold"
             >
-              <Plus className="size-4" /> Tạo giáo án mới
+              <Plus className="size-4" /> Tạo giáo án
             </Button>
           </div>
         </div>
@@ -469,7 +486,7 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm theo tên bài, chủ đề, môn học, lớp..."
+              placeholder="Tìm theo tên bài, chủ đề, môn học, lớp, file đính kèm..."
               className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-xs sm:text-sm outline-none focus:border-teal-400 shadow-2xs"
             />
             {searchQuery && (
@@ -531,12 +548,12 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
             <div className="text-center">
               <p className="font-semibold text-slate-800 text-base">Chưa có giáo án nào</p>
               <p className="text-xs text-slate-500 mt-1">
-                Bắt đầu soạn giáo án mới hoặc dùng Trợ lý AI để tạo bản nháp nhanh.
+                Tạo giáo án mới trực tiếp trên TeachFlow hoặc tải lên tệp DOCX / PDF có sẵn.
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button onClick={() => setAiDraftOpen(true)} variant="outline" className="border-violet-200 text-violet-700">
-                <Sparkles className="size-4" /> Soạn với AI
+              <Button onClick={() => setUploadModalOpen(true)} variant="outline" className="border-teal-200 text-teal-700">
+                <Upload className="size-4" /> Tải giáo án lên
               </Button>
               <Button onClick={() => setCreateModalOpen(true)} className="bg-teal-600 hover:bg-teal-700">
                 <Plus className="size-4" /> Tạo giáo án
@@ -548,6 +565,9 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
             {plans.map((p) => {
               const statusInfo = computeLessonStatus(p.status)
               const hasLinkedSchedule = p.schedules && p.schedules.length > 0
+              const isUploaded = p.sourceType === 'UPLOADED'
+              const isPdf = p.mimeType?.includes('pdf') || p.originalFileName?.toLowerCase().endsWith('.pdf')
+
               return (
                 <div
                   key={p.id}
@@ -556,15 +576,41 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        onClick={() => handleOpenEditor(p.id!)}
-                        className="text-left font-bold text-slate-900 hover:text-teal-700 text-base truncate transition"
-                      >
-                        {p.title}
-                      </button>
+                      {isUploaded ? (
+                        <span className="font-bold text-slate-900 text-base truncate">
+                          {p.title}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleOpenEditor(p.id!)}
+                          className="text-left font-bold text-slate-900 hover:text-teal-700 text-base truncate transition"
+                        >
+                          {p.title}
+                        </button>
+                      )}
+
                       <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
                         {p.subject} · {p.grade}
                       </span>
+
+                      {/* Source type badge */}
+                      {isUploaded ? (
+                        <span
+                          className={`rounded-lg px-2 py-0.5 text-[10px] font-bold border flex items-center gap-1 ${
+                            isPdf
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
+                              : 'bg-blue-50 text-blue-700 border-blue-200'
+                          }`}
+                        >
+                          <FileText className="size-3" />
+                          {isPdf ? 'PDF' : 'DOCX'}
+                        </span>
+                      ) : (
+                        <span className="rounded-lg bg-teal-50 px-2 py-0.5 text-[10px] font-bold text-teal-700 border border-teal-200">
+                          NATIVE
+                        </span>
+                      )}
+
                       <span
                         className={`rounded-lg px-2.5 py-0.5 text-[11px] font-semibold border ${
                           statusInfo.tone === 'blue'
@@ -582,11 +628,24 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
                     </div>
 
                     <div className="mt-1.5 flex flex-wrap items-center gap-3.5 text-xs text-slate-500">
-                      <span>⏱ {p.duration || 40} phút</span>
-                      <span>📋 {p.activitiesCount ?? p.activities?.length ?? 0} hoạt động</span>
+                      {isUploaded ? (
+                        <>
+                          <span className="font-mono text-slate-600">
+                            📎 {p.originalFileName || 'Tệp đính kèm'}
+                            {p.fileSize ? ` (${(p.fileSize / 1024).toFixed(0)} KB)` : ''}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span>⏱ {p.duration || 40} phút</span>
+                          <span>📋 {p.activitiesCount ?? p.activities?.length ?? 0} hoạt động</span>
+                        </>
+                      )}
+
                       {p.date && (
                         <span>📅 Ngày dạy: {new Date(p.date + 'T00:00:00').toLocaleDateString('vi-VN')}</span>
                       )}
+
                       {hasLinkedSchedule ? (
                         <span className="inline-flex items-center gap-1 text-teal-700 font-medium bg-teal-50 border border-teal-200 rounded-md px-1.5 py-0.5 text-[11px]">
                           <Calendar className="size-3" /> Đã gắn lịch ({p.schedules![0].plannedDate ? new Date(p.schedules![0].plannedDate).toLocaleDateString('vi-VN') : ''} {p.schedules![0].startTime || ''})
@@ -599,14 +658,50 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
 
                   {/* Actions */}
                   <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleOpenEditor(p.id!)}
-                      className="text-xs h-8 gap-1 hover:text-teal-700 font-semibold"
-                    >
-                      <Edit2 className="size-3.5" /> Chỉnh sửa
-                    </Button>
+                    {isUploaded ? (
+                      <>
+                        {isPdf ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setPdfPreviewTarget(p)}
+                            className="text-xs h-8 gap-1 font-semibold text-rose-700 border-rose-200 hover:bg-rose-50"
+                          >
+                            <Eye className="size-3.5" /> Xem PDF
+                          </Button>
+                        ) : null}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => downloadLessonPlanFile(p.id!, p.originalFileName || `${p.title}.docx`)}
+                          className="text-xs h-8 gap-1 font-semibold text-blue-700 border-blue-200 hover:bg-blue-50"
+                        >
+                          <Download className="size-3.5" /> Tải xuống
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenEditor(p.id!)}
+                          className="text-xs h-8 gap-1 hover:text-teal-700 font-semibold"
+                        >
+                          <Edit2 className="size-3.5" /> Chỉnh sửa
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleExport('docx', p)}
+                          disabled={exportingType !== null}
+                          className="text-xs h-8 gap-1"
+                          title="Xuất Microsoft Word (.docx)"
+                        >
+                          <FileDown className="size-3.5" /> Xuất Word
+                        </Button>
+                      </>
+                    )}
+
                     <Button
                       size="sm"
                       variant="outline"
@@ -615,16 +710,6 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
                       title="Gắn hoặc đổi lịch dạy"
                     >
                       <Link2 className="size-3.5" /> Lịch dạy
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleExport('docx', p)}
-                      disabled={exportingType !== null}
-                      className="text-xs h-8 gap-1"
-                      title="Xuất Microsoft Word (.docx)"
-                    >
-                      <FileDown className="size-3.5" /> Xuất Word
                     </Button>
                     <Button
                       size="sm"
@@ -662,13 +747,29 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
           }}
         />
 
+        <UploadLessonPlanDialog
+          open={uploadModalOpen}
+          classes={classes}
+          onClose={() => setUploadModalOpen(false)}
+          onUploaded={() => {
+            loadPlans()
+          }}
+        />
+
+        <PdfPreviewDialog
+          target={pdfPreviewTarget}
+          onClose={() => setPdfPreviewTarget(null)}
+        />
+
         <DuplicateLessonPlanDialog
           target={duplicateTarget}
           classes={classes}
           onClose={() => setDuplicateTarget(null)}
           onDuplicated={(dup) => {
             loadPlans()
-            handleOpenEditor(dup.id!)
+            if (dup.sourceType !== 'UPLOADED') {
+              handleOpenEditor(dup.id!)
+            }
           }}
         />
 
@@ -1391,6 +1492,325 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
   )
 }
 
+// ─── Modal Dialog: Upload Lesson Plan ─────────────────────────────────────────
+function UploadLessonPlanDialog({
+  open,
+  classes,
+  onClose,
+  onUploaded,
+}: {
+  open: boolean
+  classes: ClassRecord[]
+  onClose: () => void
+  onUploaded: (plan: LessonPlan) => void
+}) {
+  const [file, setFile] = useState<File | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [title, setTitle] = useState('')
+  const [subject, setSubject] = useState('Toán')
+  const [classroomId, setClassroomId] = useState('')
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [topic, setTopic] = useState('')
+  const [notes, setNotes] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (open) {
+      setFile(null)
+      setIsDragging(false)
+      setTitle('')
+      setSubject('Toán')
+      setClassroomId(classes[0]?.id || '')
+      setDate(new Date().toISOString().split('T')[0])
+      setTopic('')
+      setNotes('')
+    }
+  }, [open, classes])
+
+  const handleSelectFile = (selectedFile: File) => {
+    const ext = selectedFile.name.split('.').pop()?.toLowerCase()
+    if (ext !== 'docx' && ext !== 'pdf') {
+      toast.error('Chỉ hỗ trợ tập tin định dạng Microsoft Word (.docx) hoặc PDF (.pdf)')
+      return
+    }
+
+    if (selectedFile.size > 25 * 1024 * 1024) {
+      toast.error('Dung lượng tập tin không được vượt quá 25MB')
+      return
+    }
+
+    setFile(selectedFile)
+    const baseName = selectedFile.name.replace(/\.[^/.]+$/, '')
+    setTitle(baseName)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleSelectFile(e.dataTransfer.files[0])
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!file) {
+      toast.error('Vui lòng chọn tập tin giáo án để tải lên')
+      return
+    }
+
+    if (!title.trim()) {
+      toast.error('Vui lòng nhập tên giáo án')
+      return
+    }
+
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('title', title.trim())
+      formData.append('subject', subject)
+      formData.append('classroomId', classroomId)
+      if (date) formData.append('date', date)
+      if (topic.trim()) formData.append('topic', topic.trim())
+      if (notes.trim()) formData.append('notes', notes.trim())
+
+      const cls = classes.find((c) => c.id === classroomId)
+      if (cls) formData.append('grade', cls.name)
+
+      const result = await uploadLessonPlanFile(formData)
+      toast.success('Đã tải giáo án lên thành công!')
+      onUploaded(result)
+      onClose()
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi tải tập tin giáo án lên')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-teal-900">
+            <Upload className="size-5 text-teal-600" /> Tải giáo án có sẵn
+          </DialogTitle>
+          <DialogDescription>
+            Tải lên tài liệu giáo án định dạng DOCX hoặc PDF để quản lý và liên kết với lịch dạy.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="grid gap-3.5 py-2 text-xs">
+          {/* Dropzone */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-2xl cursor-pointer transition ${
+              isDragging
+                ? 'border-teal-500 bg-teal-50/80 scale-[0.99]'
+                : file
+                  ? 'border-teal-400 bg-teal-50/40'
+                  : 'border-slate-300 bg-slate-50/50 hover:bg-slate-100/70'
+            }`}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files && e.target.files[0]) {
+                  handleSelectFile(e.target.files[0])
+                }
+              }}
+            />
+
+            {file ? (
+              <div className="flex items-center gap-3 w-full">
+                <div className="grid size-10 place-items-center rounded-xl bg-teal-100 text-teal-700 shrink-0">
+                  <FileCheck className="size-6" />
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="font-bold text-slate-900 text-xs truncate">{file.name}</p>
+                  <p className="text-[11px] text-slate-500">
+                    {(file.size / 1024).toFixed(0)} KB · {file.name.endsWith('.pdf') ? 'Tài liệu PDF' : 'Microsoft Word'}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={(e) => { e.stopPropagation(); setFile(null) }}
+                  className="size-8 p-0 text-slate-400 hover:text-rose-600"
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="grid size-10 place-items-center rounded-xl bg-teal-50 text-teal-600 mb-2">
+                  <UploadCloud className="size-6" />
+                </div>
+                <p className="font-semibold text-slate-800 text-xs">
+                  Kéo thả file vào đây hoặc <span className="text-teal-600 underline">chọn file</span>
+                </p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Hỗ trợ định dạng DOCX, PDF (tối đa 25MB)
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Form metadata */}
+          <div>
+            <Label className="text-xs font-semibold">Tên giáo án *</Label>
+            <Input
+              className="mt-1 text-xs"
+              placeholder="VD: Tiết 5: Ôn tập các số đến 100.000"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs font-semibold">Môn học *</Label>
+              <select
+                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-xs"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+              >
+                <option value="Toán">Toán</option>
+                <option value="Tiếng Việt">Tiếng Việt</option>
+                <option value="Khoa học">Khoa học</option>
+                <option value="Lịch sử & Địa lí">Lịch sử & Địa lí</option>
+                <option value="Đạo đức">Đạo đức</option>
+                <option value="Tin học">Tin học</option>
+                <option value="Công nghệ">Công nghệ</option>
+                <option value="Hoạt động trải nghiệm">Hoạt động trải nghiệm</option>
+              </select>
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Lớp *</Label>
+              <select
+                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-xs"
+                value={classroomId}
+                onChange={(e) => setClassroomId(e.target.value)}
+              >
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs font-semibold">Ngày dự kiến dạy</Label>
+              <Input
+                type="date"
+                className="mt-1 text-xs"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Chủ đề</Label>
+              <Input
+                className="mt-1 text-xs"
+                placeholder="VD: Phân số"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs font-semibold">Ghi chú</Label>
+            <textarea
+              rows={2}
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-background px-3 py-2 text-xs focus:outline-none focus:border-teal-400"
+              placeholder="Ghi chú thêm về giáo án..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+
+          <DialogFooter className="mt-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={uploading}>
+              Hủy
+            </Button>
+            <Button
+              type="submit"
+              disabled={uploading || !file}
+              className="bg-teal-600 hover:bg-teal-700 font-semibold gap-1.5"
+            >
+              {uploading && <Loader2 className="size-3.5 animate-spin" />}
+              {uploading ? 'Đang tải lên...' : 'Tải lên giáo án'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Modal Dialog: PDF Preview ────────────────────────────────────────────────
+function PdfPreviewDialog({
+  target,
+  onClose,
+}: {
+  target: LessonPlan | null
+  onClose: () => void
+}) {
+  if (!target) return null
+
+  const fileUrl = getLessonPlanFileUrl(target.id!)
+
+  return (
+    <Dialog open={!!target} onOpenChange={(val) => !val && onClose()}>
+      <DialogContent className="sm:max-w-[850px] h-[85vh] flex flex-col p-4 sm:p-6">
+        <DialogHeader className="flex flex-row items-center justify-between pb-2 border-b">
+          <div>
+            <DialogTitle className="text-base text-slate-900 truncate">
+              {target.title}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {target.originalFileName} · {target.subject} · {target.grade}
+            </DialogDescription>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => downloadLessonPlanFile(target.id!, target.originalFileName || `${target.title}.pdf`)}
+            className="text-xs gap-1"
+          >
+            <Download className="size-3.5" /> Tải về máy
+          </Button>
+        </DialogHeader>
+
+        <div className="flex-1 w-full h-full bg-slate-100 rounded-xl overflow-hidden my-2 border">
+          <iframe
+            src={fileUrl}
+            className="w-full h-full border-none"
+            title={target.title}
+          />
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={onClose}>Đóng</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ─── Modal Dialog: Create Lesson Plan ─────────────────────────────────────────
 function CreateLessonPlanDialog({
   open,
@@ -1430,6 +1850,22 @@ function CreateLessonPlanDialog({
     setSubmitting(true)
     try {
       const cls = classes.find((c) => c.id === classroomId)
+      // Strip any UI-only id before sending to create API
+      const cleanActivities = starterActivities.map((act, index) => ({
+        phase: act.phase,
+        title: act.title,
+        minutes: act.minutes,
+        method: act.method,
+        technique: act.technique,
+        competencies: act.competencies,
+        qualities: act.qualities,
+        equipment: act.equipment,
+        objective: act.objective,
+        teacher: act.teacher,
+        students: act.students,
+        sortOrder: index,
+      }))
+
       const created = await createLessonPlan({
         title: title.trim(),
         subject,
@@ -1439,7 +1875,7 @@ function CreateLessonPlanDialog({
         duration,
         topic: topic.trim() || undefined,
         objective: objective.trim() || undefined,
-        activities: starterActivities,
+        activities: cleanActivities as any,
         status: 'DRAFT',
       })
       toast.success('Đã tạo giáo án mới thành công')
@@ -2239,8 +2675,7 @@ function AiFullDraftModal({
         requirements: requirements.trim() || undefined,
       })
 
-      const activities: Activity[] = (aiPlan.activities || []).map((a, i) => ({
-        id: `act-${Date.now()}-${i}`,
+      const cleanActivities = (aiPlan.activities || []).map((a, i) => ({
         phase: a.activityType || (i === 0 ? 'Khởi động' : i === 1 ? 'Khám phá' : i === 2 ? 'Luyện tập' : 'Vận dụng'),
         title: a.title,
         minutes: a.durationMinutes || 10,
@@ -2264,7 +2699,7 @@ function AiFullDraftModal({
         objective: aiPlan.objectives,
         teachingEquipment: aiPlan.teachingEquipment,
         status: 'DRAFT',
-        activities: activities.length > 0 ? activities : starterActivities,
+        activities: cleanActivities.length > 0 ? (cleanActivities as any) : undefined,
       })
 
       toast.success('AI đã tạo bản nháp giáo án hoàn chỉnh!')

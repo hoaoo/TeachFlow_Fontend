@@ -55,6 +55,11 @@ export type LessonPlan = {
   postLessonAdjustment?: string;
   notes?: string;
   status?: 'DRAFT' | 'COMPLETED' | 'TAUGHT' | string;
+  sourceType?: 'NATIVE' | 'UPLOADED' | string;
+  originalFileName?: string | null;
+  storedFileName?: string | null;
+  mimeType?: string | null;
+  fileSize?: number | null;
   version?: number;
   activities: Activity[];
   resources?: any[];
@@ -95,18 +100,114 @@ export async function getLessonPlanById(id: string): Promise<LessonPlan> {
 }
 
 export async function createLessonPlan(plan: Partial<LessonPlan> & { scheduleId?: string }): Promise<LessonPlan> {
-  return await api.post<LessonPlan>('/lesson-plans', plan);
+  const payload: any = {
+    title: plan.title,
+    topic: plan.topic,
+    subject: plan.subject,
+    grade: plan.grade,
+    classroomId: plan.classroomId,
+    subjectId: plan.subjectId,
+    teachingAssignmentId: (plan as any).teachingAssignmentId,
+    lessonId: (plan as any).lessonId,
+    date: plan.date,
+    duration: plan.duration,
+    objective: plan.objective,
+    specificCompetencies: plan.specificCompetencies,
+    generalCompetencies: plan.generalCompetencies,
+    qualities: plan.qualities,
+    teachingEquipment: plan.teachingEquipment,
+    postLessonAdjustment: plan.postLessonAdjustment,
+    notes: plan.notes,
+    status: plan.status,
+    scheduleId: plan.scheduleId,
+  };
+
+  // Explicit mapping of allowed fields in CreateActivityDto to prevent 'property id should not exist'
+  if (plan.activities && Array.isArray(plan.activities)) {
+    payload.activities = plan.activities.map((act, index) => ({
+      phase: act.phase,
+      title: act.title,
+      minutes: act.minutes,
+      method: act.method || '',
+      technique: act.technique || '',
+      competencies: act.competencies || '',
+      qualities: act.qualities || '',
+      equipment: act.equipment || undefined,
+      objective: act.objective || '',
+      teacher: act.teacher || '',
+      students: act.students || '',
+      sortOrder: act.sortOrder ?? index,
+    }));
+  }
+
+  return await api.post<LessonPlan>('/lesson-plans', payload);
 }
 
 export async function updateLessonPlan(id: string, plan: Partial<LessonPlan>): Promise<LessonPlan> {
-  return await api.patch<LessonPlan>(`/lesson-plans/${id}`, plan);
+  const payload: any = {
+    version: plan.version,
+    title: plan.title,
+    topic: plan.topic,
+    subject: plan.subject,
+    grade: plan.grade,
+    date: plan.date,
+    duration: plan.duration,
+    objective: plan.objective,
+    specificCompetencies: plan.specificCompetencies,
+    generalCompetencies: plan.generalCompetencies,
+    qualities: plan.qualities,
+    teachingEquipment: plan.teachingEquipment,
+    postLessonAdjustment: plan.postLessonAdjustment,
+    notes: plan.notes,
+    status: plan.status,
+  };
+
+  if (plan.activities && Array.isArray(plan.activities)) {
+    payload.activities = plan.activities.map((act, index) => ({
+      phase: act.phase,
+      title: act.title,
+      minutes: act.minutes,
+      method: act.method || '',
+      technique: act.technique || '',
+      competencies: act.competencies || '',
+      qualities: act.qualities || '',
+      equipment: act.equipment || undefined,
+      objective: act.objective || '',
+      teacher: act.teacher || '',
+      students: act.students || '',
+      sortOrder: act.sortOrder ?? index,
+    }));
+  }
+
+  return await api.patch<LessonPlan>(`/lesson-plans/${id}`, payload);
+}
+
+export async function uploadLessonPlanFile(formData: FormData): Promise<LessonPlan> {
+  return await api.postForm<LessonPlan>('/lesson-plans/upload', formData);
+}
+
+export function getLessonPlanFileUrl(id: string): string {
+  const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api').replace(/\/+$/, '');
+  return `${baseUrl}/lesson-plans/${id}/file`;
+}
+
+export async function downloadLessonPlanFile(id: string, filename?: string): Promise<void> {
+  const blob = await api.getBlob(`/lesson-plans/${id}/file`);
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename || 'lesson-plan-file';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
 }
 
 export async function saveLessonPlan(plan: LessonPlan): Promise<LessonPlan> {
   if (plan.id && !plan.id.startsWith('mock-') && !plan.id.startsWith('plan-')) {
-    return await api.patch<LessonPlan>(`/lesson-plans/${plan.id}`, plan);
+    return await updateLessonPlan(plan.id, plan);
   } else {
-    return await api.post<LessonPlan>('/lesson-plans', plan);
+    return await createLessonPlan(plan);
   }
 }
 
