@@ -145,10 +145,12 @@ function Sidebar({
     }
 
     window.addEventListener('teachflow:classes-changed', handleClassesChange)
+    window.addEventListener('teachflow:students-changed', handleClassesChange)
     window.addEventListener('teachflow:auth-state-changed', handleClassesChange)
     return () => {
       isMounted = false
       window.removeEventListener('teachflow:classes-changed', handleClassesChange)
+      window.removeEventListener('teachflow:students-changed', handleClassesChange)
       window.removeEventListener('teachflow:auth-state-changed', handleClassesChange)
     }
   }, [user, isAdmin])

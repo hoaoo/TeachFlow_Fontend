@@ -206,7 +206,18 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
 
   useEffect(() => {
     loadStudentsData()
-  }, [loadStudentsData])
+
+    const handleSync = () => {
+      loadStudentsData()
+      loadOptions()
+    }
+    window.addEventListener('teachflow:students-changed', handleSync)
+    window.addEventListener('teachflow:classes-changed', handleSync)
+    return () => {
+      window.removeEventListener('teachflow:students-changed', handleSync)
+      window.removeEventListener('teachflow:classes-changed', handleSync)
+    }
+  }, [loadStudentsData, loadOptions])
 
   // Handlers for Filters
   const handleSearchChange = (kw: string) => {
@@ -278,6 +289,8 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
       setFormNote('')
       toast.success(`Đã thêm học sinh ${created.name} vào lớp thành công!`)
       loadStudentsData()
+      window.dispatchEvent(new CustomEvent('teachflow:students-changed'))
+      window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
     } catch (err: any) {
       toast.error(err?.message || 'Có lỗi xảy ra khi tạo học sinh')
     } finally {
@@ -319,6 +332,8 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
       setEditTarget(null)
       toast.success(`Đã cập nhật hồ sơ học sinh ${updated.name}`)
       loadStudentsData()
+      window.dispatchEvent(new CustomEvent('teachflow:students-changed'))
+      window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
     } catch (err: any) {
       toast.error(err?.message || 'Lỗi khi cập nhật học sinh')
     } finally {
@@ -352,6 +367,8 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
       setTransferTarget(null)
       toast.success(res.message || 'Đã chuyển lớp thành công!')
       loadStudentsData()
+      window.dispatchEvent(new CustomEvent('teachflow:students-changed'))
+      window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
     } catch (err: any) {
       toast.error(err?.message || 'Lỗi khi chuyển lớp cho học sinh')
     } finally {
@@ -367,6 +384,8 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
       setDeleteTarget(null)
       toast.success(`Đã rút học sinh ${deleteTarget.name} khỏi lớp (lịch sử vẫn được lưu trữ)`)
       loadStudentsData()
+      window.dispatchEvent(new CustomEvent('teachflow:students-changed'))
+      window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
     } catch (err: any) {
       toast.error(err?.message || 'Lỗi khi rút học sinh')
     }
@@ -412,6 +431,8 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
         setImportText('')
         setImportRows([])
         loadStudentsData()
+        window.dispatchEvent(new CustomEvent('teachflow:students-changed'))
+        window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
       } else {
         toast.error(`Import không thành công: ${res.errorCount} lỗi`)
       }

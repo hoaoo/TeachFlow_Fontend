@@ -1578,6 +1578,8 @@ function TabStudents({
       toast.success('Đã thêm học sinh vào lớp thành công!')
       loadStudents()
       onClassUpdated()
+      window.dispatchEvent(new CustomEvent('teachflow:students-changed'))
+      window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
     } catch (err: any) {
       toast.error(err?.message || 'Lỗi khi thêm học sinh')
     } finally {
@@ -1623,6 +1625,8 @@ function TabStudents({
         setImportRows([])
         loadStudents()
         onClassUpdated()
+        window.dispatchEvent(new CustomEvent('teachflow:students-changed'))
+        window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
       }
     } catch (err: any) {
       toast.error(err?.message || 'Lỗi khi import học sinh')
@@ -1647,6 +1651,8 @@ function TabStudents({
       setTransferReason('')
       loadStudents()
       onClassUpdated()
+      window.dispatchEvent(new CustomEvent('teachflow:students-changed'))
+      window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
     } catch (err: any) {
       toast.error(err?.message || 'Lỗi khi chuyển lớp')
     } finally {
@@ -1662,6 +1668,8 @@ function TabStudents({
       setDeleteTarget(null)
       loadStudents()
       onClassUpdated()
+      window.dispatchEvent(new CustomEvent('teachflow:students-changed'))
+      window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
     } catch (err: any) {
       toast.error(err?.message || 'Lỗi khi rút học sinh')
     }
