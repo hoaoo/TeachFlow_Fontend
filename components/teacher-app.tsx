@@ -486,6 +486,10 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
 
   // Load dashboard overview data
   const loadDashboardData = useCallback(async () => {
+    if (!user) {
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setDashboardError(null)
     try {
@@ -514,7 +518,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [user])
 
   useEffect(() => {
     loadDashboardData()
@@ -542,8 +546,13 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
     return mondayStr === curMonStr
   }, [mondayStr])
 
-  // Fetch schedule whenever viewMode or selectedDate changes (no auth event listeners — avoids refresh storm)
+  // Fetch schedule whenever viewMode or selectedDate changes (only when user is authenticated)
   useEffect(() => {
+    if (!user) {
+      setScheduleLessons([])
+      setLoadingSchedule(false)
+      return
+    }
     const reqId = ++scheduleReqSeq.current
     setLoadingSchedule(true)
     setScheduleError(null)
@@ -591,7 +600,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
           }
         })
     }
-  }, [scheduleViewMode, selectedDate, mondayStr, sundayStr, scheduleRetryKey])
+  }, [user, scheduleViewMode, selectedDate, mondayStr, sundayStr, scheduleRetryKey])
 
   const handlePrev = () => {
     if (scheduleViewMode === 'day') {
@@ -2119,8 +2128,8 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
   );
 }
 
-function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { user, login, logout } = useAuth()
+function LoginForm({ onSuccess }: { onSuccess?: () => void }) {
+  const { login } = useAuth()
   const [email, setEmail] = useState('teacher@teachflow.vn')
   const [password, setPassword] = useState('Password123@')
   const [loading, setLoading] = useState(false)
@@ -2131,13 +2140,48 @@ function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     try {
       await login(email, password)
       toast.success('Đăng nhập thành công!')
-      onClose()
+      onSuccess?.()
     } catch (err: any) {
       toast.error(err?.message || 'Đăng nhập thất bại. Vui lòng kiểm tra lại email/mật khẩu.')
     } finally {
       setLoading(false)
     }
   }
+
+  return (
+    <form onSubmit={handleLogin} className="flex flex-col gap-4 py-2">
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-slate-700">Email giáo viên</label>
+        <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="teacher@teachflow.vn" required />
+      </div>
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-slate-700">Mật khẩu</label>
+        <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
+      </div>
+      <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
+        <p className="font-medium text-slate-700">Tài khoản mẫu seed:</p>
+        <p>Email: <code className="text-teal-700">teacher@teachflow.vn</code></p>
+        <p>Mật khẩu: <code className="text-teal-700">Password123@</code></p>
+      </div>
+      <Button type="submit" disabled={loading} className="w-full bg-teal-600 hover:bg-teal-700 font-semibold">
+        {loading ? (
+          <>
+            <Loader2 className="mr-2 size-4 animate-spin" />
+            Đang xác thực...
+          </>
+        ) : (
+          <>
+            <LogIn className="mr-2 size-4" />
+            Đăng nhập
+          </>
+        )}
+      </Button>
+    </form>
+  )
+}
+
+function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { user, logout } = useAuth()
 
   return (
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
@@ -2167,27 +2211,7 @@ function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
             </DialogFooter>
           </div>
         ) : (
-          <form onSubmit={handleLogin} className="flex flex-col gap-4 py-2">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-700">Email giáo viên</label>
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="teacher@teachflow.vn" required />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-700">Mật khẩu</label>
-              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
-            </div>
-            <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
-              <p className="font-medium text-slate-700">Tài khoản mẫu seed:</p>
-              <p>Email: <code className="text-teal-700">teacher@teachflow.vn</code></p>
-              <p>Mật khẩu: <code className="text-teal-700">Password123@</code></p>
-            </div>
-            <DialogFooter className="gap-2">
-              <Button type="button" variant="outline" onClick={onClose}>Hủy</Button>
-              <Button type="submit" disabled={loading} className="bg-teal-600 hover:bg-teal-700">
-                {loading ? 'Đang xác thực...' : 'Đăng nhập'}
-              </Button>
-            </DialogFooter>
-          </form>
+          <LoginForm onSuccess={onClose} />
         )}
       </DialogContent>
     </Dialog>
@@ -2195,7 +2219,7 @@ function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
 }
 
 export function TeacherApp() {
-  const { user } = useAuth()
+  const { user, isLoading, isAuthenticated } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
   const [active, setActive] = useState<View>(isAdmin ? 'Tổng quan hệ thống' : 'Tổng quan')
   const [menuOpen, setMenuOpen] = useState(false)
@@ -2216,6 +2240,47 @@ export function TeacherApp() {
     window.addEventListener('teachflow:open-login', handleOpenLogin)
     return () => window.removeEventListener('teachflow:open-login', handleOpenLogin)
   }, [])
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 gap-3">
+        <div className="grid size-12 place-items-center rounded-2xl bg-teal-600 text-white shadow-md">
+          <School className="size-6" />
+        </div>
+        <div className="flex items-center gap-2 text-slate-500">
+          <Loader2 className="size-4 animate-spin text-teal-600" />
+          <span className="text-sm font-medium">Đang khởi tạo TeachFlow...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated || !user) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-4 sm:p-6">
+        <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
+          <div className="flex items-center gap-3 border-b border-slate-100 pb-5 mb-5">
+            <div className="grid size-11 place-items-center rounded-xl bg-teal-600 text-white shadow-sm">
+              <School className="size-6" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-slate-900">TeachFlow</h1>
+              <p className="text-xs text-slate-500">Không gian làm việc dành cho giáo viên</p>
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <h2 className="text-base font-semibold text-slate-900">Đăng nhập tài khoản</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Đăng nhập để đồng bộ dữ liệu giáo án, lớp học và học sinh trực tiếp với backend.
+            </p>
+          </div>
+
+          <LoginForm />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-900">

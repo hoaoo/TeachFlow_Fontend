@@ -14,6 +14,7 @@ import {
   Loader2,
   Trash2,
 } from 'lucide-react';
+import { useAuth } from '@/context/auth-context';
 import {
   getNotifications,
   getUnreadCount,
@@ -30,6 +31,7 @@ interface NotificationDropdownProps {
 }
 
 export function NotificationDropdown({ onNavigate }: NotificationDropdownProps) {
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -37,8 +39,13 @@ export function NotificationDropdown({ onNavigate }: NotificationDropdownProps) 
   const [filterUnreadOnly, setFilterUnreadOnly] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Poll unread count every 30 seconds
+  // Poll unread count every 30 seconds only if user is authenticated
   useEffect(() => {
+    if (!user) {
+      setUnreadCount(0);
+      setNotifications([]);
+      return;
+    }
     let mounted = true;
     const checkCount = async () => {
       try {
@@ -55,10 +62,11 @@ export function NotificationDropdown({ onNavigate }: NotificationDropdownProps) 
       mounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [user]);
 
   // Fetch notifications when opened or filter changed
   const fetchList = async () => {
+    if (!user) return;
     try {
       setLoading(true);
       const res = await getNotifications({
