@@ -175,7 +175,7 @@ export function ScheduleAttendanceDialog({
         onOpenChange(val)
       }}
     >
-      <DialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-2xl bg-slate-50 border border-slate-200 shadow-2xl">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-4xl sm:max-w-4xl md:max-w-[900px] max-h-[88vh] flex flex-col p-0 overflow-hidden rounded-2xl bg-slate-50 border border-slate-200 shadow-2xl">
         {/* Header */}
         <div className="bg-white px-5 sm:px-6 py-4 border-b border-slate-200 shrink-0">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -228,7 +228,7 @@ export function ScheduleAttendanceDialog({
               <Check className="size-3.5 text-teal-600" /> Đánh dấu tất cả có mặt
             </Button>
             <span className="text-xs text-slate-500">
-              Chọn trạng thái và ghi chú cho từng học sinh:
+              Lựa chọn trạng thái và ghi chú cho từng học sinh:
             </span>
           </div>
         </div>
@@ -261,7 +261,7 @@ export function ScheduleAttendanceDialog({
               <p className="text-xs text-slate-400 mt-1">Vui lòng kiểm tra danh sách phân lớp của lớp học này.</p>
             </div>
           ) : (
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               {students.map((student, idx) => {
                 const displayName = student.name || student.fullName || (student as any)?.displayName || 'Học sinh không tên'
                 const displayCode = student.studentCode || (student as any)?.code || ''
@@ -271,133 +271,141 @@ export function ScheduleAttendanceDialog({
                 return (
                   <div
                     key={student.studentId || `student-${idx}`}
-                    className={`flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-xl border transition-all ${
+                    className={`w-full max-w-full box-border rounded-xl border p-4 transition-all ${
                       student.status === 'PRESENT'
-                        ? 'bg-white border-slate-200 hover:border-teal-200 shadow-2xs'
+                        ? 'bg-white border-slate-200 hover:border-teal-200 shadow-xs'
                         : student.status === 'EXCUSED_ABSENCE'
-                          ? 'bg-blue-50/60 border-blue-200 shadow-2xs'
+                          ? 'bg-blue-50/70 border-blue-200 shadow-xs'
                           : student.status === 'UNEXCUSED_ABSENCE'
-                            ? 'bg-rose-50/60 border-rose-200 shadow-2xs'
-                            : 'bg-amber-50/60 border-amber-200 shadow-2xs'
+                            ? 'bg-rose-50/70 border-rose-200 shadow-xs'
+                            : 'bg-amber-50/70 border-amber-200 shadow-xs'
                     }`}
                   >
-                    {/* Left: Student Identity (STT, Avatar, Name, Code, Gender) */}
-                    <div className="flex items-center gap-3 min-w-[200px] shrink-0">
-                      <span className="text-xs font-bold text-slate-400 w-6 text-center shrink-0">
-                        #{idx + 1}
-                      </span>
-                      <div
-                        className={`size-9 rounded-full grid place-items-center text-xs font-bold shrink-0 border ${
-                          student.status === 'PRESENT'
-                            ? 'bg-teal-50 text-teal-700 border-teal-200'
-                            : student.status === 'EXCUSED_ABSENCE'
-                              ? 'bg-blue-100 text-blue-800 border-blue-300'
-                              : student.status === 'UNEXCUSED_ABSENCE'
-                                ? 'bg-rose-100 text-rose-800 border-rose-300'
-                                : 'bg-amber-100 text-amber-800 border-amber-300'
-                        }`}
-                      >
-                        {displayInitials}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-bold text-slate-900 leading-tight break-words">
-                            {displayName}
-                          </p>
-                          {displayCode && (
-                            <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
-                              {displayCode}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          {student.gender || 'Học sinh'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Right: Status Toggle Buttons, Late Minutes, and Note */}
-                    <div className="flex flex-wrap items-center gap-2 flex-1 justify-start lg:justify-end">
-                      {/* 4 Status Buttons */}
-                      <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100/90 p-1 text-xs font-medium shrink-0 shadow-2xs">
-                        <button
-                          type="button"
-                          onClick={() => handleSetStatus(student.studentId, 'PRESENT')}
-                          className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 font-medium transition-all ${
+                    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-3 sm:gap-4 items-start w-full">
+                      {/* Col 1: Index + Avatar */}
+                      <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                        <span className="text-xs font-bold text-slate-400 w-5 text-center shrink-0">
+                          #{idx + 1}
+                        </span>
+                        <div
+                          className={`size-10 rounded-full grid place-items-center text-xs font-bold shrink-0 border ${
                             student.status === 'PRESENT'
-                              ? 'bg-teal-600 text-white font-bold shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                              ? 'bg-teal-50 text-teal-700 border-teal-200'
+                              : student.status === 'EXCUSED_ABSENCE'
+                                ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                : student.status === 'UNEXCUSED_ABSENCE'
+                                  ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                  : 'bg-amber-100 text-amber-800 border-amber-300'
                           }`}
                         >
-                          <Check className="size-3" />
-                          Có mặt
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSetStatus(student.studentId, 'EXCUSED_ABSENCE')}
-                          className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 font-medium transition-all ${
-                            student.status === 'EXCUSED_ABSENCE'
-                              ? 'bg-blue-600 text-white font-bold shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-                          }`}
-                        >
-                          Có phép
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSetStatus(student.studentId, 'UNEXCUSED_ABSENCE')}
-                          className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 font-medium transition-all ${
-                            student.status === 'UNEXCUSED_ABSENCE'
-                              ? 'bg-rose-600 text-white font-bold shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-                          }`}
-                        >
-                          Vắng
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSetStatus(student.studentId, 'LATE')}
-                          className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 font-medium transition-all ${
-                            student.status === 'LATE'
-                              ? 'bg-amber-600 text-white font-bold shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-                          }`}
-                        >
-                          <Clock className="size-3" />
-                          Đi muộn
-                        </button>
+                          {displayInitials}
+                        </div>
                       </div>
 
-                      {/* Late Minutes input if LATE */}
-                      {isLate && (
-                        <div className="flex items-center gap-1.5 bg-white border border-amber-300 rounded-lg px-2.5 py-1 text-xs shadow-2xs">
-                          <Clock className="size-3.5 text-amber-600" />
-                          <input
-                            type="number"
-                            min="0"
-                            max="180"
-                            aria-label={`Số phút đi muộn của ${displayName}`}
-                            value={student.lateMinutes >= 0 ? student.lateMinutes : 5}
-                            onChange={(e) => {
-                              const val = Math.max(0, parseInt(e.target.value) || 0)
-                              handleSetLateMinutes(student.studentId, val)
-                            }}
-                            className="w-10 text-center font-bold text-amber-900 bg-transparent border-b border-amber-400 focus:outline-hidden"
-                          />
-                          <span className="text-amber-800 font-medium">phút</span>
+                      {/* Col 2: Student Details + Status Buttons Grid + Late Input + Note Input */}
+                      <div className="min-w-0 flex flex-col gap-2.5 w-full">
+                        {/* Row 1: Student Name, Code, Gender */}
+                        <div className="flex flex-wrap items-center justify-between gap-1.5">
+                          <div className="flex items-center gap-2 flex-wrap min-w-0">
+                            <span className="text-sm font-bold text-slate-900 leading-tight">
+                              {displayName}
+                            </span>
+                            {displayCode && (
+                              <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                                {displayCode}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs font-medium text-slate-500">
+                            {student.gender || 'Học sinh'}
+                          </span>
                         </div>
-                      )}
 
-                      {/* Student note input */}
-                      <div className="relative min-w-[160px] sm:w-44 lg:w-48 flex-1 sm:flex-none">
-                        <input
-                          type="text"
-                          aria-label={`Ghi chú cho ${displayName}`}
-                          placeholder="Ghi chú học sinh..."
-                          value={student.note || ''}
-                          onChange={(e) => handleSetNote(student.studentId, e.target.value)}
-                          className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-teal-500 text-slate-800 placeholder:text-slate-400 shadow-2xs"
-                        />
+                        {/* Row 2: 4 Status Buttons in Responsive Grid (2 cols on mobile, 4 cols on sm+) */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full">
+                          <button
+                            type="button"
+                            onClick={() => handleSetStatus(student.studentId, 'PRESENT')}
+                            className={`flex items-center justify-center gap-1.5 rounded-lg py-2 px-3 text-xs font-semibold border transition-all ${
+                              student.status === 'PRESENT'
+                                ? 'bg-teal-600 border-teal-600 text-white shadow-xs'
+                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+                            }`}
+                          >
+                            <Check className="size-3.5 shrink-0" />
+                            Có mặt
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSetStatus(student.studentId, 'EXCUSED_ABSENCE')}
+                            className={`flex items-center justify-center gap-1.5 rounded-lg py-2 px-3 text-xs font-semibold border transition-all ${
+                              student.status === 'EXCUSED_ABSENCE'
+                                ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+                            }`}
+                          >
+                            Có phép
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSetStatus(student.studentId, 'UNEXCUSED_ABSENCE')}
+                            className={`flex items-center justify-center gap-1.5 rounded-lg py-2 px-3 text-xs font-semibold border transition-all ${
+                              student.status === 'UNEXCUSED_ABSENCE'
+                                ? 'bg-rose-600 border-rose-600 text-white shadow-xs'
+                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+                            }`}
+                          >
+                            Vắng
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSetStatus(student.studentId, 'LATE')}
+                            className={`flex items-center justify-center gap-1.5 rounded-lg py-2 px-3 text-xs font-semibold border transition-all ${
+                              student.status === 'LATE'
+                                ? 'bg-amber-600 border-amber-600 text-white shadow-xs'
+                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+                            }`}
+                          >
+                            <Clock className="size-3.5 shrink-0" />
+                            Đi muộn
+                          </button>
+                        </div>
+
+                        {/* Row 3 (Optional): If LATE -> late minutes input */}
+                        {isLate && (
+                          <div className="flex items-center gap-2 bg-amber-50/90 border border-amber-300 rounded-lg p-2 text-xs text-amber-900 w-full sm:w-auto">
+                            <Clock className="size-4 text-amber-600 shrink-0" />
+                            <span className="font-medium">Số phút đi muộn:</span>
+                            <input
+                              type="number"
+                              min="0"
+                              max="180"
+                              aria-label={`Số phút đi muộn của ${displayName}`}
+                              value={student.lateMinutes >= 0 ? student.lateMinutes : 5}
+                              onChange={(e) => {
+                                const val = Math.max(0, parseInt(e.target.value) || 0)
+                                handleSetLateMinutes(student.studentId, val)
+                              }}
+                              className="w-16 h-7 rounded border border-amber-300 bg-white text-center font-bold text-amber-900 focus:outline-teal-500"
+                            />
+                            <span className="font-semibold text-amber-800">phút</span>
+                          </div>
+                        )}
+
+                        {/* Row 4: Student Individual Note Input (Full width, independent row) */}
+                        <div className="w-full min-w-0">
+                          <input
+                            type="text"
+                            aria-label={`Ghi chú cho ${displayName}`}
+                            placeholder={`Ghi chú riêng cho ${displayName} (ví dụ: hăng hái phát biểu, quên sách vở...)...`}
+                            value={student.note || ''}
+                            onChange={(e) => handleSetNote(student.studentId, e.target.value)}
+                            className="w-full text-xs h-8.5 border border-slate-200 rounded-lg px-3 bg-white focus:outline-teal-500 text-slate-800 placeholder:text-slate-400 shadow-2xs"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -408,8 +416,8 @@ export function ScheduleAttendanceDialog({
         </div>
 
         {/* Footer */}
-        <div className="bg-white px-5 sm:px-6 py-3.5 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-          <div className="w-full sm:w-auto flex-1 max-w-md">
+        <div className="bg-white px-5 sm:px-6 py-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+          <div className="w-full sm:flex-1 min-w-0">
             <Input
               type="text"
               placeholder="Ghi chú chung cho tiết dạy (tùy chọn)..."
@@ -418,18 +426,18 @@ export function ScheduleAttendanceDialog({
                 setSessionNote(e.target.value)
                 setIsDirty(true)
               }}
-              className="text-xs h-8.5 bg-slate-50"
+              className="text-xs h-9 bg-slate-50 w-full"
             />
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end shrink-0">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => onOpenChange(false)}
               disabled={saving}
-              className="text-xs font-semibold h-8.5"
+              className="text-xs font-semibold h-9 px-4"
             >
               Hủy
             </Button>
@@ -438,7 +446,7 @@ export function ScheduleAttendanceDialog({
               size="sm"
               onClick={handleSave}
               disabled={saving || loading || students.length === 0}
-              className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs gap-1.5 shadow-xs h-8.5"
+              className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs gap-1.5 shadow-xs h-9 px-5"
             >
               {saving ? (
                 <>
