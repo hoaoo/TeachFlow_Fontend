@@ -1407,17 +1407,17 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
         onSelect={(libAct) => {
           const newAct: Activity = {
             id: `act-${Date.now()}`,
-            phase: libAct.type || 'Hoạt động',
+            phase: libAct.type || 'Khởi động',
             title: libAct.title,
-            minutes: 10,
-            method: libAct.type === 'Trò chơi' ? 'Trò chơi học tập' : 'Thảo luận nhóm',
-            technique: 'Động não',
-            competencies: 'Giao tiếp và hợp tác',
-            qualities: 'Chăm chỉ',
-            equipment: '',
-            objective: libAct.description || `Thực hiện hoạt động ${libAct.title}`,
-            teacher: libAct.description || `GV tổ chức ${libAct.title}`,
-            students: `HS tham gia ${libAct.title}`,
+            minutes: libAct.durationMinutes || 10,
+            method: libAct.method || (libAct.type === 'Trò chơi' ? 'Trò chơi học tập' : 'Thảo luận nhóm'),
+            technique: libAct.technique || 'Think-Pair-Share',
+            competencies: libAct.competencies || 'Năng lực giao tiếp và hợp tác',
+            qualities: libAct.qualities || 'Chăm chỉ, trung thực',
+            equipment: libAct.equipment || '',
+            objective: libAct.objective || libAct.description || `Mục tiêu hoạt động ${libAct.title}`,
+            teacher: libAct.teacherActivity || `GV tổ chức hoạt động ${libAct.title}.`,
+            students: libAct.studentActivity || `HS tham gia hoạt động ${libAct.title}.`,
             sortOrder: lesson.activities.length,
           }
           setLesson((prev) => {
@@ -2381,85 +2381,200 @@ function ActivityLibraryPickerDialog({
   const [activities, setActivities] = useState<LibraryActivity[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState('Tất cả')
+  const [previewAct, setPreviewAct] = useState<LibraryActivity | null>(null)
 
   useEffect(() => {
     if (open) {
       setLoading(true)
+      setPreviewAct(null)
       getLibraryActivities()
-        .then(setActivities)
+        .then((res) => setActivities(res.items || []))
         .catch(() => setActivities([]))
         .finally(() => setLoading(false))
     }
   }, [open])
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return activities
-    const q = search.toLowerCase()
-    return activities.filter((a) =>
-      `${a.title} ${a.subject} ${a.grade} ${a.type}`.toLowerCase().includes(q)
-    )
-  }, [activities, search])
+    return activities.filter((a) => {
+      const matchType = typeFilter === 'Tất cả' || a.type === typeFilter || (a as any).typeName === typeFilter
+      const q = search.trim().toLowerCase()
+      const matchSearch =
+        !q ||
+        `${a.title} ${a.subject} ${a.grade} ${a.type} ${a.method || ''} ${a.technique || ''}`
+          .toLowerCase()
+          .includes(q)
+      return matchType && matchSearch
+    })
+  }, [activities, search, typeFilter])
 
   return (
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
-      <DialogContent className="sm:max-w-[540px] max-h-[85vh] flex flex-col">
+      <DialogContent className="sm:max-w-[620px] max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Thư viện hoạt động dạy học</DialogTitle>
           <DialogDescription>
-            Chọn hoạt động mẫu để chèn bản sao vào giáo án của bạn.
+            Khám phá và chèn bản sao hoạt động (snapshot) vào giáo án hiện tại.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="relative my-2">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm theo tên trò chơi, khởi động, môn học..."
-            className="pl-9 text-xs"
-          />
-        </div>
-
-        <div className="flex-1 overflow-y-auto divide-y divide-slate-100 min-h-[240px]">
-          {loading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="size-6 animate-spin text-teal-600" />
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="py-12 text-center text-xs text-slate-400">
-              Không tìm thấy hoạt động nào phù hợp.
-            </div>
-          ) : (
-            filtered.map((a) => (
-              <div
-                key={a.id}
-                onClick={() => onSelect(a)}
-                className="group flex items-center justify-between p-3 hover:bg-teal-50/60 cursor-pointer rounded-xl transition"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
-                      {a.type}
-                    </span>
-                    <p className="text-xs font-semibold text-slate-900 group-hover:text-teal-700 truncate">
-                      {a.title}
-                    </p>
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    {a.subject} · {a.grade} {a.description ? `· ${a.description}` : ''}
-                  </p>
-                </div>
-                <Button size="sm" variant="ghost" className="text-xs text-teal-600 shrink-0">
-                  Chèn vào
-                </Button>
+        {previewAct ? (
+          <div className="flex-1 overflow-y-auto space-y-3.5 my-2 text-xs">
+            <div className="flex items-center justify-between pb-2 border-b">
+              <div>
+                <span className="rounded-lg bg-teal-50 px-2 py-0.5 text-[11px] font-bold text-teal-700 border border-teal-200">
+                  {previewAct.type || 'Hoạt động'}
+                </span>
+                <h4 className="font-bold text-sm text-slate-900 mt-1">{previewAct.title}</h4>
+                <p className="text-slate-500 text-[11px]">
+                  {[previewAct.subject, previewAct.grade].filter(Boolean).join(' · ')} · ⏱ {previewAct.durationMinutes || 10} phút
+                </p>
               </div>
-            ))
-          )}
-        </div>
+              <Button size="sm" variant="ghost" onClick={() => setPreviewAct(null)} className="text-xs">
+                Quay lại danh sách
+              </Button>
+            </div>
 
-        <DialogFooter>
-          <Button variant="outline" size="sm" onClick={onClose}>Đóng</Button>
-        </DialogFooter>
+            {previewAct.objective && (
+              <div className="rounded-lg bg-slate-50 p-2.5 border">
+                <strong className="text-slate-900 block mb-0.5">🎯 Mục tiêu:</strong>
+                <p className="text-slate-700 leading-relaxed">{previewAct.objective}</p>
+              </div>
+            )}
+
+            {(previewAct.method || previewAct.technique) && (
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {previewAct.method && (
+                  <div className="rounded-lg border p-2">
+                    <span className="text-slate-400 block text-[10px]">Phương pháp:</span>
+                    <span className="font-semibold text-slate-800">{previewAct.method}</span>
+                  </div>
+                )}
+                {previewAct.technique && (
+                  <div className="rounded-lg border p-2">
+                    <span className="text-slate-400 block text-[10px]">Kĩ thuật:</span>
+                    <span className="font-semibold text-violet-700">{previewAct.technique}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {previewAct.gameRules && (
+              <div className="rounded-lg bg-amber-50 p-2.5 border border-amber-200 text-amber-950">
+                <strong className="block mb-0.5 text-amber-900">🎮 Luật chơi:</strong>
+                <p className="leading-relaxed whitespace-pre-line">{previewAct.gameRules}</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg border border-teal-100 bg-teal-50/30 p-2.5">
+                <strong className="text-teal-900 block mb-1">Hoạt động Giáo viên:</strong>
+                <p className="text-slate-700 leading-relaxed whitespace-pre-line">{previewAct.teacherActivity || 'GV tổ chức hoạt động cho học sinh.'}</p>
+              </div>
+              <div className="rounded-lg border border-blue-100 bg-blue-50/30 p-2.5">
+                <strong className="text-blue-900 block mb-1">Hoạt động Học sinh:</strong>
+                <p className="text-slate-700 leading-relaxed whitespace-pre-line">{previewAct.studentActivity || 'HS tham gia hoạt động theo hướng dẫn.'}</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <Button size="sm" variant="outline" onClick={() => setPreviewAct(null)}>
+                Đóng xem trước
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => onSelect(previewAct)}
+                className="bg-teal-600 hover:bg-teal-700 text-white font-semibold gap-1"
+              >
+                <Plus className="size-3.5" /> Chèn vào giáo án
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-2 my-2">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Tìm theo tên trò chơi, khởi động, môn..."
+                  className="pl-9 text-xs"
+                />
+              </div>
+
+              <select
+                aria-label="Lọc loại hoạt động"
+                className="h-9 rounded-md border bg-background px-2.5 text-xs font-medium"
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+              >
+                <option value="Tất cả">Tất cả loại</option>
+                <option value="Khởi động">Khởi động</option>
+                <option value="Khám phá">Khám phá</option>
+                <option value="Luyện tập">Luyện tập</option>
+                <option value="Vận dụng">Vận dụng</option>
+                <option value="Trò chơi">Trò chơi</option>
+              </select>
+            </div>
+
+            <div className="flex-1 overflow-y-auto divide-y divide-slate-100 min-h-[260px]">
+              {loading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="size-6 animate-spin text-teal-600" />
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-400">
+                  Không tìm thấy hoạt động nào phù hợp.
+                </div>
+              ) : (
+                filtered.map((a) => (
+                  <div
+                    key={a.id}
+                    className="group flex items-center justify-between p-3 hover:bg-teal-50/50 rounded-xl transition gap-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+                          {a.type || 'Hoạt động'}
+                        </span>
+                        <p className="text-xs font-semibold text-slate-900 group-hover:text-teal-700 truncate">
+                          {a.title}
+                        </p>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        {[a.subject, a.grade].filter(Boolean).join(' · ')} · ⏱ {a.durationMinutes || 10}p
+                        {a.method ? ` · ${a.method}` : ''}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setPreviewAct(a)}
+                        className="text-xs h-7 px-2 text-slate-600 hover:text-teal-700"
+                      >
+                        <Eye className="size-3.5 mr-1" /> Xem
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => onSelect(a)}
+                        className="text-xs h-7 bg-teal-600 hover:bg-teal-700 text-white font-semibold"
+                      >
+                        Chèn
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={onClose}>Đóng</Button>
+            </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   )
