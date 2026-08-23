@@ -32,6 +32,7 @@ import {
 import { toast } from 'sonner';
 import {
   getHomeroomDashboard,
+  getMyHomeroomClasses,
   getBehaviorRecords,
   createBehaviorRecord,
   updateBehaviorRecord,
@@ -51,7 +52,6 @@ import {
   type MonthlySummaryData,
   type MonthlyReviewData,
 } from '@/services/homeroom-service';
-import { getClasses } from '@/services/classroom-service';
 import { toggleTask as apiToggleTask } from '@/services/dashboard-service';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -91,6 +91,8 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
   // Dashboard Data State
   const [dashboardData, setDashboardData] = useState<HomeroomDashboardData | null>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
+  const [homeroomState, setHomeroomState] = useState<'loading' | 'empty' | 'error' | 'success'>('loading');
+  const [homeroomError, setHomeroomError] = useState('');
 
   // Behavior Tab State
   const [behaviorList, setBehaviorList] = useState<BehaviorRecord[]>([]);
@@ -145,34 +147,45 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
 
   // 1. Initial Load Classes
   useEffect(() => {
-    getClasses()
+    getMyHomeroomClasses()
       .then((res) => {
-        if (res && res.length > 0) {
-          setClassList(res.map((c) => ({ id: c.id, name: c.name })));
-          setSelectedClassId(res[0].id);
+        if (!res.hasHomeroomClass || res.classes.length === 0) {
+          setClassList([]);
+          setSelectedClassId('');
+          setDashboardData(null);
+          setHomeroomState('empty');
+          setLoadingDashboard(false);
+          return;
         }
+        setClassList(res.classes.map((c) => ({ id: c.id, name: c.name })));
+        setSelectedClassId(res.classes[0].id);
+        setHomeroomState('success');
       })
-      .catch((err) => console.error(err));
+      .catch((err) => {
+        setHomeroomError(err?.message || 'Không thể tải danh sách lớp chủ nhiệm');
+        setHomeroomState('error');
+        setLoadingDashboard(false);
+      });
   }, []);
 
   // 2. Load Dashboard when class changes
-  const fetchDashboard = async (classId?: string) => {
+  const fetchDashboard = async (classId: string) => {
+    if (!classId) return;
     setLoadingDashboard(true);
     try {
       const data = await getHomeroomDashboard(classId);
       setDashboardData(data);
-      if (!selectedClassId && data.classroom?.id) {
-        setSelectedClassId(data.classroom.id);
-      }
+      setHomeroomState('success');
     } catch (err: any) {
-      toast.error(err.message || 'Lỗi tải dữ liệu bảng điều khiển chủ nhiệm');
+      setHomeroomError(err.message || 'Lỗi tải dữ liệu bảng điều khiển chủ nhiệm');
+      setHomeroomState('error');
     } finally {
       setLoadingDashboard(false);
     }
   };
 
   useEffect(() => {
-    fetchDashboard(selectedClassId);
+    if (selectedClassId) fetchDashboard(selectedClassId);
   }, [selectedClassId]);
 
   // 3. Load Behavior Records
@@ -438,6 +451,59 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
     }
   };
 
+  if (homeroomState === 'loading') {
+    return (
+      <div className="space-y-5" aria-label="Đang tải dữ liệu chủ nhiệm">
+        <div className="h-20 animate-pulse rounded-2xl bg-slate-100" />
+        <div className="grid gap-4 sm:grid-cols-3">
+          {[0, 1, 2].map((item) => (
+            <div key={item} className="h-32 animate-pulse rounded-2xl bg-slate-100" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (homeroomState === 'empty') {
+    return (
+      <div className="flex min-h-[460px] items-center justify-center">
+        <div className="max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto mb-4 grid size-14 place-items-center rounded-full bg-teal-50 text-teal-700">
+            <School className="size-7" />
+          </div>
+          <h1 className="text-xl font-bold text-slate-900">Chưa có lớp chủ nhiệm</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            Bạn chưa được gán làm giáo viên chủ nhiệm của lớp nào.<br />
+            Hãy đánh dấu một lớp là lớp chủ nhiệm trong phần Lớp học để sử dụng các chức năng quản lý chủ nhiệm.
+          </p>
+          <Button
+            className="mt-6 bg-teal-600 text-white hover:bg-teal-700"
+            onClick={() => onNavigate?.('Lớp học')}
+          >
+            Đi tới Lớp học
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (homeroomState === 'error') {
+    return (
+      <div className="flex min-h-[360px] items-center justify-center">
+        <div className="max-w-lg rounded-2xl border border-rose-200 bg-rose-50 p-7 text-center">
+          <AlertCircle className="mx-auto size-8 text-rose-600" />
+          <h1 className="mt-3 text-lg font-bold text-slate-900">Không thể tải dữ liệu chủ nhiệm</h1>
+          <p className="mt-2 text-sm text-slate-600">{homeroomError}</p>
+          <Button className="mt-5" variant="outline" onClick={() => window.location.reload()}>
+            Thử lại
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!selectedClassId || !dashboardData?.classroom) return null;
+
   return (
     <div className="flex flex-col gap-6">
       {/* Top Header & Classroom Selector */}
@@ -445,12 +511,12 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
         <div>
           <div className="flex items-center gap-2">
             <span className="rounded-md bg-teal-100 px-2.5 py-0.5 text-xs font-semibold text-teal-800">
-              {dashboardData?.classroom.schoolYearName || 'Năm học 2026 - 2027'}
+              {dashboardData.classroom.schoolYearName}
             </span>
-            <span className="text-xs text-slate-400">· Công tác chủ nhiệm tiểu học</span>
+            <span className="text-xs text-slate-400">· Công tác chủ nhiệm</span>
           </div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Chủ nhiệm {dashboardData?.classroom?.name ? `lớp ${dashboardData.classroom.name}` : ''}
+            Chủ nhiệm lớp {dashboardData.classroom.name}
           </h1>
         </div>
 

@@ -9,6 +9,8 @@ import {
   createClass as apiCreateClass,
   updateClass as apiUpdateClass,
   deleteClass as apiDeleteClass,
+  setClassAsHomeroom,
+  unsetClassAsHomeroom,
   completeClass as apiCompleteClass,
   cloneClass as apiCloneClass,
   getClassDashboard,
@@ -82,6 +84,7 @@ import {
 } from 'lucide-react'
 import { ScheduleAttendanceDialog } from '@/components/schedule-attendance-dialog'
 import { generateStudentComment } from '@/services/ai-service'
+import { useAuth } from '@/context/auth-context'
 
 type ViewState = {
   page: 'classes' | 'class' | 'student'
@@ -100,6 +103,8 @@ export function ClassroomManager({
   initialSection?: 'classes' | 'students'
   initialClassId?: string
 }) {
+  const { user } = useAuth()
+  const authenticatedTeacherId = user?.teacher?.id || (user as any)?.teacherId
   const [view, setView] = useState<ViewState>({
     page: initialClassId ? 'class' : 'classes',
     classId: initialClassId,
@@ -156,6 +161,7 @@ export function ClassroomManager({
   const [editStatus, setEditStatus] = useState('ACTIVE')
   const [editSubjectIds, setEditSubjectIds] = useState<string[]>([])
   const [updating, setUpdating] = useState(false)
+  const [updatingHomeroomId, setUpdatingHomeroomId] = useState<string | null>(null)
 
   // Clone Form State
   const [cloneTargetSyId, setCloneTargetSyId] = useState('')
@@ -410,6 +416,26 @@ export function ClassroomManager({
     }
   }
 
+  const handleHomeroomChange = async (classroom: ClassRecord) => {
+    if (updatingHomeroomId) return
+    setUpdatingHomeroomId(classroom.id)
+    try {
+      const isCurrentHomeroom = classroom.homeroomTeacherId === authenticatedTeacherId
+      const updated = isCurrentHomeroom
+        ? await unsetClassAsHomeroom(classroom.id)
+        : await setClassAsHomeroom(classroom.id)
+      setClasses((prev) => prev.map((item) => (item.id === classroom.id ? { ...item, ...updated } : item)))
+      toast.success(isCurrentHomeroom ? 'Đã bỏ lớp chủ nhiệm' : 'Đã đặt làm lớp chủ nhiệm')
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('teachflow:classes-changed'))
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Không thể cập nhật phân công chủ nhiệm')
+    } finally {
+      setUpdatingHomeroomId(null)
+    }
+  }
+
   // Selected current class
   const currentClass = classes.find((item) => item.id === view.classId) ?? classes[0]
 
@@ -628,6 +654,11 @@ export function ClassroomManager({
                           <CardTitle className="text-lg font-bold text-slate-900 group-hover:text-teal-700 transition-colors">
                             {item.name}
                           </CardTitle>
+                          {item.homeroomTeacherId === authenticatedTeacherId && (
+                            <Badge className="border-teal-200 bg-teal-50 text-[10px] text-teal-700">
+                              Chủ nhiệm
+                            </Badge>
+                          )}
                           {item.code && (
                             <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
                               {item.code}
@@ -674,6 +705,14 @@ export function ClassroomManager({
                               <BarChart3 className="size-3.5 mr-2" /> Đánh giá
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleHomeroomChange(item)}
+                            >
+                              <ShieldCheck className="size-3.5 mr-2" />
+                              {item.homeroomTeacherId === authenticatedTeacherId
+                                ? 'Bỏ lớp chủ nhiệm'
+                                : 'Đặt làm lớp chủ nhiệm'}
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => openEditModal(item)}>
                               <Edit2 className="size-3.5 mr-2" /> Chỉnh sửa lớp
                             </DropdownMenuItem>

@@ -308,6 +308,14 @@ export async function deleteClass(id: string): Promise<void> {
   await api.delete(`/classes/${id}`);
 }
 
+export async function setClassAsHomeroom(id: string): Promise<ClassRecord> {
+  return api.post<ClassRecord>(`/classes/${id}/homeroom`, {});
+}
+
+export async function unsetClassAsHomeroom(id: string): Promise<ClassRecord> {
+  return api.delete<ClassRecord>(`/classes/${id}/homeroom`);
+}
+
 export async function completeClass(id: string): Promise<ClassRecord> {
   return await api.post<ClassRecord>(`/classes/${id}/complete`, {});
 }

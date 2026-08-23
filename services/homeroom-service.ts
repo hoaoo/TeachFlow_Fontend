@@ -8,14 +8,28 @@ export interface HomeroomClassroom {
   room?: string;
   schedule?: string;
   accent?: string;
-  studentCount: number;
+  studentCount?: number;
   gradeName?: string;
   schoolYearName?: string;
   schoolYearId: string;
 }
 
+export interface MyHomeroomClassesResponse {
+  hasHomeroomClass: boolean;
+  classes: Array<{
+    id: string;
+    code: string;
+    name: string;
+    gradeName: string;
+    gradeLevel: number;
+    schoolYearId: string;
+    schoolYearName: string;
+  }>;
+}
+
 export interface HomeroomDashboardData {
-  classroom: HomeroomClassroom;
+  hasHomeroomClass: boolean;
+  classroom: HomeroomClassroom | null;
   attendanceToday: {
     isRecorded: boolean;
     total: number;
@@ -169,9 +183,14 @@ export interface MonthlyReviewData {
 }
 
 // 1. Dashboard
-export async function getHomeroomDashboard(classId?: string): Promise<HomeroomDashboardData> {
-  const query = classId ? `?classId=${encodeURIComponent(classId)}` : '';
-  return api.get<HomeroomDashboardData>(`/homeroom/dashboard${query}`);
+export async function getMyHomeroomClasses(): Promise<MyHomeroomClassesResponse> {
+  return api.get<MyHomeroomClassesResponse>('/homeroom/classrooms');
+}
+
+export async function getHomeroomDashboard(classId: string): Promise<HomeroomDashboardData> {
+  return api.get<HomeroomDashboardData>(
+    `/homeroom/dashboard?classId=${encodeURIComponent(classId)}`,
+  );
 }
 
 // 2. Students Need Attention
