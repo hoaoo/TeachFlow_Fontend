@@ -24,17 +24,17 @@ test('behavior form uses the complete active classroom roster', () => {
 });
 
 test('renders the required no-homeroom empty state and classroom CTA', () => {
-  assert.match(viewSource, /u1ea1n.*?u1ec7m/);
-  assert.match(viewSource, /u00e3y.*?u1eadp/);
-  assert.match(viewSource, /u1ecdn l.*?u1ec7m/);
+  assert.match(viewSource, /Bạn chưa thiết lập lớp chủ nhiệm/);
+  assert.match(viewSource, /Hãy chọn một lớp trong màn Lớp học để thiết lập/);
+  assert.match(viewSource, /Chọn lớp chủ nhiệm/);
   assert.match(viewSource, /homeroomState === 'empty'/);
 });
 
 test('homeroom badge and actions depend on authenticated teacher assignment', () => {
-  assert.match(classroomSource, /item\.homeroomTeacherId === authenticatedTeacherId/);
+  assert.match(classroomSource, /classroom\.homeroomTeacherId === authenticatedTeacherId/);
   assert.match(classroomSource, /item\.teacherId === authenticatedTeacherId/);
   assert.match(classroomSource, /aria-label=/);
-  assert.match(classroomSource, /\\\\u0110\\\\u1eb7t l.*?nhi\\\\u1ec7m/);
-  assert.match(classroomSource, /B\\\\?f.*?nhi\\\\?m/);
+  assert.match(classroomSource, /Đặt làm lớp chủ nhiệm/);
+  assert.match(classroomSource, /Bỏ lớp chủ nhiệm/);
   assert.match(classroomSource, /!classroom\.schoolYear\.isCurrent/);
 });

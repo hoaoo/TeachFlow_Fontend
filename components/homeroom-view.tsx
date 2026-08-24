@@ -58,29 +58,29 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
 const QUICK_POSITIVE_SUGGESTIONS = [
-  'TÃ­ch cá»±c phÃ¡t biá»ƒu',
-  'HoÃ n thÃ nh tá»‘t nhiá»‡m vá»¥',
-  'Há»£p tÃ¡c tá»‘t vá»›i báº¡n',
-  'CÃ³ tinh tháº§n giÃºp Ä‘á»¡ báº¡n',
-  'Chuáº©n bá»‹ bÃ i Ä‘áº§y Ä‘á»§',
-  'CÃ³ tiáº¿n bá»™ rÃµ rá»‡t',
+  'Tích cực phát biểu',
+  'Hoàn thành tốt nhiệm vụ',
+  'Hợp tác tốt với bạn',
+  'Có tinh thần giúp đỡ bạn',
+  'Chuẩn bị bài đầy đủ',
+  'Có tiến bộ rõ rệt',
 ];
 
 const QUICK_REMINDER_SUGGESTIONS = [
-  'Cáº§n táº­p trung hÆ¡n trong giá» há»c',
-  'ChÆ°a chuáº©n bá»‹ bÃ i Ä‘áº§y Ä‘á»§',
-  'Cáº§n giá»¯ tráº­t tá»± trong giá»',
-  'Cáº§n hoÃ n thÃ nh nhiá»‡m vá»¥ Ä‘Ãºng thá»i gian',
-  'Cáº§n chá»§ Ä‘á»™ng tham gia hoáº¡t Ä‘á»™ng nhÃ³m',
+  'Cần tập trung hơn trong giờ học',
+  'Chưa chuẩn bị bài đầy đủ',
+  'Cần giữ trật tự trong giờ',
+  'Cần hoàn thành nhiệm vụ đúng thời gian',
+  'Cần chủ động tham gia hoạt động nhóm',
 ];
 
 const CATEGORY_MAP: Record<string, string> = {
-  DISCIPLINE: 'Ká»· luáº­t & Tráº­t tá»±',
-  LEARNING: 'Há»c táº­p',
-  HYGIENE: 'Vá»‡ sinh & TÃ¡c phong',
-  TEAMWORK: 'LÃ m viá»‡c nhÃ³m',
-  RESPONSIBILITY: 'TrÃ¡ch nhiá»‡m',
-  OTHER: 'KhÃ¡c',
+  DISCIPLINE: 'Kỷ luật & Trật tự',
+  LEARNING: 'Học tập',
+  HYGIENE: 'Vệ sinh & Tác phong',
+  TEAMWORK: 'Làm việc nhóm',
+  RESPONSIBILITY: 'Trách nhiệm',
+  OTHER: 'Khác',
 };
 
 export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialTab?: 'overview' | 'behavior' | 'weekly' | 'monthly'; onNavigate?: (view: any) => void }) {
@@ -161,7 +161,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
         setSelectedClassId(res.classes[0].id);
       })
       .catch((err) => {
-        setHomeroomError(err?.message || 'KhÃ´ng thá»ƒ táº£i danh sÃ¡ch lá»›p chá»§ nhiá»‡m');
+        setHomeroomError(err?.message || 'Không thể tải danh sách lớp chủ nhiệm');
         setHomeroomState('error');
         setLoadingDashboard(false);
       });
@@ -182,7 +182,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
       setDashboardData(data);
       setHomeroomState('success');
     } catch (err: any) {
-      setHomeroomError(err.message || 'Lá»—i táº£i dá»¯ liá»‡u báº£ng Ä‘iá»u khiá»ƒn chá»§ nhiá»‡m');
+      setHomeroomError(err.message || 'Lỗi tải dữ liệu bảng điều khiển chủ nhiệm');
       setHomeroomState('error');
     } finally {
       setLoadingDashboard(false);
@@ -209,7 +209,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
       setBehaviorList(res.data);
       setBehaviorTotal(res.total);
     } catch (err: any) {
-      toast.error(err.message || 'Lá»—i táº£i danh sÃ¡ch ná» náº¿p');
+      toast.error(err.message || 'Lỗi tải danh sách nề nếp');
     } finally {
       setLoadingBehavior(false);
     }
@@ -244,7 +244,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
       }
       setWeeklyIsDirty(false);
     } catch (err: any) {
-      toast.error(err.message || 'Lá»—i táº£i nháº­n xÃ©t tuáº§n');
+      toast.error(err.message || 'Lỗi tải nhận xét tuần');
     } finally {
       setLoadingWeekly(false);
     }
@@ -279,7 +279,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
       }
       setMonthlyIsDirty(false);
     } catch (err: any) {
-      toast.error(err.message || 'Lá»—i táº£i tá»•ng káº¿t thÃ¡ng');
+      toast.error(err.message || 'Lỗi tải tổng kết tháng');
     } finally {
       setLoadingMonthly(false);
     }
@@ -315,11 +315,11 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
   const handleSaveBehavior = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!behaviorFormStudentId) {
-      toast.error('Vui lÃ²ng chá»n há»c sinh');
+      toast.error('Vui lòng chọn học sinh');
       return;
     }
     if (!behaviorFormContent.trim()) {
-      toast.error('Vui lÃ²ng nháº­p ná»™i dung ghi nháº­n');
+      toast.error('Vui lòng nhập nội dung ghi nhận');
       return;
     }
 
@@ -332,7 +332,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
           level: behaviorFormLevel,
           content: behaviorFormContent.trim(),
         });
-        toast.success('Cáº­p nháº­t ghi nháº­n ná» náº¿p thÃ nh cÃ´ng');
+        toast.success('Cập nhật ghi nhận nề nếp thành công');
       } else {
         await createBehaviorRecord({
           classroomId: selectedClassId,
@@ -342,13 +342,13 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
           level: behaviorFormLevel,
           content: behaviorFormContent.trim(),
         });
-        toast.success('ThÃªm ghi nháº­n ná» náº¿p thÃ nh cÃ´ng');
+        toast.success('Thêm ghi nhận nề nếp thành công');
       }
       setShowBehaviorModal(false);
       fetchBehavior();
       fetchDashboard(selectedClassId);
     } catch (err: any) {
-      toast.error(err.message || 'KhÃ´ng thá»ƒ lÆ°u ghi nháº­n ná» náº¿p');
+      toast.error(err.message || 'Không thể lưu ghi nhận nề nếp');
     } finally {
       setSubmittingBehavior(false);
     }
@@ -359,12 +359,12 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
     setDeletingRecord(true);
     try {
       await deleteBehaviorRecord(recordToDelete.id);
-      toast.success('ÄÃ£ xÃ³a ghi nháº­n ná» náº¿p');
+      toast.success('Đã xóa ghi nhận nề nếp');
       setRecordToDelete(null);
       fetchBehavior();
       fetchDashboard(selectedClassId);
     } catch (err: any) {
-      toast.error(err.message || 'Lá»—i khi xÃ³a ghi nháº­n');
+      toast.error(err.message || 'Lỗi khi xóa ghi nhận');
     } finally {
       setDeletingRecord(false);
     }
@@ -384,9 +384,9 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
       });
       setWeeklyVersion(res.version);
       setWeeklyIsDirty(false);
-      toast.success(`ÄÃ£ lÆ°u nháº­n xÃ©t tuáº§n ${selectedWeek}`);
+      toast.success(`Đã lưu nhận xét tuần ${selectedWeek}`);
     } catch (err: any) {
-      toast.error(err.message || 'KhÃ´ng thá»ƒ lÆ°u nháº­n xÃ©t tuáº§n');
+      toast.error(err.message || 'Không thể lưu nhận xét tuần');
     } finally {
       setSavingWeekly(false);
     }
@@ -397,9 +397,9 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
     else setExportingWeeklyPdf(true);
     try {
       await exportWeeklyReviewFile(selectedClassId, selectedWeek, format);
-      toast.success(`ÄÃ£ táº£i xuá»‘ng bÃ¡o cÃ¡o tuáº§n (${format.toUpperCase()})`);
+      toast.success(`Đã tải xuống báo cáo tuần (${format.toUpperCase()})`);
     } catch (err: any) {
-      toast.error(err.message || `Lá»—i xuáº¥t file ${format.toUpperCase()}`);
+      toast.error(err.message || `Lỗi xuất file ${format.toUpperCase()}`);
     } finally {
       if (format === 'docx') setExportingWeeklyDocx(false);
       else setExportingWeeklyPdf(false);
@@ -421,9 +421,9 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
       });
       setMonthlyVersion(res.version);
       setMonthlyIsDirty(false);
-      toast.success(`ÄÃ£ lÆ°u tá»•ng káº¿t thÃ¡ng ${selectedMonth}/${selectedYear}`);
+      toast.success(`Đã lưu tổng kết tháng ${selectedMonth}/${selectedYear}`);
     } catch (err: any) {
-      toast.error(err.message || 'KhÃ´ng thá»ƒ lÆ°u tá»•ng káº¿t thÃ¡ng');
+      toast.error(err.message || 'Không thể lưu tổng kết tháng');
     } finally {
       setSavingMonthly(false);
     }
@@ -434,9 +434,9 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
     else setExportingMonthlyPdf(true);
     try {
       await exportMonthlySummaryFile(selectedClassId, selectedYear, selectedMonth, format);
-      toast.success(`ÄÃ£ táº£i xuá»‘ng bÃ¡o cÃ¡o thÃ¡ng (${format.toUpperCase()})`);
+      toast.success(`Đã tải xuống báo cáo tháng (${format.toUpperCase()})`);
     } catch (err: any) {
-      toast.error(err.message || `Lá»—i xuáº¥t file ${format.toUpperCase()}`);
+      toast.error(err.message || `Lỗi xuất file ${format.toUpperCase()}`);
     } finally {
       if (format === 'docx') setExportingMonthlyDocx(false);
       else setExportingMonthlyPdf(false);
@@ -458,7 +458,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
 
   if (homeroomState === 'loading') {
     return (
-      <div className="space-y-5" aria-label="Äang táº£i dá»¯ liá»‡u chá»§ nhiá»‡m">
+      <div className="space-y-5" aria-label="Đang tải dữ liệu chủ nhiệm">
         <div className="h-20 animate-pulse rounded-2xl bg-slate-100" />
         <div className="grid gap-4 sm:grid-cols-3">
           {[0, 1, 2].map((item) => (
@@ -477,16 +477,16 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
             <School className="size-7" />
           </div>
           <h1 className="text-xl font-bold text-slate-900">
-            {'B\u1ea1n ch\u01b0a thi\u1ebft l\u1eadp l\u1edbp ch\u1ee7 nhi\u1ec7m.'}
+            {'Bạn chưa thiết lập lớp chủ nhiệm.'}
           </h1>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            {'H\u00e3y ch\u1ecdn m\u1ed9t l\u1edbp trong m\u00e0n L\u1edbp h\u1ecdc \u0111\u1ec3 thi\u1ebft l\u1eadp.'}
+            {'Hãy chọn một lớp trong màn Lớp học để thiết lập.'}
           </p>
           <Button
             className="mt-6 bg-teal-600 text-white hover:bg-teal-700"
-            onClick={() => onNavigate?.('L\u1edbp h\u1ecdc')}
+            onClick={() => onNavigate?.('Lớp học')}
           >
-            {'Ch\u1ecdn l\u1edbp ch\u1ee7 nhi\u1ec7m'}
+            {'Chọn lớp chủ nhiệm'}
           </Button>
         </div>
       </div>
@@ -498,10 +498,11 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
       <div className="flex min-h-[360px] items-center justify-center">
         <div className="max-w-lg rounded-2xl border border-rose-200 bg-rose-50 p-7 text-center">
           <AlertCircle className="mx-auto size-8 text-rose-600" />
-          <h1 className="mt-3 text-lg font-bold text-slate-900">KhÃ´ng thá»ƒ táº£i dá»¯ liá»‡u chá»§ nhiá»‡m</h1>
+          <h1 className="mt-3 text-lg font-bold text-slate-900">Không thể tải dữ liệu chủ nhiệm</h1>
           <p className="mt-2 text-sm text-slate-600">{homeroomError}</p>
           <Button className="mt-5" variant="outline" onClick={() => window.location.reload()}>
-            {'Ch\\u1ecdn l\\u1edbp ch\\u1ee7 nhi\\u1ec7m'}\r\n          </Button>
+            Thử lại
+          </Button>
         </div>
       </div>
     );
@@ -518,32 +519,32 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
             <span className="rounded-md bg-teal-100 px-2.5 py-0.5 text-xs font-semibold text-teal-800">
               {dashboardData.classroom.schoolYearName}
             </span>
-            <span className="text-xs text-slate-400">Â· CÃ´ng tÃ¡c chá»§ nhiá»‡m</span>
+            <span className="text-xs text-slate-400">· Công tác chủ nhiệm</span>
           </div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Chá»§ nhiá»‡m lá»›p {dashboardData.classroom.name}
+            Chủ nhiệm lớp {dashboardData.classroom.name}
           </h1>
         </div>
 
         {/* Classroom dropdown switcher */}
         <div className="flex items-center gap-3">
-          <label htmlFor="homeroom-class-select" className="text-xs font-medium text-slate-500">Lá»›p:</label>
+          <label htmlFor="homeroom-class-select" className="text-xs font-medium text-slate-500">Lớp:</label>
           <select
             id="homeroom-class-select"
-            aria-label="Chá»n lá»›p chá»§ nhiá»‡m"
+            aria-label="Chọn lớp chủ nhiệm"
             value={selectedClassId}
             onChange={(e) => setSelectedClassId(e.target.value)}
             className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm outline-none focus:border-teal-500"
           >
             {classList.map((c) => (
               <option key={c.id} value={c.id}>
-                Lá»›p {c.name}
+                Lớp {c.name}
               </option>
             ))}
           </select>
           <button
             onClick={() => fetchDashboard(selectedClassId)}
-            title="LÃ m má»›i dá»¯ liá»‡u"
+            title="Làm mới dữ liệu"
             className="grid size-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50"
           >
             <RefreshCw className={`size-4 ${loadingDashboard ? 'animate-spin text-teal-600' : ''}`} />
@@ -561,7 +562,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
               : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
-          <School className="size-4" /> Tá»•ng quan
+          <School className="size-4" /> Tổng quan
         </button>
         <button
           onClick={() => setActiveTab('behavior')}
@@ -571,7 +572,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
               : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
-          <Award className="size-4" /> Ná» náº¿p há»c sinh
+          <Award className="size-4" /> Nề nếp học sinh
         </button>
         <button
           onClick={() => setActiveTab('weekly')}
@@ -581,7 +582,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
               : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
-          <ClipboardList className="size-4" /> Nháº­n xÃ©t tuáº§n
+          <ClipboardList className="size-4" /> Nhận xét tuần
         </button>
         <button
           onClick={() => setActiveTab('monthly')}
@@ -591,12 +592,12 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
               : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
-          <FileText className="size-4" /> BÃ¡o cÃ¡o thÃ¡ng
+          <FileText className="size-4" /> Báo cáo tháng
         </button>
       </div>
 
       {/* ========================================================
-          TAB 1: Tá»”NG QUAN (OVERVIEW)
+          TAB 1: TỔNG QUAN (OVERVIEW)
       ======================================================== */}
       {activeTab === 'overview' && (
         <div className="flex flex-col gap-6">
@@ -604,7 +605,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-slate-500">SÄ© sá»‘ lá»›p</span>
+                <span className="text-sm font-medium text-slate-500">Sĩ số lớp</span>
                 <span className="grid size-10 place-items-center rounded-xl bg-teal-50 text-teal-600">
                   <Users className="size-5" />
                 </span>
@@ -612,12 +613,12 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
               <p className="mt-2 text-3xl font-bold text-slate-900">
                 {dashboardData?.classroom?.studentCount || 0}
               </p>
-              <p className="mt-1 text-xs text-slate-400">{dashboardData?.classroom?.room || 'PhÃ²ng há»c chÃ­nh'}</p>
+              <p className="mt-1 text-xs text-slate-400">{dashboardData?.classroom?.room || 'Phòng học chính'}</p>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-slate-500">CÃ³ máº·t hÃ´m nay</span>
+                <span className="text-sm font-medium text-slate-500">Có mặt hôm nay</span>
                 <span className="grid size-10 place-items-center rounded-xl bg-emerald-50 text-emerald-600">
                   <CheckCircle2 className="size-5" />
                 </span>
@@ -629,13 +630,13 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                 </span>
               </p>
               <p className="mt-1 text-xs text-slate-400">
-                {dashboardData?.attendanceToday?.isRecorded ? 'ÄÃ£ Ä‘iá»ƒm danh hÃ´m nay' : 'ChÆ°a lÆ°u Ä‘iá»ƒm danh hÃ´m nay'}
+                {dashboardData?.attendanceToday?.isRecorded ? 'Đã điểm danh hôm nay' : 'Chưa lưu điểm danh hôm nay'}
               </p>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-slate-500">Váº¯ng / Äi muá»™n hÃ´m nay</span>
+                <span className="text-sm font-medium text-slate-500">Vắng / Đi muộn hôm nay</span>
                 <span className="grid size-10 place-items-center rounded-xl bg-orange-50 text-orange-600">
                   <Clock className="size-5" />
                 </span>
@@ -644,18 +645,18 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                 {(dashboardData?.attendanceToday?.excusedAbsence || 0) +
                   (dashboardData?.attendanceToday?.unexcusedAbsence || 0)}
                 <span className="ml-2 text-sm font-normal text-slate-500">
-                  ({dashboardData?.attendanceToday?.late || 0} muá»™n)
+                  ({dashboardData?.attendanceToday?.late || 0} muộn)
                 </span>
               </p>
               <p className="mt-1 text-xs text-slate-400">
-                {dashboardData?.attendanceToday?.excusedAbsence || 0} cÃ³ phÃ©p Â·{' '}
-                {dashboardData?.attendanceToday?.unexcusedAbsence || 0} khÃ´ng phÃ©p
+                {dashboardData?.attendanceToday?.excusedAbsence || 0} có phép ·{' '}
+                {dashboardData?.attendanceToday?.unexcusedAbsence || 0} không phép
               </p>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-slate-500">Há»c sinh cáº§n quan tÃ¢m</span>
+                <span className="text-sm font-medium text-slate-500">Học sinh cần quan tâm</span>
                 <span className="grid size-10 place-items-center rounded-xl bg-rose-50 text-rose-600">
                   <AlertTriangle className="size-5" />
                 </span>
@@ -663,26 +664,26 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
               <p className="mt-2 text-3xl font-bold text-rose-600">
                 {dashboardData?.studentsNeedAttention?.length || 0}
               </p>
-              <p className="mt-1 text-xs text-slate-400">TÃ­n hiá»‡u chuyÃªn cáº§n / há»c táº­p / ná» náº¿p 30 ngÃ y</p>
+              <p className="mt-1 text-xs text-slate-400">Tín hiệu chuyên cần / học tập / nề nếp 30 ngày</p>
             </div>
           </div>
 
           {/* Main 2-column layout */}
           <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-            {/* Left Column: ChuyÃªn cáº§n & Há»c sinh cáº§n quan tÃ¢m & Ná» náº¿p */}
+            {/* Left Column: Chuyên cần & Học sinh cần quan tâm & Nề nếp */}
             <div className="flex flex-col gap-6">
               {/* Quick Actions Card */}
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="text-base font-semibold text-slate-900">HÃ nh Ä‘á»™ng nhanh chá»§ nhiá»‡m</h2>
+                <h2 className="text-base font-semibold text-slate-900">Hành động nhanh chủ nhiệm</h2>
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <button
-                    onClick={() => onNavigate && onNavigate('Äiá»ƒm danh')}
+                    onClick={() => onNavigate && onNavigate('Điểm danh')}
                     className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 p-3 text-center transition hover:border-teal-500 hover:bg-teal-50/50"
                   >
                     <span className="grid size-10 place-items-center rounded-lg bg-teal-50 text-teal-600">
                       <CheckCircle2 className="size-5" />
                     </span>
-                    <span className="text-xs font-semibold text-slate-700">Äiá»ƒm danh</span>
+                    <span className="text-xs font-semibold text-slate-700">Điểm danh</span>
                   </button>
 
                   <button
@@ -692,7 +693,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                     <span className="grid size-10 place-items-center rounded-lg bg-orange-50 text-orange-600">
                       <Plus className="size-5" />
                     </span>
-                    <span className="text-xs font-semibold text-slate-700">Ghi nháº­n ná» náº¿p</span>
+                    <span className="text-xs font-semibold text-slate-700">Ghi nhận nề nếp</span>
                   </button>
 
                   <button
@@ -702,7 +703,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                     <span className="grid size-10 place-items-center rounded-lg bg-blue-50 text-blue-600">
                       <ClipboardList className="size-5" />
                     </span>
-                    <span className="text-xs font-semibold text-slate-700">Nháº­n xÃ©t tuáº§n</span>
+                    <span className="text-xs font-semibold text-slate-700">Nhận xét tuần</span>
                   </button>
 
                   <button
@@ -712,22 +713,22 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                     <span className="grid size-10 place-items-center rounded-lg bg-purple-50 text-purple-600">
                       <FileText className="size-5" />
                     </span>
-                    <span className="text-xs font-semibold text-slate-700">BÃ¡o cÃ¡o thÃ¡ng</span>
+                    <span className="text-xs font-semibold text-slate-700">Báo cáo tháng</span>
                   </button>
                 </div>
               </div>
 
-              {/* Há»c sinh cáº§n quan tÃ¢m (Rule-based) */}
+              {/* Học sinh cần quan tâm (Rule-based) */}
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div>
-                    <h2 className="text-base font-semibold text-slate-900">Há»c sinh cáº§n chÃº Ã½ Ä‘áº·c biá»‡t</h2>
+                    <h2 className="text-base font-semibold text-slate-900">Học sinh cần chú ý đặc biệt</h2>
                     <p className="text-xs text-slate-400">
-                      Tá»± Ä‘á»™ng phÃ¢n tÃ­ch tá»« dá»¯ liá»‡u chuyÃªn cáº§n, ná» náº¿p vÃ  há»c táº­p 30 ngÃ y qua
+                      Tự động phân tích từ dữ liệu chuyên cần, nề nếp và học tập 30 ngày qua
                     </p>
                   </div>
                   <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-bold text-rose-700">
-                    {dashboardData?.studentsNeedAttention?.length || 0} há»c sinh
+                    {dashboardData?.studentsNeedAttention?.length || 0} học sinh
                   </span>
                 </div>
 
@@ -768,31 +769,31 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                           onClick={() => handleOpenAddBehavior(s.studentId)}
                           className="self-end rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 sm:self-center"
                         >
-                          + Ghi nháº­n
+                          + Ghi nhận
                         </button>
                       </div>
                     ))
                   ) : (
                     <div className="py-8 text-center text-sm text-slate-400">
                       <CheckCircle2 className="mx-auto mb-2 size-8 text-emerald-500" />
-                      Lá»›p há»c Ä‘ang cÃ³ ná» náº¿p vÃ  há»c táº­p ráº¥t tá»‘t, chÆ°a cÃ³ há»c sinh nÃ o trong diá»‡n cáº§n lÆ°u Ã½.
+                      Lớp học đang có nề nếp và học tập rất tốt, chưa có học sinh nào trong diện cần lưu ý.
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Ná» náº¿p gáº§n Ä‘Ã¢y */}
+              {/* Nề nếp gần đây */}
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div>
-                    <h2 className="text-base font-semibold text-slate-900">Ghi nháº­n ná» náº¿p gáº§n Ä‘Ã¢y</h2>
-                    <p className="text-xs text-slate-400">CÃ¡c biá»ƒu dÆ°Æ¡ng vÃ  nháº¯c nhá»Ÿ má»›i nháº¥t</p>
+                    <h2 className="text-base font-semibold text-slate-900">Ghi nhận nề nếp gần đây</h2>
+                    <p className="text-xs text-slate-400">Các biểu dương và nhắc nhở mới nhất</p>
                   </div>
                   <button
                     onClick={() => setActiveTab('behavior')}
                     className="text-xs font-semibold text-teal-600 hover:text-teal-700"
                   >
-                    Xem táº¥t cáº£ &rarr;
+                    Xem tất cả &rarr;
                   </button>
                 </div>
 
@@ -821,12 +822,12 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                                 }`}
                               >
                                 {b.level === 'POSITIVE'
-                                  ? 'TÃ­ch cá»±c'
+                                  ? 'Tích cực'
                                   : b.level === 'REMINDER'
-                                  ? 'Nháº¯c nhá»Ÿ'
-                                  : 'Cáº§n quan tÃ¢m'}
+                                  ? 'Nhắc nhở'
+                                  : 'Cần quan tâm'}
                               </span>
-                              <span className="text-[11px] text-slate-400">Â· {b.recordDate}</span>
+                              <span className="text-[11px] text-slate-400">· {b.recordDate}</span>
                             </div>
                             <p className="mt-1 text-xs text-slate-600">{b.content}</p>
                           </div>
@@ -835,21 +836,21 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                     ))
                   ) : (
                     <div className="py-6 text-center text-sm text-slate-400">
-                      ChÆ°a cÃ³ ghi nháº­n ná» náº¿p nÃ o. HÃ£y báº¥m "ThÃªm ghi nháº­n" Ä‘á»ƒ táº¡o má»›i.
+                      Chưa có ghi nhận nề nếp nào. Hãy bấm "Thêm ghi nhận" để tạo mới.
                     </div>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Right Column: Sinh nháº­t sáº¯p tá»›i & Viá»‡c cáº§n lÃ m */}
+            {/* Right Column: Sinh nhật sắp tới & Việc cần làm */}
             <div className="flex flex-col gap-6">
-              {/* Sinh nháº­t sáº¯p tá»›i */}
+              {/* Sinh nhật sắp tới */}
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div className="flex items-center gap-2">
                     <Cake className="size-5 text-pink-500" />
-                    <h2 className="text-base font-semibold text-slate-900">Sinh nháº­t 30 ngÃ y tá»›i</h2>
+                    <h2 className="text-base font-semibold text-slate-900">Sinh nhật 30 ngày tới</h2>
                   </div>
                   <span className="text-xs font-medium text-slate-400">
                     {dashboardData?.upcomingBirthdays?.length || 0} em
@@ -876,7 +877,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                           <div>
                             <p className="text-sm font-semibold text-slate-800">{b.fullName}</p>
                             <p className="text-xs text-slate-400">
-                              {b.dateOfBirth} ({b.turningAge} tuá»•i)
+                              {b.dateOfBirth} ({b.turningAge} tuổi)
                             </p>
                           </div>
                         </div>
@@ -884,11 +885,11 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                         <div>
                           {b.isToday ? (
                             <span className="inline-flex items-center gap-1 rounded-full bg-pink-600 px-2.5 py-0.5 text-xs font-bold text-white shadow-sm">
-                              ðŸŽ‰ HÃ´m nay!
+                              🎉 Hôm nay!
                             </span>
                           ) : (
                             <span className="rounded-md bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
-                              CÃ²n {b.daysUntilBirthday} ngÃ y
+                              Còn {b.daysUntilBirthday} ngày
                             </span>
                           )}
                         </div>
@@ -896,20 +897,20 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                     ))
                   ) : (
                     <div className="py-6 text-center text-sm text-slate-400">
-                      KhÃ´ng cÃ³ sinh nháº­t nÃ o trong 30 ngÃ y tá»›i.
+                      Không có sinh nhật nào trong 30 ngày tới.
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Nhiá»‡m vá»¥ chá»§ nhiá»‡m tuáº§n nÃ y */}
+              {/* Nhiệm vụ chủ nhiệm tuần này */}
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div>
-                    <h2 className="text-base font-semibold text-slate-900">Viá»‡c chá»§ nhiá»‡m tuáº§n nÃ y</h2>
+                    <h2 className="text-base font-semibold text-slate-900">Việc chủ nhiệm tuần này</h2>
                     <p className="text-xs text-slate-400">
                       {dashboardData?.weeklyTasks?.filter((t) => t.done).length || 0}/
-                      {dashboardData?.weeklyTasks?.length || 0} Ä‘Ã£ hoÃ n thÃ nh
+                      {dashboardData?.weeklyTasks?.length || 0} đã hoàn thành
                     </p>
                   </div>
                 </div>
@@ -945,7 +946,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                       </div>
                     ))
                   ) : (
-                    <div className="py-6 text-center text-sm text-slate-400">KhÃ´ng cÃ³ cÃ´ng viá»‡c tá»“n Ä‘á»ng.</div>
+                    <div className="py-6 text-center text-sm text-slate-400">Không có công việc tồn đọng.</div>
                   )}
                 </div>
               </div>
@@ -955,7 +956,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
       )}
 
       {/* ========================================================
-          TAB 2: Ná»€ Náº¾P (BEHAVIOR MANAGEMENT)
+          TAB 2: NỀ NẾP (BEHAVIOR MANAGEMENT)
       ======================================================== */}
       {activeTab === 'behavior' && (
         <div className="flex flex-col gap-6">
@@ -967,7 +968,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="TÃ¬m há»c sinh, ná»™i dung..."
+                  placeholder="Tìm học sinh, nội dung..."
                   value={behaviorSearch}
                   onChange={(e) => setBehaviorSearch(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && fetchBehavior()}
@@ -984,13 +985,13 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                 }}
                 className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 outline-none"
               >
-                <option value="ALL">Táº¥t cáº£ danh má»¥c</option>
-                <option value="DISCIPLINE">Ká»· luáº­t & Tráº­t tá»±</option>
-                <option value="LEARNING">Há»c táº­p</option>
-                <option value="HYGIENE">Vá»‡ sinh & TÃ¡c phong</option>
-                <option value="TEAMWORK">LÃ m viá»‡c nhÃ³m</option>
-                <option value="RESPONSIBILITY">TrÃ¡ch nhiá»‡m</option>
-                <option value="OTHER">KhÃ¡c</option>
+                <option value="ALL">Tất cả danh mục</option>
+                <option value="DISCIPLINE">Kỷ luật & Trật tự</option>
+                <option value="LEARNING">Học tập</option>
+                <option value="HYGIENE">Vệ sinh & Tác phong</option>
+                <option value="TEAMWORK">Làm việc nhóm</option>
+                <option value="RESPONSIBILITY">Trách nhiệm</option>
+                <option value="OTHER">Khác</option>
               </select>
 
               {/* Level Filter */}
@@ -1002,10 +1003,10 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                 }}
                 className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 outline-none"
               >
-                <option value="ALL">Táº¥t cáº£ má»©c Ä‘á»™</option>
-                <option value="POSITIVE">TÃ­ch cá»±c / Biá»ƒu dÆ°Æ¡ng</option>
-                <option value="REMINDER">Cáº§n nháº¯c nhá»Ÿ</option>
-                <option value="NEEDS_ATTENTION">Cáº§n quan tÃ¢m Ä‘áº·c biá»‡t</option>
+                <option value="ALL">Tất cả mức độ</option>
+                <option value="POSITIVE">Tích cực / Biểu dương</option>
+                <option value="REMINDER">Cần nhắc nhở</option>
+                <option value="NEEDS_ATTENTION">Cần quan tâm đặc biệt</option>
               </select>
             </div>
 
@@ -1013,7 +1014,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
               onClick={() => handleOpenAddBehavior()}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-700"
             >
-              <Plus className="size-4" /> ThÃªm ghi nháº­n ná» náº¿p
+              <Plus className="size-4" /> Thêm ghi nhận nề nếp
             </button>
           </div>
 
@@ -1022,12 +1023,12 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
             <table className="w-full text-left text-sm">
               <thead className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-5 py-3.5">Há»c sinh</th>
-                  <th className="px-4 py-3.5">NgÃ y</th>
-                  <th className="px-4 py-3.5">Danh má»¥c</th>
-                  <th className="px-4 py-3.5">Má»©c Ä‘á»™</th>
-                  <th className="px-5 py-3.5">Ná»™i dung ghi nháº­n</th>
-                  <th className="px-4 py-3.5 text-right">Thao tÃ¡c</th>
+                  <th className="px-5 py-3.5">Học sinh</th>
+                  <th className="px-4 py-3.5">Ngày</th>
+                  <th className="px-4 py-3.5">Danh mục</th>
+                  <th className="px-4 py-3.5">Mức độ</th>
+                  <th className="px-5 py-3.5">Nội dung ghi nhận</th>
+                  <th className="px-4 py-3.5 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1061,10 +1062,10 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                           }`}
                         >
                           {rec.level === 'POSITIVE'
-                            ? 'TÃ­ch cá»±c'
+                            ? 'Tích cực'
                             : rec.level === 'REMINDER'
-                            ? 'Nháº¯c nhá»Ÿ'
-                            : 'Cáº§n quan tÃ¢m'}
+                            ? 'Nhắc nhở'
+                            : 'Cần quan tâm'}
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-slate-700 max-w-md truncate">{rec.content}</td>
@@ -1072,14 +1073,14 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => handleOpenEditBehavior(rec)}
-                            title="Chá»‰nh sá»­a"
+                            title="Chỉnh sửa"
                             className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                           >
                             <Edit2 className="size-4" />
                           </button>
                           <button
                             onClick={() => setRecordToDelete(rec)}
-                            title="XÃ³a"
+                            title="Xóa"
                             className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
                           >
                             <Trash2 className="size-4" />
@@ -1091,7 +1092,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                 ) : (
                   <tr>
                     <td colSpan={6} className="py-12 text-center text-sm text-slate-400">
-                      ChÆ°a cÃ³ ghi nháº­n ná» náº¿p nÃ o phÃ¹ há»£p vá»›i bá»™ lá»c.
+                      Chưa có ghi nhận nề nếp nào phù hợp với bộ lọc.
                     </td>
                   </tr>
                 )}
@@ -1101,7 +1102,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
             {/* Pagination Controls */}
             <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3 text-xs text-slate-500">
               <div>
-                Hiá»ƒn thá»‹ {behaviorList.length} trÃªn tá»•ng sá»‘ {behaviorTotal} báº£n ghi
+                Hiển thị {behaviorList.length} trên tổng số {behaviorTotal} bản ghi
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -1109,7 +1110,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                   onClick={() => setBehaviorPage((p) => p - 1)}
                   className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium disabled:opacity-40"
                 >
-                  Trang trÆ°á»›c
+                  Trang trước
                 </button>
                 <span className="font-semibold">
                   Trang {behaviorPage} / {Math.ceil(behaviorTotal / behaviorPageSize) || 1}
@@ -1128,24 +1129,24 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
       )}
 
       {/* ========================================================
-          TAB 3: NHáº¬N XÃ‰T TUáº¦N (WEEKLY REVIEW)
+          TAB 3: NHẬN XÉT TUẦN (WEEKLY REVIEW)
       ======================================================== */}
       {activeTab === 'weekly' && (
         <div className="flex flex-col gap-6">
           {/* Week Selector Bar & Actions */}
           <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
-              <label htmlFor="homeroom-week-select" className="text-sm font-semibold text-slate-700">Tuáº§n há»c:</label>
+              <label htmlFor="homeroom-week-select" className="text-sm font-semibold text-slate-700">Tuần học:</label>
               <select
                 id="homeroom-week-select"
-                aria-label="Chá»n tuáº§n há»c"
+                aria-label="Chọn tuần học"
                 value={selectedWeek}
                 onChange={(e) => setSelectedWeek(parseInt(e.target.value, 10))}
                 className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-teal-700 outline-none"
               >
                 {Array.from({ length: 35 }, (_, i) => i + 1).map((w) => (
                   <option key={w} value={w}>
-                    Tuáº§n {w}
+                    Tuần {w}
                   </option>
                 ))}
               </select>
@@ -1161,7 +1162,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                 className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
               >
                 {exportingWeeklyDocx ? <Loader2 className="size-3.5 animate-spin" /> : <FileDown className="size-3.5 text-blue-600" />}
-                Xuáº¥t Word (.docx)
+                Xuất Word (.docx)
               </button>
               <button
                 onClick={() => handleExportWeekly('pdf')}
@@ -1169,7 +1170,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                 className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
               >
                 {exportingWeeklyPdf ? <Loader2 className="size-3.5 animate-spin" /> : <FileDown className="size-3.5 text-rose-600" />}
-                Xuáº¥t PDF
+                Xuất PDF
               </button>
               <button
                 onClick={handleSaveWeekly}
@@ -1177,7 +1178,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                 className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-teal-700"
               >
                 {savingWeekly ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-                LÆ°u nháº­n xÃ©t tuáº§n
+                Lưu nhận xét tuần
               </button>
             </div>
           </div>
@@ -1185,35 +1186,35 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
           {/* Auto Aggregated Summary Cards */}
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">ChuyÃªn cáº§n tuáº§n</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Chuyên cần tuần</p>
               <p className="mt-2 text-2xl font-bold text-teal-600">
                 {weeklySummary?.attendance.presentRate || 100}%
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                {weeklySummary?.attendance.excusedAbsence || 0} phÃ©p Â· {weeklySummary?.attendance.unexcusedAbsence || 0} khÃ´ng phÃ©p Â· {weeklySummary?.attendance.late || 0} muá»™n
+                {weeklySummary?.attendance.excusedAbsence || 0} phép · {weeklySummary?.attendance.unexcusedAbsence || 0} không phép · {weeklySummary?.attendance.late || 0} muộn
               </p>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Ná» náº¿p tuáº§n</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Nề nếp tuần</p>
               <p className="mt-2 text-2xl font-bold text-emerald-600">
                 +{weeklySummary?.behavior.positive || 0}
                 <span className="ml-2 text-sm font-normal text-slate-500">
-                  / -{weeklySummary?.behavior.reminder || 0} nháº¯c nhá»Ÿ
+                  / -{weeklySummary?.behavior.reminder || 0} nhắc nhở
                 </span>
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                {weeklySummary?.behavior.needsAttention || 0} trÆ°á»ng há»£p cáº§n lÆ°u Ã½
+                {weeklySummary?.behavior.needsAttention || 0} trường hợp cần lưu ý
               </p>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Há»c táº­p tuáº§n</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Học tập tuần</p>
               <p className="mt-2 text-2xl font-bold text-blue-600">
-                {weeklySummary?.assessment.excellent || 0} Tá»‘t
+                {weeklySummary?.assessment.excellent || 0} Tốt
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                {weeklySummary?.assessment.completed || 0} HoÃ n thÃ nh Â· {weeklySummary?.assessment.needsSupport || 0} Cáº§n há»— trá»£
+                {weeklySummary?.assessment.completed || 0} Hoàn thành · {weeklySummary?.assessment.needsSupport || 0} Cần hỗ trợ
               </p>
             </div>
           </div>
@@ -1223,18 +1224,18 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
             {weeklyIsDirty && (
               <div className="flex items-center gap-2 rounded-xl bg-amber-50 p-3 text-xs font-medium text-amber-800">
                 <AlertCircle className="size-4 shrink-0 text-amber-600" />
-                Báº¡n cÃ³ thay Ä‘á»•i chÆ°a Ä‘Æ°á»£c lÆ°u. Vui lÃ²ng báº¥m nÃºt "LÆ°u nháº­n xÃ©t tuáº§n" Ä‘á»ƒ cáº­p nháº­t.
+                Bạn có thay đổi chưa được lưu. Vui lòng bấm nút "Lưu nhận xét tuần" để cập nhật.
               </div>
             )}
 
             <div>
               <label htmlFor="homeroom-weekly-strengths" className="text-sm font-semibold text-slate-800">
-                1. Äiá»ƒm ná»•i báº­t trong tuáº§n (Æ¯u Ä‘iá»ƒm, thÃ nh tÃ­ch, tiáº¿n bá»™)
+                1. Điểm nổi bật trong tuần (Ưu điểm, thành tích, tiến bộ)
               </label>
               <textarea
                 id="homeroom-weekly-strengths"
                 rows={3}
-                placeholder="VD: Lá»›p duy trÃ¬ ná» náº¿p truy bÃ i Ä‘áº§u giá» tá»‘t, cÃ¡c báº¡n há»c sinh tÃ­ch cá»±c xÃ¢y dá»±ng bÃ i..."
+                placeholder="VD: Lớp duy trì nề nếp truy bài đầu giờ tốt, các bạn học sinh tích cực xây dựng bài..."
                 value={weeklyStrengths}
                 onChange={(e) => {
                   setWeeklyStrengths(e.target.value);
@@ -1246,12 +1247,12 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
 
             <div>
               <label htmlFor="homeroom-weekly-limitations" className="text-sm font-semibold text-slate-800">
-                2. Háº¡n cháº¿ cÃ²n tá»“n táº¡i (CÃ¡c váº¥n Ä‘á» cáº§n cháº¥n chá»‰nh)
+                2. Hạn chế còn tồn tại (Các vấn đề cần chấn chỉnh)
               </label>
               <textarea
                 id="homeroom-weekly-limitations"
                 rows={3}
-                placeholder="VD: Má»™t vÃ i báº¡n cÃ²n quÃªn mang sÃ¡ch bÃ i táº­p, cÃ²n hiá»‡n tÆ°á»£ng nÃ³i chuyá»‡n riÃªng trong giá» Khoa há»c..."
+                placeholder="VD: Một vài bạn còn quên mang sách bài tập, còn hiện tượng nói chuyện riêng trong giờ Khoa học..."
                 value={weeklyLimitations}
                 onChange={(e) => {
                   setWeeklyLimitations(e.target.value);
@@ -1263,12 +1264,12 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
 
             <div>
               <label htmlFor="homeroom-weekly-plan" className="text-sm font-semibold text-slate-800">
-                3. Káº¿ hoáº¡ch trá»ng tÃ¢m tuáº§n tá»›i
+                3. Kế hoạch trọng tâm tuần tới
               </label>
               <textarea
                 id="homeroom-weekly-plan"
                 rows={3}
-                placeholder="VD: Kiá»ƒm tra Ä‘á»“ dÃ¹ng há»c táº­p Ä‘áº§u tuáº§n; Phá»‘i há»£p phá»¥ huynh nháº¯c nhá»Ÿ há»c sinh Ã´n táº­p chuáº©n bá»‹ kiá»ƒm tra..."
+                placeholder="VD: Kiểm tra đồ dùng học tập đầu tuần; Phối hợp phụ huynh nhắc nhở học sinh ôn tập chuẩn bị kiểm tra..."
                 value={weeklyNextPlan}
                 onChange={(e) => {
                   setWeeklyNextPlan(e.target.value);
@@ -1282,32 +1283,32 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
       )}
 
       {/* ========================================================
-          TAB 4: BÃO CÃO THÃNG (MONTHLY REPORTS)
+          TAB 4: BÁO CÁO THÁNG (MONTHLY REPORTS)
       ======================================================== */}
       {activeTab === 'monthly' && (
         <div className="flex flex-col gap-6">
           {/* Month/Year Selector Bar */}
           <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
-              <label htmlFor="homeroom-month-select" className="text-sm font-semibold text-slate-700">ThÃ¡ng:</label>
+              <label htmlFor="homeroom-month-select" className="text-sm font-semibold text-slate-700">Tháng:</label>
               <select
                 id="homeroom-month-select"
-                aria-label="Chá»n thÃ¡ng tá»•ng káº¿t"
+                aria-label="Chọn tháng tổng kết"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(parseInt(e.target.value, 10))}
                 className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-teal-700 outline-none"
               >
                 {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                   <option key={m} value={m}>
-                    ThÃ¡ng {m}
+                    Tháng {m}
                   </option>
                 ))}
               </select>
 
-              <label htmlFor="homeroom-year-select" className="text-sm font-semibold text-slate-700">NÄƒm:</label>
+              <label htmlFor="homeroom-year-select" className="text-sm font-semibold text-slate-700">Năm:</label>
               <select
                 id="homeroom-year-select"
-                aria-label="Chá»n nÄƒm tá»•ng káº¿t"
+                aria-label="Chọn năm tổng kết"
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
                 className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 outline-none"
@@ -1327,7 +1328,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                 className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
               >
                 {exportingMonthlyDocx ? <Loader2 className="size-3.5 animate-spin" /> : <FileDown className="size-3.5 text-blue-600" />}
-                Xuáº¥t Word (.docx)
+                Xuất Word (.docx)
               </button>
               <button
                 onClick={() => handleExportMonthly('pdf')}
@@ -1335,7 +1336,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                 className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
               >
                 {exportingMonthlyPdf ? <Loader2 className="size-3.5 animate-spin" /> : <FileDown className="size-3.5 text-rose-600" />}
-                Xuáº¥t PDF
+                Xuất PDF
               </button>
               <button
                 onClick={handleSaveMonthly}
@@ -1343,7 +1344,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
                 className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-teal-700"
               >
                 {savingMonthly ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-                LÆ°u tá»•ng káº¿t thÃ¡ng
+                Lưu tổng kết tháng
               </button>
             </div>
           </div>
@@ -1351,35 +1352,35 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
           {/* Monthly Aggregation Breakdown */}
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">ChuyÃªn cáº§n thÃ¡ng</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Chuyên cần tháng</p>
               <p className="mt-2 text-2xl font-bold text-teal-600">
                 {monthlySummary?.attendance.attendanceRate || 100}%
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                {monthlySummary?.attendance.totalSchoolDays || 0} ngÃ y há»c Â· {monthlySummary?.attendance.excusedAbsence || 0} phÃ©p Â· {monthlySummary?.attendance.unexcusedAbsence || 0} khÃ´ng phÃ©p
+                {monthlySummary?.attendance.totalSchoolDays || 0} ngày học · {monthlySummary?.attendance.excusedAbsence || 0} phép · {monthlySummary?.attendance.unexcusedAbsence || 0} không phép
               </p>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Ná» náº¿p toÃ n thÃ¡ng</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Nề nếp toàn tháng</p>
               <p className="mt-2 text-2xl font-bold text-emerald-600">
                 +{monthlySummary?.behavior.positive || 0}
                 <span className="ml-2 text-sm font-normal text-slate-500">
-                  / -{monthlySummary?.behavior.reminder || 0} nháº¯c nhá»Ÿ
+                  / -{monthlySummary?.behavior.reminder || 0} nhắc nhở
                 </span>
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                {monthlySummary?.behavior.needsAttention || 0} trÆ°á»ng há»£p cáº§n lÆ°u Ã½
+                {monthlySummary?.behavior.needsAttention || 0} trường hợp cần lưu ý
               </p>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">ÄÃ¡nh giÃ¡ há»c táº­p</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Đánh giá học tập</p>
               <p className="mt-2 text-2xl font-bold text-blue-600">
-                {monthlySummary?.learning.excellent || 0} HoÃ n thÃ nh tá»‘t
+                {monthlySummary?.learning.excellent || 0} Hoàn thành tốt
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                {monthlySummary?.learning.completed || 0} HoÃ n thÃ nh Â· {monthlySummary?.learning.needsSupport || 0} Cáº§n há»— trá»£
+                {monthlySummary?.learning.completed || 0} Hoàn thành · {monthlySummary?.learning.needsSupport || 0} Cần hỗ trợ
               </p>
             </div>
           </div>
@@ -1389,18 +1390,18 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
             {monthlyIsDirty && (
               <div className="flex items-center gap-2 rounded-xl bg-amber-50 p-3 text-xs font-medium text-amber-800">
                 <AlertCircle className="size-4 shrink-0 text-amber-600" />
-                Báº¡n cÃ³ thay Ä‘á»•i chÆ°a Ä‘Æ°á»£c lÆ°u. Vui lÃ²ng báº¥m "LÆ°u tá»•ng káº¿t thÃ¡ng" Ä‘á»ƒ cáº­p nháº­t.
+                Bạn có thay đổi chưa được lưu. Vui lòng bấm "Lưu tổng kết tháng" để cập nhật.
               </div>
             )}
 
             <div>
               <label htmlFor="homeroom-monthly-highlights" className="text-sm font-semibold text-slate-800">
-                1. ThÃ nh tÃ­ch & Äiá»ƒm ná»•i báº­t trong thÃ¡ng
+                1. Thành tích & Điểm nổi bật trong tháng
               </label>
               <textarea
                 id="homeroom-monthly-highlights"
                 rows={3}
-                placeholder="VD: Lá»›p Ä‘áº¡t danh hiá»‡u xuáº¥t sáº¯c trong tuáº§n lá»… thi Ä‘ua; 100% há»c sinh hoÃ n thÃ nh bÃ i táº­p..."
+                placeholder="VD: Lớp đạt danh hiệu xuất sắc trong tuần lễ thi đua; 100% học sinh hoàn thành bài tập..."
                 value={monthlyHighlights}
                 onChange={(e) => {
                   setMonthlyHighlights(e.target.value);
@@ -1412,12 +1413,12 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
 
             <div>
               <label htmlFor="homeroom-monthly-limitations" className="text-sm font-semibold text-slate-800">
-                2. Háº¡n cháº¿ cáº§n kháº¯c phá»¥c
+                2. Hạn chế cần khắc phục
               </label>
               <textarea
                 id="homeroom-monthly-limitations"
                 rows={3}
-                placeholder="VD: Cáº§n nÃ¢ng cao Ã½ thá»©c tá»± giÃ¡c giá»¯ gÃ¬n vá»‡ sinh lá»›p há»c; Nháº¯c nhá»Ÿ má»™t sá»‘ há»c sinh Ä‘i há»c Ä‘Ãºng giá»..."
+                placeholder="VD: Cần nâng cao ý thức tự giác giữ gìn vệ sinh lớp học; Nhắc nhở một số học sinh đi học đúng giờ..."
                 value={monthlyLimitations}
                 onChange={(e) => {
                   setMonthlyLimitations(e.target.value);
@@ -1429,12 +1430,12 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
 
             <div>
               <label htmlFor="homeroom-monthly-plan" className="text-sm font-semibold text-slate-800">
-                3. Káº¿ hoáº¡ch trá»ng tÃ¢m thÃ¡ng tiáº¿p theo
+                3. Kế hoạch trọng tâm tháng tiếp theo
               </label>
               <textarea
                 id="homeroom-monthly-plan"
                 rows={3}
-                placeholder="VD: Tá»• chá»©c thi Ä‘ua chÃ o má»«ng ngÃ y 20/11; Phá»¥ Ä‘áº¡o bá»• trá»£ cho cÃ¡c há»c sinh chÆ°a Ä‘áº¡t chuáº©n..."
+                placeholder="VD: Tổ chức thi đua chào mừng ngày 20/11; Phụ đạo bổ trợ cho các học sinh chưa đạt chuẩn..."
                 value={monthlyNextPlan}
                 onChange={(e) => {
                   setMonthlyNextPlan(e.target.value);
@@ -1448,35 +1449,35 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
       )}
 
       {/* ========================================================
-          MODAL: THÃŠM / Sá»¬A GHI NHáº¬N Ná»€ Náº¾P (WITH QUICK SUGGESTIONS)
+          MODAL: THÊM / SỬA GHI NHẬN NỀ NẾP (WITH QUICK SUGGESTIONS)
       ======================================================== */}
       <Dialog open={showBehaviorModal} onOpenChange={setShowBehaviorModal}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editingBehavior ? 'Chá»‰nh sá»­a ghi nháº­n ná» náº¿p' : 'ThÃªm ghi nháº­n ná» náº¿p má»›i'}</DialogTitle>
+            <DialogTitle>{editingBehavior ? 'Chỉnh sửa ghi nhận nề nếp' : 'Thêm ghi nhận nề nếp mới'}</DialogTitle>
             <DialogDescription>
-              Ghi nháº­n cÃ¡c biá»ƒu hiá»‡n tÃ­ch cá»±c hoáº·c cáº§n nháº¯c nhá»Ÿ cá»§a há»c sinh Ä‘á»ƒ theo dÃµi sá»± tiáº¿n bá»™.
+              Ghi nhận các biểu hiện tích cực hoặc cần nhắc nhở của học sinh để theo dõi sự tiến bộ.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSaveBehavior} className="flex flex-col gap-4">
             {/* Student selection */}
             <div>
-              <label htmlFor="homeroom-modal-student-select" className="text-xs font-semibold text-slate-700">Há»c sinh *</label>
+              <label htmlFor="homeroom-modal-student-select" className="text-xs font-semibold text-slate-700">Học sinh *</label>
               <select
                 id="homeroom-modal-student-select"
-                aria-label="Chá»n há»c sinh Ä‘á»ƒ ghi nháº­n ná» náº¿p"
+                aria-label="Chọn học sinh để ghi nhận nề nếp"
                 disabled={!!editingBehavior}
                 value={behaviorFormStudentId}
                 onChange={(e) => setBehaviorFormStudentId(e.target.value)}
                 className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium outline-none focus:border-teal-500"
               >
-                <option value="">-- Chá»n há»c sinh trong lá»›p --</option>
+                <option value="">-- Chọn học sinh trong lớp --</option>
                 {dashboardData?.students.map((student) => (
                   <option key={student.id} value={student.id}>
                     {student.fullName}
                     {dashboardData.studentsNeedAttention.some((item) => item.studentId === student.id)
-                      ? ' (Cáº§n quan tÃ¢m)'
+                      ? ' (Cần quan tâm)'
                       : ''}
                   </option>
                 ))}
@@ -1489,7 +1490,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label htmlFor="homeroom-modal-date" className="text-xs font-semibold text-slate-700">NgÃ y ghi nháº­n *</label>
+                <label htmlFor="homeroom-modal-date" className="text-xs font-semibold text-slate-700">Ngày ghi nhận *</label>
                 <input
                   id="homeroom-modal-date"
                   type="date"
@@ -1500,42 +1501,42 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
               </div>
 
               <div>
-                <label htmlFor="homeroom-modal-category" className="text-xs font-semibold text-slate-700">Danh má»¥c *</label>
+                <label htmlFor="homeroom-modal-category" className="text-xs font-semibold text-slate-700">Danh mục *</label>
                 <select
                   id="homeroom-modal-category"
-                  aria-label="Chá»n danh má»¥c ná» náº¿p"
+                  aria-label="Chọn danh mục nề nếp"
                   value={behaviorFormCategory}
                   onChange={(e) => setBehaviorFormCategory(e.target.value)}
                   className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-teal-500"
                 >
-                  <option value="LEARNING">Há»c táº­p</option>
-                  <option value="DISCIPLINE">Ká»· luáº­t & Tráº­t tá»±</option>
-                  <option value="HYGIENE">Vá»‡ sinh & TÃ¡c phong</option>
-                  <option value="TEAMWORK">LÃ m viá»‡c nhÃ³m</option>
-                  <option value="RESPONSIBILITY">TrÃ¡ch nhiá»‡m</option>
-                  <option value="OTHER">KhÃ¡c</option>
+                  <option value="LEARNING">Học tập</option>
+                  <option value="DISCIPLINE">Kỷ luật & Trật tự</option>
+                  <option value="HYGIENE">Vệ sinh & Tác phong</option>
+                  <option value="TEAMWORK">Làm việc nhóm</option>
+                  <option value="RESPONSIBILITY">Trách nhiệm</option>
+                  <option value="OTHER">Khác</option>
                 </select>
               </div>
             </div>
 
             <div>
-              <label htmlFor="homeroom-modal-level" className="text-xs font-semibold text-slate-700">Má»©c Ä‘á»™ *</label>
+              <label htmlFor="homeroom-modal-level" className="text-xs font-semibold text-slate-700">Mức độ *</label>
               <select
                 id="homeroom-modal-level"
-                aria-label="Chá»n má»©c Ä‘á»™ ná» náº¿p"
+                aria-label="Chọn mức độ nề nếp"
                 value={behaviorFormLevel}
                 onChange={(e) => setBehaviorFormLevel(e.target.value)}
                 className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-teal-500"
               >
-                <option value="POSITIVE">TÃ­ch cá»±c (Biá»ƒu dÆ°Æ¡ng, khen thÆ°á»Ÿng)</option>
-                <option value="REMINDER">Cáº§n nháº¯c nhá»Ÿ</option>
-                <option value="NEEDS_ATTENTION">Cáº§n quan tÃ¢m Ä‘áº·c biá»‡t</option>
+                <option value="POSITIVE">Tích cực (Biểu dương, khen thưởng)</option>
+                <option value="REMINDER">Cần nhắc nhở</option>
+                <option value="NEEDS_ATTENTION">Cần quan tâm đặc biệt</option>
               </select>
             </div>
 
             {/* Quick Suggestions */}
             <div>
-              <p className="text-xs font-semibold text-slate-600">Gá»£i Ã½ nhanh (Báº¥m Ä‘á»ƒ Ä‘iá»n):</p>
+              <p className="text-xs font-semibold text-slate-600">Gợi ý nhanh (Bấm để điền):</p>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {(behaviorFormLevel === 'POSITIVE'
                   ? QUICK_POSITIVE_SUGGESTIONS
@@ -1555,11 +1556,11 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
 
             {/* Content Textarea */}
             <div>
-              <label htmlFor="homeroom-modal-content" className="text-xs font-semibold text-slate-700">Ná»™i dung chi tiáº¿t *</label>
+              <label htmlFor="homeroom-modal-content" className="text-xs font-semibold text-slate-700">Nội dung chi tiết *</label>
               <textarea
                 id="homeroom-modal-content"
                 rows={3}
-                placeholder="Nháº­p ná»™i dung quan sÃ¡t hoáº·c nháº­n xÃ©t vá» há»c sinh..."
+                placeholder="Nhập nội dung quan sát hoặc nhận xét về học sinh..."
                 value={behaviorFormContent}
                 onChange={(e) => setBehaviorFormContent(e.target.value)}
                 className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-teal-500"
@@ -1568,10 +1569,10 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
 
             <DialogFooter className="mt-2">
               <Button type="button" variant="outline" onClick={() => setShowBehaviorModal(false)}>
-                Há»§y
+                Hủy
               </Button>
               <Button type="submit" disabled={submittingBehavior} className="bg-teal-600 hover:bg-teal-700 text-white">
-                {submittingBehavior ? <Loader2 className="size-4 animate-spin" /> : 'LÆ°u ghi nháº­n'}
+                {submittingBehavior ? <Loader2 className="size-4 animate-spin" /> : 'Lưu ghi nhận'}
               </Button>
             </DialogFooter>
           </form>
@@ -1585,16 +1586,16 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="text-rose-600 flex items-center gap-2">
-              <AlertTriangle className="size-5" /> XÃ¡c nháº­n xÃ³a ghi nháº­n
+              <AlertTriangle className="size-5" /> Xác nhận xóa ghi nhận
             </DialogTitle>
             <DialogDescription>
-              Báº¡n cÃ³ cháº¯c cháº¯n muá»‘n xÃ³a ghi nháº­n ná» náº¿p cá»§a há»c sinh{' '}
-              <strong>{recordToDelete?.studentName}</strong> khÃ´ng? Thao tÃ¡c nÃ y khÃ´ng thá»ƒ hoÃ n tÃ¡c.
+              Bạn có chắc chắn muốn xóa ghi nhận nề nếp của học sinh{' '}
+              <strong>{recordToDelete?.studentName}</strong> không? Thao tác này không thể hoàn tác.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-4">
             <Button type="button" variant="outline" onClick={() => setRecordToDelete(null)}>
-              Há»§y
+              Hủy
             </Button>
             <Button
               type="button"
@@ -1602,7 +1603,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
               onClick={handleDeleteBehavior}
               className="bg-rose-600 hover:bg-rose-700 text-white"
             >
-              {deletingRecord ? <Loader2 className="size-4 animate-spin" /> : 'XÃ¡c nháº­n xÃ³a'}
+              {deletingRecord ? <Loader2 className="size-4 animate-spin" /> : 'Xác nhận xóa'}
             </Button>
           </DialogFooter>
         </DialogContent>
