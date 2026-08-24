@@ -32,6 +32,7 @@ export type ClassRecord = {
   gradeId?: string
   gradeDetail?: { id: string; code?: string; name: string; level: number }
   schoolYearId?: string
+  teacherId?: string
   schoolYear?: { id: string; name: string; isCurrent: boolean }
   room: string
   schedule: string
@@ -39,8 +40,9 @@ export type ClassRecord = {
   average?: number | null
   attendance?: number | null
   teacher: string
-  homeroomTeacherId?: string
+  homeroomTeacherId?: string | null
   homeroomTeacher?: { id: string; fullName: string; phone?: string }
+  isHomeroom?: boolean
   accent: string
   status?: string
   isActive?: boolean

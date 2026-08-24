@@ -30,6 +30,12 @@ export interface MyHomeroomClassesResponse {
 export interface HomeroomDashboardData {
   hasHomeroomClass: boolean;
   classroom: HomeroomClassroom | null;
+  students: Array<{
+    id: string;
+    fullName: string;
+    initials?: string;
+    avatarColor?: string;
+  }>;
   attendanceToday: {
     isRecorded: boolean;
     total: number;

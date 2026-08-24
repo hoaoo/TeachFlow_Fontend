@@ -272,6 +272,7 @@ export async function createClass(data: {
   gradeId?: string;
   schoolYearId?: string;
   homeroomTeacherId?: string;
+  isHomeroom?: boolean;
   room?: string;
   schedule?: string;
   accent?: string;
@@ -292,6 +293,7 @@ export async function updateClass(
     accent?: string;
     status?: string;
     subjectIds?: string[];
+    isHomeroom?: boolean;
   },
 ): Promise<ClassRecord> {
   return await api.patch<ClassRecord>(`/classes/${id}`, data);
