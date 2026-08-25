@@ -12,6 +12,7 @@ import {
   importStudents,
   analyzeStudentImportFile,
   getStudentOverview,
+  getStudentProfile,
   getStudentAttendance,
   getStudentAssessments,
   getStudentComments,
@@ -1856,28 +1857,22 @@ function StudentTabEnrollments({ studentId }: { studentId: string }) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function StudentTabWorksheets({ student }: { student: StudentRecord }) {
-  return (
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { getStudentProfile(student.id).then(setData).catch(() => setData(null)).finally(() => setLoading(false)); }, [student.id]);
+  const assignments = data?.recent?.assignments || [];
+  const behaviors = data?.recent?.behaviors || [];
+  return <div className="space-y-4">
     <Card className="border-slate-200 shadow-2xs">
-      <CardHeader className="p-4 sm:p-5 border-b border-slate-100">
-        <CardTitle className="text-base font-bold text-slate-900">
-          Phiếu học tập & Bài tập phân hóa
-        </CardTitle>
-        <CardDescription className="text-xs mt-0.5">
-          Theo dõi các bài tập đã giao và mức độ hoàn thành của học sinh {student.name}.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="p-6 text-center text-slate-400 space-y-2">
-        <FileText className="size-8 mx-auto text-slate-300 mb-1" />
-        <p className="text-xs text-slate-600 font-medium">Học sinh đã hoàn thành 100% các phiếu học tập được giao trong tuần.</p>
-        <p className="text-[11px] text-slate-400">Giáo viên có thể phân bổ thêm phiếu bài tập nâng cao từ mục <strong>Phiếu học tập</strong>.</p>
-      </CardContent>
+      <CardHeader className="p-4 sm:p-5 border-b border-slate-100"><CardTitle className="text-base font-bold">Phiếu đã giao</CardTitle><CardDescription className="text-xs">Dữ liệu lấy từ các WorksheetAssignment đang hoạt động của lớp.</CardDescription></CardHeader>
+      <CardContent className="p-4 sm:p-5">{loading ? <div className="py-8 text-center"><Loader2 className="mx-auto size-5 animate-spin text-teal-600" /></div> : assignments.length === 0 ? <p className="py-8 text-center text-xs text-slate-400">Chưa có phiếu nào được giao cho lớp của học sinh.</p> : <div className="space-y-2">{assignments.map((item:any) => <div key={item.id} className="rounded-lg border border-slate-200 p-3 text-xs"><div className="flex justify-between gap-2"><b>{item.worksheet?.title || 'Phiếu học tập'}</b><Badge variant="outline">{item.status}</Badge></div><p className="mt-1 text-slate-500">Lớp {item.classroom?.name} · Giao {new Date(item.assignedAt).toLocaleDateString('vi-VN')}</p>{item.dueAt && <p className="mt-1 text-amber-700">Hạn: {new Date(item.dueAt).toLocaleDateString('vi-VN')}</p>}</div>)}</div>}</CardContent>
     </Card>
-  )
+    <Card className="border-slate-200 shadow-2xs">
+      <CardHeader className="p-4 border-b border-slate-100"><CardTitle className="text-sm font-bold">Nề nếp gần đây</CardTitle></CardHeader>
+      <CardContent className="p-4">{behaviors.length === 0 ? <p className="text-center text-xs text-slate-400">Chưa có ghi nhận nề nếp nào.</p> : <div className="space-y-2">{behaviors.map((item:any) => <div key={item.id} className="rounded-lg bg-slate-50 p-3 text-xs"><b>{item.category}</b><span className="ml-2 text-slate-500">{new Date(item.recordDate).toLocaleDateString('vi-VN')}</span><p className="mt-1 text-slate-700">{item.content}</p></div>)}</div>}</CardContent>
+    </Card>
+  </div>
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// TAB 6: GHI CHÚ & NHẬN XÉT CỦA GIÁO VIÊN
-// ═══════════════════════════════════════════════════════════════════════════
 
 function StudentTabComments({ student }: { student: StudentRecord }) {
   const [comments, setComments] = useState<StudentCommentItem[]>([])

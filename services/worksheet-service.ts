@@ -85,3 +85,27 @@ export async function deleteWorksheet(id: string): Promise<void> {
 export async function duplicateWorksheet(id: string): Promise<WorksheetItem> {
   return await api.post<WorksheetItem>(`/worksheets/${id}/duplicate`, {});
 }
+
+export type WorksheetAssignment = {
+  id: string;
+  worksheetId: string;
+  classroom: { id: string; name: string; code?: string };
+  assignedAt: string;
+  dueAt?: string | null;
+  note?: string | null;
+  status: string;
+};
+
+export async function assignWorksheet(id: string, data: { classroomId: string; dueAt?: string; note?: string }): Promise<WorksheetAssignment> {
+  return api.post<WorksheetAssignment>(`/worksheets/${id}/assign`, data);
+}
+export async function getWorksheetAssignments(id: string): Promise<WorksheetAssignment[]> {
+  const data = await api.get<WorksheetAssignment[]>(`/worksheets/${id}/assignments`);
+  return Array.isArray(data) ? data : [];
+}
+export async function updateWorksheetAssignment(id: string, assignmentId: string, data: { dueAt?: string | null; note?: string | null }) {
+  return api.patch<WorksheetAssignment>(`/worksheets/${id}/assignments/${assignmentId}`, data);
+}
+export async function cancelWorksheetAssignment(id: string, assignmentId: string) {
+  return api.delete(`/worksheets/${id}/assignments/${assignmentId}`);
+}

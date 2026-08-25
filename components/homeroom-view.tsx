@@ -52,6 +52,7 @@ import {
   type MonthlySummaryData,
   type MonthlyReviewData,
 } from '@/services/homeroom-service';
+import { generateHomeroomSummary } from '@/services/ai-service';
 import { toggleTask as apiToggleTask } from '@/services/dashboard-service';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -144,6 +145,20 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
   const [savingMonthly, setSavingMonthly] = useState(false);
   const [exportingMonthlyDocx, setExportingMonthlyDocx] = useState(false);
   const [exportingMonthlyPdf, setExportingMonthlyPdf] = useState(false);
+  const [generatingAiSummary, setGeneratingAiSummary] = useState(false);
+
+  const handleGenerateAiSummary = async () => {
+    if (!selectedClassId) return;
+    setGeneratingAiSummary(true);
+    try {
+      const result = await generateHomeroomSummary({ classroomId: selectedClassId, period: activeTab === 'monthly' ? 'MONTH' : 'WEEK', weekNumber: selectedWeek });
+      toast.success(result?.summary || 'Đã tạo bản nháp tổng hợp bằng AI. Hãy rà soát trước khi dùng.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Không thể tạo bản nháp AI');
+    } finally {
+      setGeneratingAiSummary(false);
+    }
+  };
 
   // 1. Initial Load Classes
   useEffect(() => {
@@ -542,6 +557,9 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
               </option>
             ))}
           </select>
+          <Button type="button" variant="outline" onClick={handleGenerateAiSummary} disabled={generatingAiSummary}>
+            {generatingAiSummary ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} Gợi ý AI
+          </Button>
           <button
             onClick={() => fetchDashboard(selectedClassId)}
             title="Làm mới dữ liệu"

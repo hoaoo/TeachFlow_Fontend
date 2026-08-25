@@ -185,6 +185,8 @@ export async function importStudents(
   return api.post('/students/import', { classroomId, students });
 }
 
+export async function getStudentProfile(id: string): Promise<any> { return api.get('/students/' + id + '/profile'); }
+
 export async function getStudentOverview(id: string): Promise<any> {
   return api.get(`/students/${id}/overview`);
 }

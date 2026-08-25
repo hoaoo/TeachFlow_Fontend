@@ -13,6 +13,7 @@ import {
   Sparkles,
   X,
   Eye,
+  Send,
   Printer,
   Image as ImageIcon,
   ArrowLeft,
@@ -20,16 +21,19 @@ import {
 import {
   getWorksheets,
   getWorksheet,
+  getWorksheetAssignments,
   createWorksheet,
   updateWorksheet,
   deleteWorksheet,
   duplicateWorksheet,
   type WorksheetItem,
+  type WorksheetAssignment,
   type WorksheetQuestion,
   type WorksheetQuestionInput,
 } from '@/services/worksheet-service'
 import { exportService } from '@/services/export-service'
 import { generateWorksheet, generateImage } from '@/services/ai-service'
+import { WorksheetAssignmentDialog } from '@/components/worksheet-assignment-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -108,6 +112,8 @@ export function WorksheetManager() {
 
   const [editTarget, setEditTarget] = useState<WorksheetItem | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<WorksheetItem | null>(null)
+  const [assignTarget, setAssignTarget] = useState<WorksheetItem | null>(null)
+  const [assignmentsByWorksheet, setAssignmentsByWorksheet] = useState<Record<string, WorksheetAssignment[]>>({})
   const [aiOpen, setAiOpen] = useState(false)
   const [imageOpen, setImageOpen] = useState(false)
   const [overwriteOpen, setOverwriteOpen] = useState(false)
@@ -145,6 +151,8 @@ export function WorksheetManager() {
     try {
       const data = await getWorksheets()
       setWorksheets(data)
+      const assignmentEntries = await Promise.all(data.map(async (item) => [item.id, await getWorksheetAssignments(item.id).catch(() => [])] as const))
+      setAssignmentsByWorksheet(Object.fromEntries(assignmentEntries))
     } catch {
       setWorksheets([])
     } finally {
@@ -496,7 +504,7 @@ export function WorksheetManager() {
           </div>
         )}
 
-        <AiWorksheetDialog
+      <AiWorksheetDialog
           open={aiOpen}
           onClose={() => setAiOpen(false)}
           aiTopic={aiTopic} setAiTopic={setAiTopic}
@@ -658,7 +666,13 @@ export function WorksheetManager() {
                   {item.subtitle || 'Phiếu bài tập'} {item.meta ? `· ${item.meta}` : ''} · {item.questionsCount || 0} câu hỏi
                 </p>
               </div>
+              {(assignmentsByWorksheet[item.id] || []).filter((assignment) => assignment.status !== 'CANCELLED').length > 0 && (
+                <span className="text-[11px] font-semibold text-teal-700">
+                  Đã giao: {(assignmentsByWorksheet[item.id] || []).filter((assignment) => assignment.status !== 'CANCELLED').map((assignment) => assignment.classroom?.name).join(', ')}
+                </span>
+              )}
               <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => setAssignTarget(item)}><Send className="size-3.5" /> Giao bài</Button>
                 <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => openEdit(item)}>
                   <Edit2 className="size-3.5" /> Chỉnh sửa
                 </Button>
@@ -675,6 +689,8 @@ export function WorksheetManager() {
           ))}
         </div>
       )}
+
+      <WorksheetAssignmentDialog worksheet={assignTarget} open={!!assignTarget} onClose={() => setAssignTarget(null)} onAssigned={loadData} />
 
       <AiWorksheetDialog
         open={aiOpen}

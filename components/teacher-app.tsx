@@ -6,7 +6,7 @@ import {
   FileText, Files, GraduationCap, Grid2X2, LayoutDashboard, Library, Menu, MoreHorizontal,
   Plus, Search, Settings, Sparkles, Users, X, ArrowUpRight, CircleHelp, School, Send,
   SlidersHorizontal, Flame, UserRound, ChevronRight, ChevronLeft, Calendar, BookMarked, LogIn, LogOut, KeyRound,
-  Loader2, Copy, BookmarkPlus, HelpCircle, Gamepad2, FileQuestion, MessageSquarePlus, Shield,
+  Loader2, Copy, Bookmark, BookmarkPlus, HelpCircle, Gamepad2, FileQuestion, MessageSquarePlus, Shield,
   Edit2, Trash2
 } from 'lucide-react'
 import { navItems } from '@/lib/mock-data'
@@ -26,6 +26,9 @@ import { ScheduleView } from '@/components/schedule-view'
 import { AssessmentManager } from '@/components/assessment-manager'
 import { AttendanceView } from '@/components/attendance-view'
 import { WorksheetManager } from '@/components/worksheet-manager'
+import { SeatingPlanView } from '@/components/seating-plan-view'
+import { TemplatesView } from '@/components/templates-view'
+import { QuickCommentsView } from '@/components/quick-comments-view'
 import { NotificationDropdown } from '@/components/notification-dropdown'
 import { AuthScreen } from '@/components/auth-screen'
 import { ScheduleAttendanceDialog } from '@/components/schedule-attendance-dialog'
@@ -70,7 +73,7 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { Activity, History } from 'lucide-react'
 
-const iconMap = { LayoutDashboard, CalendarDays, BookOpen, Library, Users, GraduationCap, Files, ClipboardCheck, School, CheckCircle2, Settings, Sparkles, FileText }
+const iconMap = { LayoutDashboard, CalendarDays, BookOpen, Library, Users, GraduationCap, Files, ClipboardCheck, School, CheckCircle2, Settings, Sparkles, FileText, Bookmark, MessageSquarePlus, Grid2X2 }
 
 type View =
   | 'Tổng quan'
@@ -87,6 +90,9 @@ type View =
   | 'Tài nguyên'
   | 'Cài đặt'
   | 'Trợ lý AI'
+  | 'Sơ đồ chỗ ngồi'
+  | 'Mẫu của tôi'
+  | 'Nhận xét nhanh'
   | 'Quản trị giáo viên'
   | 'Tổng quan hệ thống'
   | 'Quản lý giáo viên'
@@ -1483,6 +1489,9 @@ function GenericView({
   if (view === 'Đánh giá') return <AssessmentManager />
   if (view === 'Điểm danh') return <AttendanceView />
   if (view === 'Phiếu học tập') return <WorksheetManager />
+  if (view === 'Sơ đồ chỗ ngồi') return <SeatingPlanView />
+  if (view === 'Mẫu của tôi') return <TemplatesView />
+  if (view === 'Nhận xét nhanh') return <QuickCommentsView />
   if (view === 'Tài nguyên') return <WorkspaceModule view="Tài nguyên" />
   return (
     <div className="flex flex-col gap-6">

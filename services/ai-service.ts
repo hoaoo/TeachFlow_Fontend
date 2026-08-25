@@ -225,3 +225,6 @@ export async function analyzeImportFile(formData: FormData): Promise<{
     throw new Error(error?.message || 'Không thể phân tích tệp lúc này. Vui lòng thử lại.');
   }
 }
+
+
+export async function generateHomeroomSummary(payload: { classroomId: string; period: 'WEEK' | 'MONTH'; weekNumber?: number }) { return api.post<any>('/ai/homeroom-summary', payload); }

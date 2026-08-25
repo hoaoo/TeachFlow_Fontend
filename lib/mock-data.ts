@@ -13,4 +13,7 @@ export const navItems = [
   { label: 'Tài nguyên', icon: 'Files' },
   { label: 'Cài đặt', icon: 'Settings' },
   { label: 'Trợ lý AI', icon: 'Sparkles' },
+  { label: 'Mẫu của tôi', icon: 'Bookmark' },
+  { label: 'Nhận xét nhanh', icon: 'MessageSquarePlus' },
+  { label: 'Sơ đồ chỗ ngồi', icon: 'Grid2X2' },
 ]
