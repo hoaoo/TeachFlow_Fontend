@@ -1244,9 +1244,9 @@ function ClassDetailView({
   const [activeTab, setActiveTab] = useState(initialTab || 'overview')
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 space-y-6">
-      {/* 1. Gọn gàng Header Lớp */}
-      <div className="space-y-3 pb-1 border-b border-slate-100">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6">
+      {/* 1. Header Lớp */}
+      <div className="space-y-3 pb-5 border-b border-slate-200/80">
         <button
           onClick={onBack}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-teal-700 transition cursor-pointer group"
@@ -1341,102 +1341,104 @@ function ClassDetailView({
         </div>
       </div>
 
-      {/* 2. Menu Tab Bar rõ ràng, cao 44px, icon + active state nổi bật */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <div className="overflow-x-auto no-scrollbar pb-1">
-          <TabsList className="inline-flex sm:grid sm:grid-cols-7 h-11 w-full min-w-max sm:min-w-0 p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 gap-1 shadow-2xs">
-            <TabsTrigger
-              value="overview"
-              className="h-9 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
-            >
-              <LayoutGrid className="size-3.5 shrink-0" />
-              <span>Tổng quan</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="students"
-              className="h-9 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
-            >
-              <Users className="size-3.5 shrink-0" />
-              <span>Học sinh</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="schedules"
-              className="h-9 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
-            >
-              <CalendarDays className="size-3.5 shrink-0" />
-              <span>Lịch dạy</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="attendance"
-              className="h-9 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
-            >
-              <CalendarCheck2 className="size-3.5 shrink-0" />
-              <span>Điểm danh</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="assessments"
-              className="h-9 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
-            >
-              <Award className="size-3.5 shrink-0" />
-              <span>Đánh giá</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="lesson-plans"
-              className="h-9 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
-            >
-              <FileText className="size-3.5 shrink-0" />
-              <span>Giáo án</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="statistics"
-              className="h-9 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
-            >
-              <TrendingUp className="size-3.5 shrink-0" />
-              <span>Thống kê</span>
-            </TabsTrigger>
-          </TabsList>
-        </div>
+      {/* 2. Menu Tab Bar - Hoàn toàn trong normal document flow (không sticky/fixed), khoảng cách 24px */}
+      <div className="mt-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <div className="overflow-x-auto no-scrollbar pb-1">
+            <TabsList className="inline-flex sm:grid sm:grid-cols-7 h-auto w-full min-w-max sm:min-w-0 p-1.5 bg-slate-100/90 rounded-xl border border-slate-200/80 gap-1.5 shadow-2xs">
+              <TabsTrigger
+                value="overview"
+                className="h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+              >
+                <LayoutGrid className="size-3.5 shrink-0" />
+                <span>Tổng quan</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="students"
+                className="h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+              >
+                <Users className="size-3.5 shrink-0" />
+                <span>Học sinh</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="schedules"
+                className="h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+              >
+                <CalendarDays className="size-3.5 shrink-0" />
+                <span>Lịch dạy</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="attendance"
+                className="h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+              >
+                <CalendarCheck2 className="size-3.5 shrink-0" />
+                <span>Điểm danh</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="assessments"
+                className="h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+              >
+                <Award className="size-3.5 shrink-0" />
+                <span>Đánh giá</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="lesson-plans"
+                className="h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+              >
+                <FileText className="size-3.5 shrink-0" />
+                <span>Giáo án</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="statistics"
+                className="h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+              >
+                <TrendingUp className="size-3.5 shrink-0" />
+                <span>Thống kê</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-        {/* TAB 1: TỔNG QUAN */}
-        <TabsContent value="overview" className="mt-5 space-y-6">
-          <TabOverview classItem={classItem} onSwitchTab={(tab) => setActiveTab(tab)} />
-        </TabsContent>
+          {/* TAB 1: TỔNG QUAN */}
+          <TabsContent value="overview" className="mt-6 space-y-6">
+            <TabOverview classItem={classItem} onSwitchTab={(tab) => setActiveTab(tab)} />
+          </TabsContent>
 
-        {/* TAB 2: HỌC SINH */}
-        <TabsContent value="students" className="mt-5 space-y-5">
-          <TabStudents
-            classItem={classItem}
-            allClasses={allClasses}
-            onOpenStudent={onOpenStudent}
-            onClassUpdated={onClassUpdated}
-          />
-        </TabsContent>
+          {/* TAB 2: HỌC SINH */}
+          <TabsContent value="students" className="mt-6 space-y-5">
+            <TabStudents
+              classItem={classItem}
+              allClasses={allClasses}
+              onOpenStudent={onOpenStudent}
+              onClassUpdated={onClassUpdated}
+            />
+          </TabsContent>
 
-        {/* TAB 3: LỊCH DẠY */}
-        <TabsContent value="schedules" className="mt-5 space-y-5">
-          <TabSchedules classItem={classItem} />
-        </TabsContent>
+          {/* TAB 3: LỊCH DẠY */}
+          <TabsContent value="schedules" className="mt-6 space-y-5">
+            <TabSchedules classItem={classItem} />
+          </TabsContent>
 
-        {/* TAB 4: ĐIỂM DANH */}
-        <TabsContent value="attendance" className="mt-5 space-y-5">
-          <TabAttendance classItem={classItem} />
-        </TabsContent>
+          {/* TAB 4: ĐIỂM DANH */}
+          <TabsContent value="attendance" className="mt-6 space-y-5">
+            <TabAttendance classItem={classItem} />
+          </TabsContent>
 
-        {/* TAB 5: ĐÁNH GIÁ */}
-        <TabsContent value="assessments" className="mt-5 space-y-5">
-          <TabAssessments classItem={classItem} />
-        </TabsContent>
+          {/* TAB 5: ĐÁNH GIÁ */}
+          <TabsContent value="assessments" className="mt-6 space-y-5">
+            <TabAssessments classItem={classItem} />
+          </TabsContent>
 
-        {/* TAB 6: GIÁO ÁN */}
-        <TabsContent value="lesson-plans" className="mt-5 space-y-5">
-          <TabLessonPlans classItem={classItem} />
-        </TabsContent>
+          {/* TAB 6: GIÁO ÁN */}
+          <TabsContent value="lesson-plans" className="mt-6 space-y-5">
+            <TabLessonPlans classItem={classItem} />
+          </TabsContent>
 
-        {/* TAB 7: THỐNG KÊ */}
-        <TabsContent value="statistics" className="mt-5 space-y-5">
-          <TabStatistics classItem={classItem} />
-        </TabsContent>
-      </Tabs>
+          {/* TAB 7: THỐNG KÊ */}
+          <TabsContent value="statistics" className="mt-6 space-y-5">
+            <TabStatistics classItem={classItem} />
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   )
 }
