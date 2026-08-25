@@ -1245,81 +1245,160 @@ function ClassDetailView({
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 space-y-6">
-      {/* Top Breadcrumb & Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <button
-            onClick={onBack}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-teal-700 mb-2 transition cursor-pointer"
-          >
-            <ArrowLeft className="size-3.5" /> Quay lại danh sách lớp
-          </button>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              {classItem.name}
-            </h1>
-            {classItem.code && (
-              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                {classItem.code}
-              </span>
-            )}
-            <Badge
-              variant={classItem.status === 'COMPLETED' ? 'secondary' : 'default'}
-              className={`text-xs ${
-                classItem.status === 'COMPLETED'
-                  ? 'bg-slate-100 text-slate-600'
-                  : 'bg-teal-50 text-teal-700 border-teal-200'
-              }`}
-            >
-              {classItem.status === 'COMPLETED' ? 'Đã kết thúc' : 'Đang hoạt động'}
-            </Badge>
-          </div>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            {classItem.grade} · {classItem.schoolYear?.name || 'Năm học'} · {classItem.room || 'Phòng học'} · {classItem.schedule || 'Sáng · Thứ 2 - Thứ 6'}
-          </p>
-        </div>
+      {/* 1. Gọn gàng Header Lớp */}
+      <div className="space-y-3 pb-1 border-b border-slate-100">
+        <button
+          onClick={onBack}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-teal-700 transition cursor-pointer group"
+        >
+          <ArrowLeft className="size-3.5 transition-transform group-hover:-translate-x-0.5" />
+          <span>Danh sách lớp</span>
+        </button>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={onOpenEdit} className="text-xs h-9 gap-1.5">
-            <Edit2 className="size-3.5" /> Sửa thông tin
-          </Button>
-          <Button variant="outline" size="sm" onClick={onOpenClone} className="text-xs h-9 gap-1.5">
-            <Copy className="size-3.5" /> Nhân bản lớp
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" className="h-9 w-9">
-                <MoreVertical className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44 text-xs">
-              {classItem.status !== 'COMPLETED' && (
-                <DropdownMenuItem onClick={onOpenComplete}>
-                  <CheckCircle2 className="size-3.5 mr-2 text-blue-600" /> Kết thúc năm học
-                </DropdownMenuItem>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                {classItem.name}
+              </h1>
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border shadow-2xs ${
+                  classItem.status === 'COMPLETED'
+                    ? 'bg-slate-100 text-slate-600 border-slate-200'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                }`}
+              >
+                <span
+                  className={`size-1.5 rounded-full ${
+                    classItem.status === 'COMPLETED' ? 'bg-slate-400' : 'bg-emerald-500'
+                  }`}
+                />
+                {classItem.status === 'COMPLETED' ? 'Đã kết thúc' : 'Đang hoạt động'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-500 mt-1.5 flex-wrap font-medium">
+              <span>{classItem.grade || 'Khối lớp'}</span>
+              <span className="text-slate-300">•</span>
+              <span>{classItem.schoolYear?.name || 'Năm học 2026–2027'}</span>
+              {classItem.room && (
+                <>
+                  <span className="text-slate-300">•</span>
+                  <span>Phòng {classItem.room}</span>
+                </>
               )}
-              <DropdownMenuItem onClick={onOpenDelete} className="text-rose-600">
-                <Trash2 className="size-3.5 mr-2" /> Xóa / Lưu trữ lớp
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              {classItem.schedule && (
+                <>
+                  <span className="text-slate-300">•</span>
+                  <span>{classItem.schedule}</span>
+                </>
+              )}
+              {classItem.code && (
+                <>
+                  <span className="text-slate-300">•</span>
+                  <span className="text-slate-400 font-mono">Mã lớp: {classItem.code}</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onOpenEdit}
+              className="h-9 px-3.5 text-xs font-semibold text-slate-700 hover:text-teal-700 hover:border-teal-300 hover:bg-teal-50/50 shadow-2xs gap-1.5"
+            >
+              <Edit2 className="size-3.5 text-slate-500" /> Sửa thông tin
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onOpenClone}
+              className="h-9 px-3.5 text-xs font-semibold text-slate-700 hover:text-teal-700 hover:border-teal-300 hover:bg-teal-50/50 shadow-2xs gap-1.5"
+            >
+              <Copy className="size-3.5 text-slate-500" /> Nhân bản lớp
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="h-9 w-9 text-slate-600 hover:text-slate-900 shadow-2xs">
+                  <MoreVertical className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48 text-xs font-medium">
+                {classItem.status !== 'COMPLETED' && (
+                  <DropdownMenuItem onClick={onOpenComplete} className="cursor-pointer">
+                    <CheckCircle2 className="size-3.5 mr-2 text-blue-600" /> Kết thúc năm học
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onOpenDelete} className="text-rose-600 cursor-pointer focus:text-rose-700 focus:bg-rose-50">
+                  <Trash2 className="size-3.5 mr-2 text-rose-600" /> Xóa / Lưu trữ lớp
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
 
-      {/* 7 Tabs Container */}
+      {/* 2. Menu Tab Bar rõ ràng, cao 44px, icon + active state nổi bật */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid grid-cols-3 sm:grid-cols-7 h-auto p-1 bg-slate-100 rounded-xl">
-          <TabsTrigger value="overview" className="text-xs py-2 font-medium">Tổng quan</TabsTrigger>
-          <TabsTrigger value="students" className="text-xs py-2 font-medium">Học sinh</TabsTrigger>
-          <TabsTrigger value="schedules" className="text-xs py-2 font-medium">Lịch dạy</TabsTrigger>
-          <TabsTrigger value="attendance" className="text-xs py-2 font-medium">Điểm danh</TabsTrigger>
-          <TabsTrigger value="assessments" className="text-xs py-2 font-medium">Đánh giá</TabsTrigger>
-          <TabsTrigger value="lesson-plans" className="text-xs py-2 font-medium">Giáo án</TabsTrigger>
-          <TabsTrigger value="statistics" className="text-xs py-2 font-medium">Thống kê</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto no-scrollbar pb-1">
+          <TabsList className="inline-flex sm:grid sm:grid-cols-7 h-11 w-full min-w-max sm:min-w-0 p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 gap-1 shadow-2xs">
+            <TabsTrigger
+              value="overview"
+              className="h-9 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+            >
+              <LayoutGrid className="size-3.5 shrink-0" />
+              <span>Tổng quan</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="students"
+              className="h-9 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+            >
+              <Users className="size-3.5 shrink-0" />
+              <span>Học sinh</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="schedules"
+              className="h-9 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+            >
+              <CalendarDays className="size-3.5 shrink-0" />
+              <span>Lịch dạy</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="attendance"
+              className="h-9 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+            >
+              <CalendarCheck2 className="size-3.5 shrink-0" />
+              <span>Điểm danh</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="assessments"
+              className="h-9 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+            >
+              <Award className="size-3.5 shrink-0" />
+              <span>Đánh giá</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="lesson-plans"
+              className="h-9 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+            >
+              <FileText className="size-3.5 shrink-0" />
+              <span>Giáo án</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="statistics"
+              className="h-9 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+            >
+              <TrendingUp className="size-3.5 shrink-0" />
+              <span>Thống kê</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* TAB 1: TỔNG QUAN */}
-        <TabsContent value="overview" className="mt-5 space-y-5">
+        <TabsContent value="overview" className="mt-5 space-y-6">
           <TabOverview classItem={classItem} onSwitchTab={(tab) => setActiveTab(tab)} />
         </TabsContent>
 
@@ -1452,100 +1531,188 @@ function TabOverview({
 
   return (
     <div className="space-y-6">
-      {/* 6 KPI Cards */}
+      {/* 3. 6 KPI Cards đồng đều, nổi bật */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
-        <Card className="border-slate-200 shadow-2xs">
-          <CardContent className="p-3.5 text-center">
-            <Users className="size-5 mx-auto text-teal-600 mb-1" />
-            <p className="text-lg font-bold text-slate-900">{kpis.studentCount}</p>
-            <p className="text-[11px] text-slate-500 font-medium">Sĩ số lớp</p>
+        {/* Sĩ số lớp */}
+        <Card className="border border-slate-200/80 shadow-2xs hover:border-slate-300 transition rounded-xl">
+          <CardContent className="p-4 flex flex-col justify-between h-full">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-500">Sĩ số lớp</span>
+              <div className="size-7 rounded-lg bg-teal-50 text-teal-700 grid place-items-center">
+                <Users className="size-4" />
+              </div>
+            </div>
+            <div className="mt-2.5">
+              <p className="text-2xl font-extrabold text-slate-900">
+                {kpis.studentCount !== null && kpis.studentCount !== undefined ? kpis.studentCount : '—'}
+              </p>
+              <p className="text-[11px] text-teal-700 font-medium mt-0.5">Học sinh</p>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200 shadow-2xs">
-          <CardContent className="p-3.5 text-center">
-            <CalendarCheck2 className="size-5 mx-auto text-blue-600 mb-1" />
-            <p className="text-lg font-bold text-blue-700">
-              {kpis.attendanceRate !== null && kpis.attendanceRate !== undefined
-                ? `${kpis.attendanceRate}%`
-                : '—'}
-            </p>
-            <p className="text-[11px] text-slate-500 font-medium">Chuyên cần</p>
+        {/* Chuyên cần */}
+        <Card className="border border-slate-200/80 shadow-2xs hover:border-slate-300 transition rounded-xl">
+          <CardContent className="p-4 flex flex-col justify-between h-full">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-500">Chuyên cần</span>
+              <div className="size-7 rounded-lg bg-blue-50 text-blue-700 grid place-items-center">
+                <CalendarCheck2 className="size-4" />
+              </div>
+            </div>
+            <div className="mt-2.5">
+              <p className="text-2xl font-extrabold text-blue-700">
+                {kpis.attendanceRate !== null && kpis.attendanceRate !== undefined
+                  ? `${kpis.attendanceRate}%`
+                  : '—'}
+              </p>
+              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                {kpis.attendanceRate !== null && kpis.attendanceRate !== undefined
+                  ? 'Tỷ lệ có mặt'
+                  : 'Chưa có dữ liệu'}
+              </p>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200 shadow-2xs">
-          <CardContent className="p-3.5 text-center">
-            <Award className="size-5 mx-auto text-amber-600 mb-1" />
-            <p className="text-lg font-bold text-amber-700">
-              {kpis.averageScore !== null && kpis.averageScore !== undefined
-                ? `${kpis.averageScore} đ`
-                : '—'}
-            </p>
-            <p className="text-[11px] text-slate-500 font-medium">Điểm TB</p>
+        {/* Điểm TB */}
+        <Card className="border border-slate-200/80 shadow-2xs hover:border-slate-300 transition rounded-xl">
+          <CardContent className="p-4 flex flex-col justify-between h-full">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-500">Điểm TB</span>
+              <div className="size-7 rounded-lg bg-amber-50 text-amber-700 grid place-items-center">
+                <Award className="size-4" />
+              </div>
+            </div>
+            <div className="mt-2.5">
+              <p className="text-2xl font-extrabold text-amber-700">
+                {kpis.averageScore !== null && kpis.averageScore !== undefined
+                  ? `${kpis.averageScore} đ`
+                  : '—'}
+              </p>
+              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                {kpis.averageScore !== null && kpis.averageScore !== undefined
+                  ? 'Trung bình môn'
+                  : 'Chưa có dữ liệu'}
+              </p>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200 shadow-2xs">
-          <CardContent className="p-3.5 text-center">
-            <CalendarDays className="size-5 mx-auto text-purple-600 mb-1" />
-            <p className="text-lg font-bold text-purple-700">{kpis.weeklyScheduleCount}</p>
-            <p className="text-[11px] text-slate-500 font-medium">Tiết tuần này</p>
+        {/* Tiết tuần này */}
+        <Card className="border border-slate-200/80 shadow-2xs hover:border-slate-300 transition rounded-xl">
+          <CardContent className="p-4 flex flex-col justify-between h-full">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-500">Tiết tuần này</span>
+              <div className="size-7 rounded-lg bg-purple-50 text-purple-700 grid place-items-center">
+                <CalendarDays className="size-4" />
+              </div>
+            </div>
+            <div className="mt-2.5">
+              <p className="text-2xl font-extrabold text-purple-700">
+                {kpis.weeklyScheduleCount !== null && kpis.weeklyScheduleCount !== undefined
+                  ? kpis.weeklyScheduleCount
+                  : '—'}
+              </p>
+              <p className="text-[11px] text-purple-700 font-medium mt-0.5">Tiết học</p>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200 shadow-2xs">
-          <CardContent className="p-3.5 text-center">
-            <FileText className="size-5 mx-auto text-emerald-600 mb-1" />
-            <p className="text-lg font-bold text-emerald-700">{kpis.preparedLessonPlanCount}</p>
-            <p className="text-[11px] text-slate-500 font-medium">Giáo án đã dạy</p>
+        {/* Giáo án đã dạy */}
+        <Card className="border border-slate-200/80 shadow-2xs hover:border-slate-300 transition rounded-xl">
+          <CardContent className="p-4 flex flex-col justify-between h-full">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-500">Giáo án đã dạy</span>
+              <div className="size-7 rounded-lg bg-emerald-50 text-emerald-700 grid place-items-center">
+                <FileText className="size-4" />
+              </div>
+            </div>
+            <div className="mt-2.5">
+              <p className="text-2xl font-extrabold text-emerald-700">
+                {kpis.preparedLessonPlanCount !== null && kpis.preparedLessonPlanCount !== undefined
+                  ? kpis.preparedLessonPlanCount
+                  : '—'}
+              </p>
+              <p className="text-[11px] text-emerald-700 font-medium mt-0.5">Kế hoạch bài dạy</p>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200 shadow-2xs">
-          <CardContent className="p-3.5 text-center">
-            <Heart className="size-5 mx-auto text-rose-500 mb-1" />
-            <p className="text-lg font-bold text-rose-600">{kpis.needsSupportStudentCount}</p>
-            <p className="text-[11px] text-slate-500 font-medium">Cần hỗ trợ</p>
+        {/* Cần hỗ trợ */}
+        <Card className="border border-slate-200/80 shadow-2xs hover:border-slate-300 transition rounded-xl">
+          <CardContent className="p-4 flex flex-col justify-between h-full">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-500">Cần hỗ trợ</span>
+              <div className="size-7 rounded-lg bg-rose-50 text-rose-600 grid place-items-center">
+                <Heart className="size-4" />
+              </div>
+            </div>
+            <div className="mt-2.5">
+              <p className="text-2xl font-extrabold text-rose-600">
+                {kpis.needsSupportStudentCount !== null && kpis.needsSupportStudentCount !== undefined
+                  ? kpis.needsSupportStudentCount
+                  : '—'}
+              </p>
+              <p className="text-[11px] text-rose-600 font-medium mt-0.5">
+                {kpis.needsSupportStudentCount > 0 ? 'Cần theo dõi' : 'Ổn định'}
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Teaching Context Section */}
-      <Card className="border-slate-200 shadow-2xs">
-        <CardHeader className="p-4 sm:p-5 flex flex-row items-center justify-between pb-3">
+      {/* 4. Khối Môn học phụ trách */}
+      <Card className="border border-slate-200/80 shadow-2xs rounded-xl overflow-hidden">
+        <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/50">
           <div>
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <BookOpen className="size-4 text-teal-600" /> Môn học phụ trách tại lớp này
-            </CardTitle>
-            <CardDescription className="text-xs mt-0.5">
-              Khai báo môn bạn trực tiếp giảng dạy tại lớp để hiển thị lịch dạy và giáo án.
-            </CardDescription>
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <BookOpen className="size-4 text-teal-600 shrink-0" /> Môn học phụ trách
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Các môn bạn trực tiếp giảng dạy tại lớp này.
+            </p>
           </div>
-          <Button size="sm" variant="outline" onClick={() => setDeclareOpen(true)} className="text-xs h-8 gap-1">
+          <Button
+            size="sm"
+            onClick={() => setDeclareOpen(true)}
+            className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold h-8 px-3 gap-1.5 shadow-2xs self-start sm:self-auto shrink-0"
+          >
             <Plus className="size-3.5" /> Khai báo môn
           </Button>
-        </CardHeader>
-        <CardContent className="p-4 sm:p-5 pt-0">
+        </div>
+        <CardContent className="p-4 sm:p-5">
           {teachingContexts.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400">
-              Chưa khai báo môn dạy riêng nào. Nhấn <strong>"Khai báo môn"</strong> để bắt đầu.
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-4 py-3 text-xs text-slate-500">
+              <div className="flex items-center gap-2 text-slate-500">
+                <AlertCircle className="size-4 text-slate-400 shrink-0" />
+                <span>Chưa khai báo môn học phụ trách tại lớp này.</span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setDeclareOpen(true)}
+                className="h-7 px-2.5 text-xs text-teal-700 border-teal-200 bg-white hover:bg-teal-50 shrink-0"
+              >
+                <Plus className="size-3 mr-1" /> Khai báo môn
+              </Button>
             </div>
           ) : (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2.5">
               {teachingContexts.map((ctx) => (
                 <div
                   key={ctx.id}
-                  className="flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50/60 px-3 py-1.5 text-xs font-semibold text-teal-900"
+                  className="inline-flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50/70 px-3 py-1.5 text-xs font-semibold text-teal-900 shadow-2xs"
                 >
+                  <BookOpen className="size-3.5 text-teal-600" />
                   <span>{ctx.subject?.name || 'Môn học'}</span>
                   <button
                     type="button"
                     onClick={() => handleDeactivate(ctx.id)}
-                    className="text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                    title="Ngừng phụ trách"
+                    className="ml-1 rounded-sm p-0.5 text-teal-500 hover:bg-teal-200/60 hover:text-rose-600 transition cursor-pointer"
+                    title="Ngừng phụ trách môn này"
                   >
-                    <X className="size-3.5" />
+                    <X className="size-3" />
                   </button>
                 </div>
               ))}
@@ -1554,66 +1721,103 @@ function TabOverview({
         </CardContent>
       </Card>
 
-      {/* 2x2 Grid of Summary Lists */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Recent Schedules */}
-        <Card className="border-slate-200 shadow-2xs">
-          <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <CalendarDays className="size-4 text-teal-600" /> Lịch dạy gần nhất
-            </CardTitle>
-            <button onClick={() => onSwitchTab('schedules')} className="text-xs text-teal-700 font-semibold hover:underline cursor-pointer">
-              Xem tất cả
-            </button>
-          </CardHeader>
-          <CardContent className="p-4 pt-0 space-y-2">
-            {(data?.recentSchedules || []).length === 0 ? (
-              <p className="text-xs text-slate-400 py-3 text-center">Chưa có lịch dạy gần đây</p>
-            ) : (
-              data?.recentSchedules.map((s) => (
-                <div key={s.id} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-100 text-xs">
-                  <div>
-                    <p className="font-semibold text-slate-900">{s.subjectName}</p>
-                    <p className="text-[11px] text-slate-500">{s.plannedDate} · {s.startTime || '07:00'} - {s.endTime || '07:45'}</p>
-                  </div>
-                  <Badge variant="outline" className="text-[10px] bg-white">
-                    {s.status === 'COMPLETED' ? 'Đã dạy' : 'Sắp tới'}
-                  </Badge>
+      {/* 5. Hai khối: Lịch dạy gần nhất & Chuyên cần gần đây */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Lịch dạy gần nhất */}
+        <Card className="border border-slate-200/80 shadow-2xs rounded-xl flex flex-col justify-between">
+          <div>
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <CalendarDays className="size-4 text-teal-600" /> Lịch dạy gần nhất
+              </h3>
+              <button
+                onClick={() => onSwitchTab('schedules')}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-800 transition cursor-pointer"
+              >
+                Xem tất cả <ChevronRight className="size-3" />
+              </button>
+            </div>
+            <CardContent className="p-4 space-y-2.5">
+              {(data?.recentSchedules || []).length === 0 ? (
+                <div className="py-6 text-center text-xs text-slate-400">
+                  <CalendarDays className="size-6 mx-auto text-slate-300 mb-1.5" />
+                  Chưa có lịch dạy gần đây
                 </div>
-              ))
-            )}
-          </CardContent>
+              ) : (
+                data?.recentSchedules.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-slate-50/80 border border-slate-100 hover:border-slate-200 transition text-xs"
+                  >
+                    <div className="min-w-0 pr-2">
+                      <p className="font-semibold text-slate-900 truncate">{s.subjectName}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {s.plannedDate} · {s.startTime || '07:00'} - {s.endTime || '07:45'}
+                      </p>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] shrink-0 font-medium ${
+                        s.status === 'COMPLETED'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-blue-50 text-blue-700 border-blue-200'
+                      }`}
+                    >
+                      {s.status === 'COMPLETED' ? 'Đã dạy' : 'Sắp tới'}
+                    </Badge>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </div>
         </Card>
 
-        {/* Recent Absences & Lates */}
-        <Card className="border-slate-200 shadow-2xs">
-          <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <Clock className="size-4 text-amber-600" /> Vắng / Đi muộn gần đây
-            </CardTitle>
-            <button onClick={() => onSwitchTab('attendance')} className="text-xs text-teal-700 font-semibold hover:underline cursor-pointer">
-              Xem chi tiết
-            </button>
-          </CardHeader>
-          <CardContent className="p-4 pt-0 space-y-2">
-            {[...(data?.recentAbsences || []), ...(data?.recentLates || [])].length === 0 ? (
-              <p className="text-xs text-slate-400 py-3 text-center">Lớp chuyên cần tốt, không có vắng / đi muộn gần đây</p>
-            ) : (
-              [...(data?.recentAbsences || []), ...(data?.recentLates || [])].slice(0, 4).map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-100 text-xs">
-                  <div>
-                    <p className="font-semibold text-slate-900">{item.studentName}</p>
-                    <p className="text-[11px] text-slate-500">{item.date} · {item.subjectName}</p>
-                  </div>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                    (item as any).lateMinutes ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
-                  }`}>
-                    {(item as any).lateMinutes ? `Đi muộn ${(item as any).lateMinutes}p` : `Vắng ${(item as any).type || ''}`}
-                  </span>
+        {/* Chuyên cần gần đây */}
+        <Card className="border border-slate-200/80 shadow-2xs rounded-xl flex flex-col justify-between">
+          <div>
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Clock className="size-4 text-amber-600" /> Chuyên cần gần đây
+              </h3>
+              <button
+                onClick={() => onSwitchTab('attendance')}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-800 transition cursor-pointer"
+              >
+                Xem chi tiết <ChevronRight className="size-3" />
+              </button>
+            </div>
+            <CardContent className="p-4 space-y-2.5">
+              {[...(data?.recentAbsences || []), ...(data?.recentLates || [])].length === 0 ? (
+                <div className="py-6 text-center text-xs text-slate-400">
+                  <CheckCircle2 className="size-6 mx-auto text-emerald-400 mb-1.5" />
+                  Lớp chuyên cần tốt, không có vắng / đi muộn gần đây
                 </div>
-              ))
-            )}
-          </CardContent>
+              ) : (
+                [...(data?.recentAbsences || []), ...(data?.recentLates || [])].slice(0, 4).map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between p-3 rounded-lg bg-slate-50/80 border border-slate-100 hover:border-slate-200 transition text-xs"
+                  >
+                    <div className="min-w-0 pr-2">
+                      <p className="font-semibold text-slate-900 truncate">{item.studentName}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {item.date} · {item.subjectName}
+                      </p>
+                    </div>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 ${
+                        (item as any).lateMinutes
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-rose-100 text-rose-800'
+                      }`}
+                    >
+                      {(item as any).lateMinutes ? `Đi muộn ${(item as any).lateMinutes}p` : `Vắng ${(item as any).type || ''}`}
+                    </span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </div>
         </Card>
       </div>
 
