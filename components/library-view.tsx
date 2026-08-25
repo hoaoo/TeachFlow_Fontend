@@ -20,6 +20,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { GameCreatorModal } from '@/components/games/game-creator-modal'
+import { GameRenderer } from '@/components/games/game-renderer'
+import { GamePayload } from '@/components/games/game-types'
 
 const ACTIVITY_TYPES = [
   'Tất cả',
@@ -102,6 +105,8 @@ export function LibraryView({ onNavigate }: { onNavigate?: (view: any) => void }
   const [deleteTarget, setDeleteTarget] = useState<LibraryActivity | null>(null)
   const [addToLessonTarget, setAddToLessonTarget] = useState<LibraryActivity | null>(null)
   const [aiModalOpen, setAiModalOpen] = useState(false)
+  const [gameCreatorOpen, setGameCreatorOpen] = useState(false)
+  const [playGamePayload, setPlayGamePayload] = useState<GamePayload | null>(null)
 
   const reqSeqRef = useRef(0)
 
@@ -182,6 +187,13 @@ export function LibraryView({ onNavigate }: { onNavigate?: (view: any) => void }
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          <Button
+            variant="outline"
+            onClick={() => setGameCreatorOpen(true)}
+            className="border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 gap-1.5 shadow-2xs font-semibold"
+          >
+            <Gamepad2 className="size-4 text-amber-600" /> Tạo trò chơi
+          </Button>
           <Button
             variant="outline"
             onClick={() => setAiModalOpen(true)}
@@ -441,6 +453,33 @@ export function LibraryView({ onNavigate }: { onNavigate?: (view: any) => void }
                   </div>
 
                   <div className="flex items-center gap-1">
+                    {(isGame || a.questionsJson) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const payload: GamePayload = (a.questionsJson as any)?.gameType
+                            ? (a.questionsJson as any)
+                            : {
+                                gameType: 'QUIZ',
+                                title: a.title,
+                                quizItems: [
+                                  {
+                                    question: `Nội dung cốt lõi của hoạt động: "${a.title}"?`,
+                                    options: ['Phát triển tư duy & hợp tác', 'Ghi nhớ máy móc', 'Hoạt động cá nhân', 'Luyện viết nhanh'],
+                                    correctAnswer: 'Phát triển tư duy & hợp tác',
+                                    explanation: a.objective || 'Mục tiêu phẩm chất năng lực GDPT',
+                                  },
+                                ],
+                              };
+                          setPlayGamePayload(payload);
+                        }}
+                        className="text-xs h-7 gap-1 text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100 font-bold"
+                        title="Chạy trò chơi (Máy chiếu)"
+                      >
+                        <Play className="size-3 fill-amber-600 text-amber-600" /> Chơi
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="ghost"
@@ -542,6 +581,30 @@ export function LibraryView({ onNavigate }: { onNavigate?: (view: any) => void }
           loadData()
         }}
       />
+
+      {/* Modal: Game Creator */}
+      <GameCreatorModal
+        open={gameCreatorOpen}
+        onOpenChange={setGameCreatorOpen}
+        onGameCreated={() => {
+          setGameCreatorOpen(false)
+          loadData()
+        }}
+      />
+
+      {/* Modal: Interactive Game Player / Projector */}
+      <Dialog open={!!playGamePayload} onOpenChange={(val) => !val && setPlayGamePayload(null)}>
+        <DialogContent className="max-w-4xl p-2 sm:p-4 bg-slate-950 border-slate-800 text-white">
+          {playGamePayload && (
+            <GameRenderer
+              payload={playGamePayload}
+              onFinish={(score, total) => {
+                toast.success(`Hoàn thành trò chơi! Đạt ${score}/${total} điểm.`);
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Modal: Delete Confirmation */}
       <Dialog open={!!deleteTarget} onOpenChange={(val) => !val && setDeleteTarget(null)}>

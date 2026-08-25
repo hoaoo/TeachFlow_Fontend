@@ -32,6 +32,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { GameRenderer } from '@/components/games/game-renderer'
+import { GamePayload } from '@/components/games/game-types'
 
 // ─── Starter Templates ───────────────────────────────────────────────────────
 const starterActivities: Activity[] = []
@@ -108,6 +110,7 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
   const [pdfPreviewTarget, setPdfPreviewTarget] = useState<LessonPlan | null>(null)
   const [duplicateTarget, setDuplicateTarget] = useState<LessonPlan | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<LessonPlan | null>(null)
+  const [playGamePayload, setPlayGamePayload] = useState<GamePayload | null>(null)
   const [linkScheduleTarget, setLinkScheduleTarget] = useState<LessonPlan | null>(null)
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false)
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
@@ -1226,6 +1229,28 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
                     <Button
                       size="sm"
                       variant="outline"
+                      onClick={() => {
+                        const payload: GamePayload = {
+                          gameType: 'QUIZ',
+                          title: selectedActivity.title || 'Trò chơi củng cố bài học',
+                          quizItems: [
+                            {
+                              question: `Nội dung trọng tâm của hoạt động: "${selectedActivity.title}"?`,
+                              options: ['Khám phá & Vận dụng kiến thức', 'Ghi nhớ máy móc', 'Hoạt động cá nhân', 'Luyện viết nhanh'],
+                              correctAnswer: 'Khám phá & Vận dụng kiến thức',
+                              explanation: selectedActivity.objective || 'Mục tiêu phẩm chất và năng lực bài học',
+                            },
+                          ],
+                        };
+                        setPlayGamePayload(payload);
+                      }}
+                      className="text-xs h-7 gap-1 text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100 font-bold"
+                    >
+                      🎮 Chạy trò chơi
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={() => handleSaveToLibrary(selectedActivity)}
                       className="text-xs h-7 gap-1"
                     >
@@ -1562,6 +1587,20 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
               Ghi đè
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Interactive Game Runner for Lesson Plan */}
+      <Dialog open={!!playGamePayload} onOpenChange={(val) => !val && setPlayGamePayload(null)}>
+        <DialogContent className="max-w-4xl p-2 sm:p-4 bg-slate-950 border-slate-800 text-white">
+          {playGamePayload && (
+            <GameRenderer
+              payload={playGamePayload}
+              onFinish={(score, total) => {
+                toast.success(`Hoàn thành trò chơi! Đạt ${score}/${total} điểm.`);
+              }}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

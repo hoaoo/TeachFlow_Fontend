@@ -1,7 +1,19 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { User, Phone, Mail, Shield, Save, Loader2, CheckCircle2 } from 'lucide-react'
+import {
+  User,
+  Phone,
+  Mail,
+  Shield,
+  Save,
+  Loader2,
+  CheckCircle2,
+  FileArchive,
+  Download,
+  School,
+  ArrowRight,
+} from 'lucide-react'
 import { useAuth } from '@/context/auth-context'
 import { api } from '@/services/api-client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,6 +21,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { TeacherBackupModal } from '@/components/teacher-backup-modal'
+import { SchoolYearRolloverModal } from '@/components/school-year-rollover-modal'
 import { toast } from 'sonner'
 
 export function TeacherSettingsView() {
@@ -16,6 +30,10 @@ export function TeacherSettingsView() {
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [saving, setSaving] = useState(false)
+  const [backupModalOpen, setBackupModalOpen] = useState(false)
+  const [rolloverModalOpen, setRolloverModalOpen] = useState(false)
+  const [currentSchoolYear, setCurrentSchoolYear] = useState<{ id: string; name: string } | null>(null)
+  const [schoolYears, setSchoolYears] = useState<Array<{ id: string; name: string }>>([])
 
   useEffect(() => {
     if (user?.teacher) {
@@ -23,6 +41,16 @@ export function TeacherSettingsView() {
       setPhone(user.teacher.phone || '')
     }
   }, [user])
+
+  useEffect(() => {
+    api.get<Array<{ id: string; name: string; isCurrent: boolean }>>('/school-years')
+      .then((res) => {
+        setSchoolYears(res || [])
+        const cur = res?.find((y) => y.isCurrent) || res?.[0]
+        if (cur) setCurrentSchoolYear(cur)
+      })
+      .catch(() => {})
+  }, [])
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,7 +85,7 @@ export function TeacherSettingsView() {
         </div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Cài đặt & Hồ sơ</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Quản lý thông tin tài khoản và cấu hình không gian làm việc của bạn.
+          Quản lý thông tin tài khoản, sao lưu dữ liệu và cấu hình năm học của bạn.
         </p>
       </div>
 
@@ -125,6 +153,71 @@ export function TeacherSettingsView() {
           </CardContent>
         </Card>
 
+        {/* School Year Rollover Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <School className="size-5 text-teal-600" />
+              Năm học & Quản lý niên khóa
+            </CardTitle>
+            <CardDescription>
+              Xem năm học hiện tại, chuyển sang năm học mới hoặc đóng niên khóa cũ.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
+              <div>
+                <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Năm học đang làm việc</p>
+                <p className="text-lg font-bold text-slate-900 mt-0.5">
+                  Năm học {currentSchoolYear?.name || '2026 - 2027'}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Khi chuyển năm học, cấu hình lớp và môn học sẽ được sao chép có chọn lọc, bảo toàn toàn vẹn dữ liệu cũ.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRolloverModalOpen(true)}
+                className="border-teal-300 text-teal-700 bg-teal-50/50 hover:bg-teal-100 font-bold shrink-0"
+              >
+                Chuyển năm học mới <ArrowRight className="size-4 ml-1.5" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Backup & Export Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <FileArchive className="size-5 text-teal-600" />
+              Sao lưu & Xuất toàn bộ dữ liệu của tôi
+            </CardTitle>
+            <CardDescription>
+              Tải xuống trọn bộ dữ liệu học sinh, điểm danh, kết quả đánh giá, giáo án và tài nguyên dưới dạng file nén (.ZIP) kèm bảng tính Excel.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-teal-100 bg-teal-50/30 p-4">
+              <div>
+                <p className="text-sm font-bold text-slate-900">Gói dữ liệu cá nhân (.ZIP)</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Bao gồm các file: students.xlsx, attendance.xlsx, assessments.xlsx, comments.xlsx, lesson-plans.xlsx, worksheets.xlsx, resources.xlsx.
+                </p>
+              </div>
+              <Button
+                type="button"
+                onClick={() => setBackupModalOpen(true)}
+                className="bg-teal-600 text-white hover:bg-teal-700 font-bold shrink-0"
+              >
+                <Download className="size-4 mr-1.5" /> Xuất dữ liệu của tôi
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Roles and permissions card */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Vai trò & Quyền hạn</CardTitle>
@@ -174,6 +267,30 @@ export function TeacherSettingsView() {
           </Button>
         </div>
       </form>
+
+      {/* Backup Modal */}
+      <TeacherBackupModal
+        open={backupModalOpen}
+        onOpenChange={setBackupModalOpen}
+        schoolYears={schoolYears}
+      />
+
+      {/* Rollover Modal */}
+      <SchoolYearRolloverModal
+        open={rolloverModalOpen}
+        onOpenChange={setRolloverModalOpen}
+        currentSchoolYear={currentSchoolYear}
+        onRolloverSuccess={() => {
+          api.get<Array<{ id: string; name: string; isCurrent: boolean }>>('/school-years')
+            .then((res) => {
+              setSchoolYears(res || [])
+              const cur = res?.find((y) => y.isCurrent) || res?.[0]
+              if (cur) setCurrentSchoolYear(cur)
+            })
+            .catch(() => {})
+        }}
+      />
     </div>
   )
 }
+

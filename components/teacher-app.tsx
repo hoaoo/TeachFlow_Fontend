@@ -30,6 +30,7 @@ import { SeatingPlanView } from '@/components/seating-plan-view'
 import { TemplatesView } from '@/components/templates-view'
 import { QuickCommentsView } from '@/components/quick-comments-view'
 import { NotificationDropdown } from '@/components/notification-dropdown'
+import { GlobalSearchBar } from '@/components/global-search-bar'
 import { AuthScreen } from '@/components/auth-screen'
 import { ScheduleAttendanceDialog } from '@/components/schedule-attendance-dialog'
 import {
@@ -322,12 +323,8 @@ function Header({
         <button className="text-slate-500 lg:hidden" onClick={onMenu}>
           <Menu />
         </button>
-        <div className="relative hidden w-72 sm:block">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-          <input
-            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm outline-none placeholder:text-slate-400 focus:border-teal-400"
-            placeholder="Tìm kiếm nhanh..."
-          />
+        <div className="hidden sm:block">
+          <GlobalSearchBar onNavigate={(v) => onNavigate?.(v as View)} />
         </div>
       </div>
       <div className="flex items-center gap-2 sm:gap-4">
