@@ -42,6 +42,15 @@ export async function getWorksheet(id: string): Promise<WorksheetItem> {
   return await api.get<WorksheetItem>(`/worksheets/${id}`);
 }
 
+export type WorksheetQuestionInput = {
+  questionType: WorksheetQuestion['questionType'];
+  content: string;
+  options?: string[];
+  correctAnswer?: any;
+  explanation?: string;
+  sortOrder?: number;
+};
+
 export async function createWorksheet(data: {
   title: string;
   description?: string;
@@ -49,6 +58,7 @@ export async function createWorksheet(data: {
   gradeId?: string;
   subtitle?: string;
   status?: string;
+  questions?: WorksheetQuestionInput[];
 }): Promise<WorksheetItem> {
   return await api.post<WorksheetItem>('/worksheets', data);
 }
@@ -62,6 +72,7 @@ export async function updateWorksheet(
     status: string;
     subjectId: string;
     gradeId: string;
+    questions: WorksheetQuestionInput[];
   }>,
 ): Promise<WorksheetItem> {
   return await api.patch<WorksheetItem>(`/worksheets/${id}`, data);

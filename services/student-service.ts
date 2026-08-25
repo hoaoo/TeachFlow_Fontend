@@ -1,4 +1,5 @@
 import { api } from './api-client';
+import { analyzeImportFile } from './ai-service';
 import { type StudentRecord } from '@/lib/classroom-data';
 import {
   buildStudentListUrl,
@@ -153,6 +154,14 @@ export async function transferStudent(
   },
 ): Promise<{ success: boolean; message: string }> {
   return api.post<{ success: boolean; message: string }>(`/students/${id}/transfer`, dto);
+}
+
+export async function analyzeStudentImportFile(file: File, classroomId?: string) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('target', 'students');
+  if (classroomId) formData.append('classroomId', classroomId);
+  return analyzeImportFile(formData);
 }
 
 export async function importStudents(

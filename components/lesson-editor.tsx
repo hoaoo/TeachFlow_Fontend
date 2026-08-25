@@ -22,8 +22,8 @@ import { getClasses, type ClassRecord } from '@/services/classroom-service'
 import { getLibraryActivities, type LibraryActivity } from '@/services/activity-service'
 import { getSchedules, type ScheduleEntry } from '@/services/schedule-service'
 import {
-  generateActivity, generateLessonPlan as aiGenerateLessonPlan,
-  type GeneratedActivity, type GeneratedLessonPlan
+  generateActivity, generateLessonPlan as aiGenerateLessonPlan, generateImage,
+  type GeneratedActivity, type GeneratedLessonPlan, type LessonPlanEditorDraft
 } from '@/services/ai-service'
 import { exportService } from '@/services/export-service'
 import { useAuth } from '@/context/auth-context'
@@ -173,6 +173,9 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false)
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
   const [aiDraftOpen, setAiDraftOpen] = useState(false)
+  const [aiImageOpen, setAiImageOpen] = useState(false)
+  const [aiOverwriteOpen, setAiOverwriteOpen] = useState(false)
+  const [pendingAiDraft, setPendingAiDraft] = useState<LessonPlan | null>(null)
   const [libraryPickerOpen, setLibraryPickerOpen] = useState(false)
   const [exportingType, setExportingType] = useState<'docx' | 'pdf' | null>(null)
 
@@ -461,7 +464,7 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
               onClick={() => setAiDraftOpen(true)}
               className="border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 gap-1.5 shadow-2xs font-semibold"
             >
-              <Sparkles className="size-4 text-violet-600" /> Tạo bản nháp bằng AI
+              <Sparkles className="size-4 text-violet-600" /> Tạo bằng AI
             </Button>
             <Button
               variant="outline"
@@ -791,10 +794,15 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
         <AiFullDraftModal
           open={aiDraftOpen}
           classes={classes}
+          currentLesson={null}
           onClose={() => setAiDraftOpen(false)}
-          onCreated={(created) => {
-            loadPlans()
-            handleOpenEditor(created.id!)
+          onGenerated={(draft) => {
+            setLesson(draft)
+            setSelectedActivityId(draft.activities[0]?.id || '')
+            setViewMode('editor')
+            setEditorSubTab('edit')
+            setAutosaveStatus('Bản nháp AI chưa lưu')
+            toast.success('AI đã đổ giáo án vào trình soạn. Hãy rà soát rồi lưu.')
           }}
         />
       </div>
@@ -878,11 +886,36 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
 
           <Button
             size="sm"
+            variant="outline"
+            onClick={() => setAiDraftOpen(true)}
+            className="text-xs h-8 gap-1 border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 font-semibold"
+          >
+            <Sparkles className="size-3.5 text-violet-600" /> Tạo bằng AI
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setAiImageOpen(true)}
+            className="text-xs h-8 gap-1"
+          >
+            <ImageIcon className="size-3.5" /> Tạo ảnh bằng AI
+          </Button>
+          <Button
+            size="sm"
             onClick={() => handleExport('docx')}
             disabled={exportingType !== null}
             className="bg-teal-600 hover:bg-teal-700 text-xs h-8 gap-1 font-semibold"
           >
-            <FileDown className="size-3.5" /> Xuất Word
+            {exportingType === 'docx' ? <Loader2 className="size-3.5 animate-spin" /> : <FileDown className="size-3.5" />} Xuất Word
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleExport('pdf')}
+            disabled={exportingType !== null}
+            className="text-xs h-8 gap-1 font-semibold"
+          >
+            {exportingType === 'pdf' ? <Loader2 className="size-3.5 animate-spin" /> : <FileText className="size-3.5" />} Xuất PDF
           </Button>
         </div>
       </div>
@@ -1488,6 +1521,96 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
           toast.success('Đã cập nhật hoạt động với nội dung từ AI')
         }}
       />
+
+      <AiFullDraftModal
+        open={aiDraftOpen}
+        classes={classes}
+        currentLesson={lesson}
+        onClose={() => setAiDraftOpen(false)}
+        onGenerated={(draft) => {
+          const hasTeacherData = Boolean(
+            lesson.objective ||
+              lesson.activities.some((a) => (a.teacher && a.teacher.trim()) || (a.students && a.students.trim())),
+          )
+          if (hasTeacherData) {
+            setPendingAiDraft(draft)
+            setAiOverwriteOpen(true)
+            return
+          }
+          setLesson((prev) => ({
+            ...draft,
+            id: prev.id,
+            classroomId: prev.classroomId,
+            date: prev.date,
+            status: prev.status,
+            version: prev.version,
+            sourceType: prev.sourceType || 'NATIVE',
+          }))
+          setSelectedActivityId(draft.activities[0]?.id || '')
+          toast.success('AI đã đổ nội dung vào trình soạn. Hãy rà soát rồi lưu.')
+        }}
+      />
+
+      <AiImageDialog
+        open={aiImageOpen}
+        lessonPlanId={lesson.id}
+        defaultPrompt={lesson.title}
+        onClose={() => setAiImageOpen(false)}
+      />
+
+      <Dialog open={aiOverwriteOpen} onOpenChange={(o) => !o && setAiOverwriteOpen(false)}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>AI sẽ thay nội dung đang soạn?</DialogTitle>
+            <DialogDescription>
+              Giáo án hiện tại đã có dữ liệu. Chọn cách áp dụng kết quả AI.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => { setAiOverwriteOpen(false); setPendingAiDraft(null) }}>Hủy</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (!pendingAiDraft) return
+                setLesson((prev) => ({
+                  ...prev,
+                  objective: prev.objective || pendingAiDraft.objective,
+                  teachingEquipment: prev.teachingEquipment || pendingAiDraft.teachingEquipment,
+                  specificCompetencies: prev.specificCompetencies || pendingAiDraft.specificCompetencies,
+                  generalCompetencies: prev.generalCompetencies || pendingAiDraft.generalCompetencies,
+                  qualities: prev.qualities || pendingAiDraft.qualities,
+                }))
+                setAiOverwriteOpen(false)
+                setPendingAiDraft(null)
+                toast.success('Đã điền các phần trống từ AI, giữ nguyên nội dung đã nhập.')
+              }}
+            >
+              Chỉ điền phần trống
+            </Button>
+            <Button
+              className="bg-violet-600 hover:bg-violet-700"
+              onClick={() => {
+                if (!pendingAiDraft) return
+                setLesson((prev) => ({
+                  ...pendingAiDraft,
+                  id: prev.id,
+                  classroomId: prev.classroomId,
+                  date: prev.date,
+                  status: prev.status,
+                  version: prev.version,
+                  sourceType: prev.sourceType || 'NATIVE',
+                }))
+                setSelectedActivityId(pendingAiDraft.activities[0]?.id || '')
+                setAiOverwriteOpen(false)
+                setPendingAiDraft(null)
+                toast.success('Đã ghi đè giáo án bằng nội dung AI. Hãy rà soát rồi lưu.')
+              }}
+            >
+              Ghi đè
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -2747,31 +2870,93 @@ function AiActivityAssistantModal({
 }
 
 // ─── Modal Dialog: AI Full Draft Generator ────────────────────────────────────
+function mapAiLessonToEditor(
+  aiPlan: GeneratedLessonPlan & { editorDraft?: LessonPlanEditorDraft },
+  meta: { subject: string; grade: string; classroomId?: string; duration: number; title: string },
+): LessonPlan {
+  const PHASE: Record<string, string> = {
+    WARM_UP: 'Khởi động',
+    EXPLORE: 'Khám phá',
+    PRACTICE: 'Luyện tập',
+    APPLICATION: 'Vận dụng',
+    OTHER: 'Hoạt động khác',
+  }
+  const draft = aiPlan.editorDraft
+  const activities = (draft?.activities || aiPlan.activities || []).map((a: any, i: number) => ({
+    id: `act-ai-${Date.now()}-${i}`,
+    phase: a.phase || PHASE[a.activityType] || (i === 0 ? 'Khởi động' : i === 1 ? 'Khám phá' : i === 2 ? 'Luyện tập' : 'Vận dụng'),
+    title: a.title,
+    minutes: a.minutes || a.durationMinutes || 10,
+    method: a.method || (a.methods || []).join(', ') || 'Thảo luận nhóm',
+    technique: a.technique || (a.techniques || []).join(', ') || 'Động não',
+    competencies: a.competencies || (Array.isArray(a.competencies) ? a.competencies.join(', ') : ''),
+    qualities: a.qualities || (Array.isArray(a.qualities) ? a.qualities.join(', ') : ''),
+    equipment: a.equipment || '',
+    objective: a.objective || '',
+    teacher: a.teacher || a.teacherActivity || '',
+    students: a.students || a.studentActivity || '',
+    sortOrder: i,
+  }))
+
+  return {
+    title: draft?.title || aiPlan.title || meta.title,
+    topic: draft?.topic || meta.title,
+    subject: meta.subject,
+    grade: meta.grade,
+    classroomId: meta.classroomId,
+    date: new Date().toISOString().split('T')[0],
+    duration: draft?.duration || meta.duration,
+    objective: draft?.objective || aiPlan.objectives || '',
+    specificCompetencies: draft?.specificCompetencies || (aiPlan as any).specificCompetencies || '',
+    generalCompetencies: draft?.generalCompetencies || (aiPlan as any).generalCompetencies || '',
+    qualities: draft?.qualities || (aiPlan as any).qualities || '',
+    teachingEquipment: draft?.teachingEquipment || aiPlan.teachingEquipment || '',
+    postLessonAdjustment: '',
+    notes: '',
+    status: 'DRAFT',
+    sourceType: 'NATIVE',
+    version: 1,
+    activities,
+    resources: [],
+    schedules: [],
+  }
+}
+
 function AiFullDraftModal({
   open,
   classes,
+  currentLesson,
   onClose,
-  onCreated,
+  onGenerated,
 }: {
   open: boolean
   classes: ClassRecord[]
+  currentLesson: LessonPlan | null
   onClose: () => void
-  onCreated: (plan: LessonPlan) => void
+  onGenerated: (plan: LessonPlan) => void
 }) {
   const [title, setTitle] = useState('')
   const [subject, setSubject] = useState('Toán')
   const [classroomId, setClassroomId] = useState('')
+  const [duration, setDuration] = useState(40)
   const [requirements, setRequirements] = useState('')
+  const [objectives, setObjectives] = useState('')
+  const [qualities, setQualities] = useState('')
+  const [competencies, setCompetencies] = useState('')
   const [generating, setGenerating] = useState(false)
 
   useEffect(() => {
     if (open) {
-      setTitle('')
-      setSubject('Toán')
-      setClassroomId(classes[0]?.id || '')
+      setTitle(currentLesson?.title || '')
+      setSubject(currentLesson?.subject || 'Toán')
+      setClassroomId(currentLesson?.classroomId || classes[0]?.id || '')
+      setDuration(currentLesson?.duration || 40)
       setRequirements('')
+      setObjectives(currentLesson?.objective || '')
+      setQualities(currentLesson?.qualities || '')
+      setCompetencies(currentLesson?.specificCompetencies || '')
     }
-  }, [open, classes])
+  }, [open, classes, currentLesson])
 
   const handleGenerateFullDraft = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -2779,46 +2964,32 @@ function AiFullDraftModal({
     setGenerating(true)
     try {
       const cls = classes.find((c) => c.id === classroomId)
-      const gradeNum = parseInt(cls?.name?.replace(/\D/g, '') || '4', 10) || 4
+      const gradeNum = parseInt((cls?.name || currentLesson?.grade || '4').replace(/\D/g, '') || '4', 10) || 4
 
-      toast.info('AI đang tạo toàn bộ bản nháp kế hoạch bài dạy...')
-      const aiPlan: GeneratedLessonPlan = await aiGenerateLessonPlan({
+      toast.info('AI đang tạo nội dung...')
+      const aiPlan = await aiGenerateLessonPlan({
         grade: gradeNum,
         subject,
         lessonTitle: title.trim(),
-        durationMinutes: 40,
+        durationMinutes: duration,
         requirements: requirements.trim() || undefined,
+        objectives: objectives.trim() || undefined,
+        qualities: qualities.trim() || undefined,
+        competencies: competencies.trim() || undefined,
+        additionalRequirements: requirements.trim() || undefined,
+        teacherContent: currentLesson
+          ? [currentLesson.objective, currentLesson.notes, currentLesson.activities.map((a) => a.title).join('; ')].filter(Boolean).join('\n')
+          : undefined,
       })
 
-      const cleanActivities = (aiPlan.activities || []).map((a, i) => ({
-        phase: a.activityType || (i === 0 ? 'Khởi động' : i === 1 ? 'Khám phá' : i === 2 ? 'Luyện tập' : 'Vận dụng'),
-        title: a.title,
-        minutes: a.durationMinutes || 10,
-        method: (a.methods || []).join(', ') || 'Thảo luận nhóm',
-        technique: (a.techniques || []).join(', ') || 'Động não',
-        competencies: (a.competencies || []).join(', '),
-        qualities: (a.qualities || []).join(', '),
-        equipment: '',
-        objective: a.objective,
-        teacher: a.teacherActivity,
-        students: a.studentActivity,
-        sortOrder: i,
-      }))
-
-      const created = await createLessonPlan({
-        title: title.trim(),
+      const draft = mapAiLessonToEditor(aiPlan, {
         subject,
-        grade: cls?.name || 'Lớp 4A',
-        classroomId: classroomId || undefined,
-        duration: 40,
-        objective: aiPlan.objectives,
-        teachingEquipment: aiPlan.teachingEquipment,
-        status: 'DRAFT',
-        activities: cleanActivities.length > 0 ? (cleanActivities as any) : undefined,
+        grade: cls?.name || currentLesson?.grade || `Lớp ${gradeNum}`,
+        classroomId: classroomId || currentLesson?.classroomId || undefined,
+        duration,
+        title: title.trim(),
       })
-
-      toast.success('AI đã tạo bản nháp giáo án hoàn chỉnh!')
-      onCreated(created)
+      onGenerated(draft)
       onClose()
     } catch (err: any) {
       toast.error(err?.message || 'Không thể tạo bản nháp giáo án lúc này')
@@ -2832,10 +3003,10 @@ function AiFullDraftModal({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-violet-900">
-            <Sparkles className="size-4 text-violet-600" /> Tạo toàn bộ bản nháp KHBD bằng AI
+            <Sparkles className="size-4 text-violet-600" /> Tạo bằng AI
           </DialogTitle>
           <DialogDescription>
-            AI sẽ tự động soạn đầy đủ 4 bước (Khởi động, Khám phá, Luyện tập, Vận dụng) và mục tiêu chuẩn.
+            AI trả về dữ liệu có cấu trúc và đổ vào trình soạn. Giáo án chưa được lưu cho đến khi bạn bấm Lưu.
           </DialogDescription>
         </DialogHeader>
 
@@ -2882,7 +3053,39 @@ function AiFullDraftModal({
           </div>
 
           <div>
-            <Label className="text-xs font-semibold">Yêu cầu sư phạm (tùy chọn)</Label>
+            <Label className="text-xs font-semibold">Thời lượng (phút)</Label>
+            <Input
+              type="number"
+              min={15}
+              max={90}
+              className="mt-1 text-xs"
+              value={duration}
+              onChange={(e) => setDuration(parseInt(e.target.value, 10) || 40)}
+            />
+          </div>
+
+          <div>
+            <Label className="text-xs font-semibold">Yêu cầu cần đạt (tùy chọn)</Label>
+            <textarea
+              rows={2}
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-background px-3 py-2 text-xs focus:outline-none focus:border-violet-400"
+              placeholder="VD: Nhận biết phân số bằng nhau..."
+              value={objectives}
+              onChange={(e) => setObjectives(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs font-semibold">Phẩm chất</Label>
+              <Input className="mt-1 text-xs" value={qualities} onChange={(e) => setQualities(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Năng lực</Label>
+              <Input className="mt-1 text-xs" value={competencies} onChange={(e) => setCompetencies(e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs font-semibold">Yêu cầu bổ sung (tùy chọn)</Label>
             <textarea
               rows={2}
               className="mt-1 w-full rounded-lg border border-slate-200 bg-background px-3 py-2 text-xs focus:outline-none focus:border-violet-400"
@@ -2906,10 +3109,112 @@ function AiFullDraftModal({
               ) : (
                 <WandSparkles className="size-4" />
               )}
-              {generating ? 'AI đang biên soạn...' : 'Bắt đầu tạo với AI'}
+              {generating ? 'AI đang tạo nội dung...' : '✨ Tạo bằng AI'}
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function AiImageDialog({
+  open,
+  lessonPlanId,
+  defaultPrompt,
+  onClose,
+}: {
+  open: boolean
+  lessonPlanId?: string
+  defaultPrompt?: string
+  onClose: () => void
+}) {
+  const [prompt, setPrompt] = useState('')
+  const [style, setStyle] = useState('minh họa sách giáo khoa')
+  const [aspectRatio, setAspectRatio] = useState('1:1')
+  const [generating, setGenerating] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setPrompt(defaultPrompt ? `Minh họa bài học ${defaultPrompt} dành cho học sinh tiểu học` : '')
+      setStyle('minh họa sách giáo khoa')
+      setAspectRatio('1:1')
+    }
+  }, [open, defaultPrompt])
+
+  const handleGenerate = async () => {
+    if (!prompt.trim()) {
+      toast.error('Vui lòng nhập mô tả ảnh')
+      return
+    }
+    setGenerating(true)
+    try {
+      toast.info('AI đang tạo ảnh...')
+      const result = await generateImage({
+        prompt: prompt.trim(),
+        style,
+        aspectRatio,
+        purpose: 'lesson-plan',
+        title: defaultPrompt || 'Ảnh minh họa giáo án',
+        lessonPlanId,
+      })
+      toast.success(`Đã lưu ảnh vào kho tài nguyên: ${result.name || result.fileName}`)
+      onClose()
+    } catch (err: any) {
+      toast.error(err?.message || 'Không thể tạo ảnh lúc này')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="size-4 text-violet-600" /> Tạo ảnh bằng AI
+          </DialogTitle>
+          <DialogDescription>
+            Ảnh được backend tạo và lưu vào kho tài nguyên của giáo viên.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3 py-2 text-xs">
+          <div>
+            <Label className="text-xs font-semibold">Mô tả ảnh *</Label>
+            <textarea
+              rows={3}
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-xs"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs font-semibold">Phong cách</Label>
+              <Input className="mt-1 text-xs" value={style} onChange={(e) => setStyle(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Tỷ lệ ảnh</Label>
+              <select
+                className="mt-1 h-9 w-full rounded-md border px-2 text-xs"
+                value={aspectRatio}
+                onChange={(e) => setAspectRatio(e.target.value)}
+              >
+                <option value="1:1">1:1</option>
+                <option value="4:3">4:3</option>
+                <option value="16:9">16:9</option>
+                <option value="3:4">3:4</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={generating}>Hủy</Button>
+          <Button onClick={handleGenerate} disabled={generating} className="bg-violet-600 hover:bg-violet-700 gap-1.5">
+            {generating ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            {generating ? 'AI đang tạo nội dung...' : '✨ Tạo ảnh bằng AI'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

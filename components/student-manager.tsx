@@ -10,6 +10,7 @@ import {
   deleteStudent,
   transferStudent,
   importStudents,
+  analyzeStudentImportFile,
   getStudentOverview,
   getStudentAttendance,
   getStudentAssessments,
@@ -137,6 +138,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
       error?: string
     }>
   >([])
+  const [importAnalyzing, setImportAnalyzing] = useState(false)
   const [importing, setImporting] = useState(false)
 
   // Load Dropdown Options
@@ -1066,14 +1068,47 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Import danh sách học sinh từ Excel / Bảng tính</DialogTitle>
+            <DialogTitle>Import danh sách học sinh</DialogTitle>
             <DialogDescription>
-              Sao chép dữ liệu từ Excel theo cột: <br />
-              <code>Họ và tên, Mã HS, Giới tính, Ngày sinh, Tên phụ huynh, Số điện thoại, Ghi chú</code>
+              Tải file .xlsx/.xls/.docx/.pdf/.jpg hoặc dán bảng. Hệ thống chỉ đề xuất dữ liệu; bạn xem trước rồi mới xác nhận lưu.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 py-2 text-xs">
+            <div>
+              <Label className="text-xs font-semibold">Tải tệp (xlsx, xls, docx, pdf, ảnh)</Label>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.docx,.pdf,.png,.jpg,.jpeg"
+                className="mt-1 block w-full text-xs"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  setImportAnalyzing(true)
+                  try {
+                    const result = await analyzeStudentImportFile(file, importTargetClassId || undefined)
+                    const rows = (result.rows || []).map((r) => ({
+                      fullName: r.fullName,
+                      studentCode: r.studentCode,
+                      gender: r.gender,
+                      dob: r.dob,
+                      parentName: r.parentName,
+                      parentPhone: r.parentPhone,
+                      note: r.note,
+                      error: r.valid ? undefined : (r.errors || []).join(', '),
+                    }))
+                    setImportRows(rows)
+                    toast.success(result.message || `Phát hiện ${result.totalRows || rows.length} dòng`)
+                  } catch (err: any) {
+                    toast.error(err?.message || 'Không phân tích được tệp')
+                  } finally {
+                    setImportAnalyzing(false)
+                    e.target.value = ''
+                  }
+                }}
+              />
+              {importAnalyzing && <p className="mt-1 text-teal-700 flex items-center gap-1"><Loader2 className="size-3 animate-spin" /> AI đang đọc tệp...</p>}
+            </div>
             <div>
               <Label className="text-xs font-semibold">Lớp học ghi danh đích *</Label>
               <select
@@ -1099,20 +1134,28 @@ Trần Thị Bình	HS002	Nữ	25/08/2016	Trần Văn Cường	0912345678	Tiếp 
             />
 
             {importRows.length > 0 && (
-              <div className="border rounded-xl p-3 bg-slate-50 max-h-48 overflow-y-auto space-y-1.5">
-                <p className="font-bold text-slate-700">Xem trước ({importRows.length} dòng):</p>
+              <div className="border rounded-xl p-3 bg-slate-50 max-h-56 overflow-y-auto space-y-1.5">
+                <p className="font-bold text-slate-700">
+                  Xem trước: {importRows.length} dòng phát hiện · {importRows.filter((r) => !r.error).length} hợp lệ · {importRows.filter((r) => r.error).length} lỗi
+                </p>
                 {importRows.map((r, i) => (
                   <div
                     key={i}
-                    className={`flex items-center justify-between text-[11px] p-2 rounded border ${
+                    className={`flex items-center justify-between gap-2 text-[11px] p-2 rounded border ${
                       r.error ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-white border-slate-200'
                     }`}
                   >
-                    <span className="font-semibold">
-                      {i + 1}. {r.fullName} ({r.gender || 'Nam'}) - Mã: {r.studentCode || 'Tự sinh'}
-                    </span>
-                    <span className="text-slate-500">
-                      {r.error ? <strong className="text-rose-600">{r.error}</strong> : `${r.dob || 'Chưa NS'} · ${r.parentPhone || 'Chưa SĐT'}`}
+                    <input
+                      className="flex-1 min-w-0 rounded border px-2 py-1"
+                      value={r.fullName}
+                      onChange={(e) => {
+                        const next = [...importRows]
+                        next[i] = { ...r, fullName: e.target.value, error: e.target.value.trim() ? undefined : 'Thiếu họ và tên' }
+                        setImportRows(next)
+                      }}
+                    />
+                    <span className="text-slate-500 shrink-0">
+                      {r.error ? <strong className="text-rose-600">⚠ {r.error}</strong> : `✓ ${r.dob || 'Chưa NS'} · ${r.gender || 'Nam'}`}
                     </span>
                   </div>
                 ))}

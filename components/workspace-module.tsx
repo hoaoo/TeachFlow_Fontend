@@ -43,6 +43,7 @@ import {
 } from '@/services/resource-service'
 import { getLessonPlans, type LessonPlan } from '@/services/lesson-service'
 import { exportService } from '@/services/export-service'
+import { generateImage } from '@/services/ai-service'
 import { toast } from 'sonner'
 
 type View =
@@ -97,6 +98,11 @@ export function WorkspaceModule({ view }: { view: View }) {
   const [uploadDesc, setUploadDesc] = useState('')
   const [uploadSubject, setUploadSubject] = useState('Tiếng Việt')
   const [uploading, setUploading] = useState(false)
+  const [aiImageOpen, setAiImageOpen] = useState(false)
+  const [aiImagePrompt, setAiImagePrompt] = useState('')
+  const [aiImageStyle, setAiImageStyle] = useState('minh họa sách giáo khoa')
+  const [aiImageRatio, setAiImageRatio] = useState('1:1')
+  const [aiImageGenerating, setAiImageGenerating] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -326,20 +332,30 @@ export function WorkspaceModule({ view }: { view: View }) {
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{view}</h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{descriptions[view]}</p>
         </div>
-        <button
-          onClick={create}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
-        >
-          {view === 'Tài nguyên' ? (
-            <>
-              <UploadCloud className="size-4" /> Tải lên tài nguyên
-            </>
-          ) : (
-            <>
-              <Plus className="size-4" /> Tạo mới
-            </>
+        <div className="flex items-center gap-2">
+          {view === 'Tài nguyên' && (
+            <button
+              onClick={() => setAiImageOpen(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm font-semibold text-violet-700 hover:bg-violet-100"
+            >
+              <Sparkles className="size-4" /> Tạo ảnh bằng AI
+            </button>
           )}
-        </button>
+          <button
+            onClick={create}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
+          >
+            {view === 'Tài nguyên' ? (
+              <>
+                <UploadCloud className="size-4" /> Tải lên tài nguyên
+              </>
+            ) : (
+              <>
+                <Plus className="size-4" /> Tạo mới
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -996,6 +1012,79 @@ export function WorkspaceModule({ view }: { view: View }) {
                 className="rounded-xl border px-4 py-2 text-sm"
               >
                 Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {aiImageOpen && (
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
+          <div className="w-full max-w-md rounded-2xl border bg-background p-6 shadow-xl">
+            <div className="flex items-start justify-between border-b pb-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-violet-600">AI</p>
+                <h2 className="mt-1 text-base font-semibold">✨ Tạo ảnh bằng AI</h2>
+              </div>
+              <button onClick={() => setAiImageOpen(false)} className="text-muted-foreground"><X className="size-5" /></button>
+            </div>
+            <div className="mt-4 grid gap-3 text-xs">
+              <textarea
+                rows={3}
+                value={aiImagePrompt}
+                onChange={(e) => setAiImagePrompt(e.target.value)}
+                placeholder="Mô tả ảnh minh họa..."
+                className="w-full rounded-xl border p-3"
+              />
+              <input
+                value={aiImageStyle}
+                onChange={(e) => setAiImageStyle(e.target.value)}
+                placeholder="Phong cách"
+                className="h-10 rounded-xl border px-3"
+              />
+              <select
+                value={aiImageRatio}
+                onChange={(e) => setAiImageRatio(e.target.value)}
+                className="h-10 rounded-xl border px-3"
+              >
+                <option value="1:1">Tỷ lệ 1:1</option>
+                <option value="4:3">Tỷ lệ 4:3</option>
+                <option value="16:9">Tỷ lệ 16:9</option>
+                <option value="3:4">Tỷ lệ 3:4</option>
+              </select>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setAiImageOpen(false)} className="rounded-xl border px-4 py-2 text-sm" disabled={aiImageGenerating}>Hủy</button>
+              <button
+                disabled={aiImageGenerating}
+                onClick={async () => {
+                  if (!aiImagePrompt.trim()) {
+                    toast.error('Vui lòng nhập mô tả ảnh')
+                    return
+                  }
+                  setAiImageGenerating(true)
+                  try {
+                    toast.info('AI đang tạo ảnh...')
+                    const result = await generateImage({
+                      prompt: aiImagePrompt.trim(),
+                      style: aiImageStyle,
+                      aspectRatio: aiImageRatio,
+                      purpose: 'resource',
+                    })
+                    toast.success(`Đã lưu ảnh: ${result.name || result.fileName}`)
+                    setAiImageOpen(false)
+                    setAiImagePrompt('')
+                    loadData()
+                  } catch (err: any) {
+                    toast.error(err?.message || 'Không thể tạo ảnh lúc này')
+                  } finally {
+                    setAiImageGenerating(false)
+                  }
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {aiImageGenerating ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                {aiImageGenerating ? 'AI đang tạo nội dung...' : 'Tạo ảnh'}
               </button>
             </div>
           </div>
