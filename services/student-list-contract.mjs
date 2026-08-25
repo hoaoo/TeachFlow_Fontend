@@ -10,11 +10,14 @@ export function buildStudentListUrl(query = {}) {
   const params = new URLSearchParams();
   if (query.page) params.set('page', String(query.page));
   if (query.pageSize) params.set('pageSize', String(query.pageSize));
-  if (hasFilterValue(query.keyword)) params.set('keyword', query.keyword.trim());
-  if (hasFilterValue(query.classId)) params.set('classId', query.classId);
+  const kw = query.search || query.keyword;
+  if (hasFilterValue(kw)) params.set('search', kw.trim());
+  const cId = query.classroomId || query.classId;
+  if (hasFilterValue(cId)) params.set('classroomId', cId);
   if (hasFilterValue(query.gradeId)) params.set('gradeId', query.gradeId);
   if (hasFilterValue(query.schoolYearId)) params.set('schoolYearId', query.schoolYearId);
   if (hasFilterValue(query.status)) params.set('status', query.status);
+  if (hasFilterValue(query.supportStatus)) params.set('supportStatus', query.supportStatus);
   if (hasFilterValue(query.sort)) params.set('sort', query.sort);
   const queryString = params.toString();
   return queryString ? `/students?${queryString}` : '/students';

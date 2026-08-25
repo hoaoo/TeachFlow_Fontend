@@ -93,11 +93,14 @@ export type StudentCommentItem = {
 export async function getStudents(query?: {
   page?: number;
   pageSize?: number;
+  search?: string;
   keyword?: string;
+  classroomId?: string;
   classId?: string;
   gradeId?: string;
   schoolYearId?: string;
   status?: string;
+  supportStatus?: string;
   sort?: string;
 }): Promise<StudentListResponse> {
   const data = await api.get<unknown>(buildStudentListUrl(query));
@@ -215,4 +218,36 @@ export async function addStudentComment(
 export async function getStudentEnrollments(id: string): Promise<StudentEnrollmentHistoryItem[]> {
   const data = await api.get<StudentEnrollmentHistoryItem[]>(`/students/${id}/enrollments`);
   return Array.isArray(data) ? data : [];
+}
+
+export async function exportStudentsXlsx(query?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  keyword?: string;
+  classroomId?: string;
+  classId?: string;
+  gradeId?: string;
+  schoolYearId?: string;
+  status?: string;
+  supportStatus?: string;
+  sort?: string;
+}): Promise<Blob> {
+  const url = buildStudentListUrl(query);
+  const exportUrl = url.replace('/students', '/students/export/xlsx');
+  return api.getBlob(exportUrl);
+}
+
+export async function createQuickAssessment(dto: {
+  studentIds: string[];
+  classroomId: string;
+  subjectId?: string;
+  title: string;
+  level?: 'EXCELLENT' | 'COMPLETED' | 'NEEDS_SUPPORT';
+  score?: number;
+  comment?: string;
+  assessmentDate?: string;
+  semester?: number;
+}): Promise<{ success: boolean; message: string; assessmentId: string; updatedStudentsCount: number }> {
+  return api.post('/assessments/quick', dto);
 }

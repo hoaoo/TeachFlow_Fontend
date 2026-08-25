@@ -18,6 +18,8 @@ import {
   getStudentComments,
   addStudentComment,
   getStudentEnrollments,
+  exportStudentsXlsx,
+  createQuickAssessment,
   notifyStudentDataChanged,
   type StudentSummaryStats,
   type StudentAttendanceResponse,
@@ -29,8 +31,10 @@ import {
   getClasses,
   getSchoolYears,
   getGrades,
+  getConfiguredClassSubjects,
   type SchoolYearOption,
   type GradeOption,
+  type ConfiguredClassSubject,
 } from '@/services/classroom-service'
 import { getStudentAcademicProfile, type StudentAcademicProfile } from '@/services/assessment-service'
 import { generateStudentComment } from '@/services/ai-service'
@@ -56,7 +60,8 @@ import {
   Copy, Edit2, Eye, FileSpreadsheet, FileText, Filter, GraduationCap, Heart,
   History, LayoutGrid, Loader2, MessageSquare, MoreVertical, Plus, RefreshCw,
   Search, Sparkles, Trash2, TrendingUp, UploadCloud, User, UserPlus, Users,
-  X, AlertCircle, Award, Phone, Mail, School, ArrowRightLeft, BookOpen, Layers
+  X, AlertCircle, Award, Phone, Mail, School, ArrowRightLeft, BookOpen, Layers,
+  Download, CheckSquare, Square, ClipboardCheck, SlidersHorizontal, ShieldAlert, CheckCheck
 } from 'lucide-react'
 
 const statusVariant = (status: StudentRecord['status']) =>
@@ -84,10 +89,17 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
   const [selectedGradeId, setSelectedGradeId] = useState<string>('ALL')
   const [selectedSchoolYearId, setSelectedSchoolYearId] = useState<string>('ALL')
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL')
+  const [selectedSupportStatus, setSelectedSupportStatus] = useState<string>('ALL')
   const [selectedSort, setSelectedSort] = useState<string>('nameAsc')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalItems, setTotalItems] = useState(0)
+
+  // Multi-select state
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
+
+  // Export State
+  const [exportingXlsx, setExportingXlsx] = useState(false)
 
   // Modals State
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
@@ -95,6 +107,19 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
   const [editTarget, setEditTarget] = useState<StudentRecord | null>(null)
   const [transferTarget, setTransferTarget] = useState<StudentRecord | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<StudentRecord | null>(null)
+
+  // Quick Assessment Dialog State
+  const [quickAssessOpen, setQuickAssessOpen] = useState(false)
+  const [quickAssessStudents, setQuickAssessStudents] = useState<StudentRecord[]>([])
+  const [quickAssessClassId, setQuickAssessClassId] = useState('')
+  const [quickAssessSubjects, setQuickAssessSubjects] = useState<ConfiguredClassSubject[]>([])
+  const [quickAssessSubjectId, setQuickAssessSubjectId] = useState('')
+  const [quickAssessTitle, setQuickAssessTitle] = useState('Đánh giá thường xuyên')
+  const [quickAssessLevel, setQuickAssessLevel] = useState<'EXCELLENT' | 'COMPLETED' | 'NEEDS_SUPPORT'>('COMPLETED')
+  const [quickAssessScore, setQuickAssessScore] = useState<string>('')
+  const [quickAssessComment, setQuickAssessComment] = useState('')
+  const [quickAssessDate, setQuickAssessDate] = useState(new Date().toISOString().slice(0, 10))
+  const [savingQuickAssess, setSavingQuickAssess] = useState(false)
 
   // Create Form State
   const [formName, setFormName] = useState('')
@@ -171,11 +196,12 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
   // Load Students List
   const loadStudentsData = useCallback(
     async (params?: {
-      keyword?: string
-      classId?: string
+      search?: string
+      classroomId?: string
       gradeId?: string
       schoolYearId?: string
       status?: string
+      supportStatus?: string
       sort?: string
       page?: number
     }) => {
@@ -183,11 +209,12 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
       setError(null)
       try {
         const queryParams = {
-          keyword: params?.keyword ?? (search || undefined),
-          classId: params?.classId ?? (selectedClassId !== 'ALL' ? selectedClassId : undefined),
+          search: params?.search ?? (search || undefined),
+          classroomId: params?.classroomId ?? (selectedClassId !== 'ALL' ? selectedClassId : undefined),
           gradeId: params?.gradeId ?? (selectedGradeId !== 'ALL' ? selectedGradeId : undefined),
           schoolYearId: params?.schoolYearId ?? (selectedSchoolYearId !== 'ALL' ? selectedSchoolYearId : undefined),
           status: params?.status ?? (selectedStatus !== 'ALL' ? selectedStatus : undefined),
+          supportStatus: params?.supportStatus ?? (selectedSupportStatus !== 'ALL' ? selectedSupportStatus : undefined),
           sort: params?.sort ?? selectedSort,
           page: params?.page ?? currentPage,
           pageSize: 20,
@@ -199,13 +226,14 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
         setTotalItems(res.totalItems)
         setTotalPages(res.totalPages || 1)
         setCurrentPage(res.page || 1)
+        setSelectedRowIds(new Set())
       } catch (err: any) {
         setError(err?.message || 'Không thể tải danh sách học sinh. Vui lòng kiểm tra lại kết nối.')
       } finally {
         setLoading(false)
       }
     },
-    [search, selectedClassId, selectedGradeId, selectedSchoolYearId, selectedStatus, selectedSort, currentPage],
+    [search, selectedClassId, selectedGradeId, selectedSchoolYearId, selectedStatus, selectedSupportStatus, selectedSort, currentPage],
   )
 
   useEffect(() => {
@@ -227,13 +255,13 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
   const handleSearchChange = (kw: string) => {
     setSearch(kw)
     setCurrentPage(1)
-    loadStudentsData({ keyword: kw, page: 1 })
+    loadStudentsData({ search: kw, page: 1 })
   }
 
   const handleClassChange = (cId: string) => {
     setSelectedClassId(cId)
     setCurrentPage(1)
-    loadStudentsData({ classId: cId, page: 1 })
+    loadStudentsData({ classroomId: cId, page: 1 })
   }
 
   const handleGradeChange = (gId: string) => {
@@ -254,9 +282,126 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
     loadStudentsData({ status: st, page: 1 })
   }
 
+  const handleSupportStatusChange = (supp: string) => {
+    setSelectedSupportStatus(supp)
+    setCurrentPage(1)
+    loadStudentsData({ supportStatus: supp, page: 1 })
+  }
+
   const handleSortChange = (sort: string) => {
     setSelectedSort(sort)
     loadStudentsData({ sort })
+  }
+
+  // Export XLSX Handler
+  const handleExportXlsx = async () => {
+    setExportingXlsx(true)
+    try {
+      const blob = await exportStudentsXlsx({
+        search: search || undefined,
+        classroomId: selectedClassId !== 'ALL' ? selectedClassId : undefined,
+        gradeId: selectedGradeId !== 'ALL' ? selectedGradeId : undefined,
+        schoolYearId: selectedSchoolYearId !== 'ALL' ? selectedSchoolYearId : undefined,
+        status: selectedStatus !== 'ALL' ? selectedStatus : undefined,
+        supportStatus: selectedSupportStatus !== 'ALL' ? selectedSupportStatus : undefined,
+        sort: selectedSort,
+      })
+
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Danh_sach_hoc_sinh_${new Date().toISOString().slice(0, 10)}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      toast.success('Đã xuất file Excel danh sách học sinh thành công!')
+    } catch (err: any) {
+      toast.error(err?.message || 'Có lỗi xảy ra khi xuất file Excel')
+    } finally {
+      setExportingXlsx(false)
+    }
+  }
+
+  // Multi-select Handlers
+  const handleToggleSelectAll = () => {
+    if (selectedRowIds.size === students.length && students.length > 0) {
+      setSelectedRowIds(new Set())
+    } else {
+      setSelectedRowIds(new Set(students.map((s) => s.id)))
+    }
+  }
+
+  const handleToggleSelectRow = (id: string) => {
+    const next = new Set(selectedRowIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelectedRowIds(next)
+  }
+
+  // Open Quick Assessment Dialog
+  const openQuickAssessmentModal = async (targetStudents: StudentRecord[]) => {
+    if (!targetStudents || targetStudents.length === 0) {
+      toast.error('Vui lòng chọn học sinh để nhập đánh giá')
+      return
+    }
+
+    setQuickAssessStudents(targetStudents)
+    const effectiveClassId = targetStudents[0]?.classId || classes[0]?.id || ''
+    setQuickAssessClassId(effectiveClassId)
+    setQuickAssessTitle('Đánh giá thường xuyên')
+    setQuickAssessLevel('COMPLETED')
+    setQuickAssessScore('')
+    setQuickAssessComment('')
+    setQuickAssessDate(new Date().toISOString().slice(0, 10))
+
+    if (effectiveClassId) {
+      try {
+        const subs = await getConfiguredClassSubjects(effectiveClassId)
+        setQuickAssessSubjects(subs)
+        if (subs.length > 0) setQuickAssessSubjectId(subs[0].id)
+      } catch {
+        setQuickAssessSubjects([])
+      }
+    }
+
+    setQuickAssessOpen(true)
+  }
+
+  const handleSaveQuickAssessment = async () => {
+    if (!quickAssessStudents.length || !quickAssessClassId) {
+      toast.error('Vui lòng kiểm tra lại thông tin lớp học và học sinh')
+      return
+    }
+    if (!quickAssessTitle.trim()) {
+      toast.error('Vui lòng nhập tên/tiêu đề đánh giá')
+      return
+    }
+
+    setSavingQuickAssess(true)
+    try {
+      const numScore = quickAssessScore.trim() !== '' ? Number(quickAssessScore) : undefined
+      const res = await createQuickAssessment({
+        studentIds: quickAssessStudents.map((s) => s.id),
+        classroomId: quickAssessClassId,
+        subjectId: quickAssessSubjectId || undefined,
+        title: quickAssessTitle.trim(),
+        level: quickAssessLevel,
+        score: numScore,
+        comment: quickAssessComment.trim() || undefined,
+        assessmentDate: quickAssessDate,
+      })
+
+      setQuickAssessOpen(false)
+      setSelectedRowIds(new Set())
+      toast.success(res.message || `Đã lưu kết quả đánh giá cho ${quickAssessStudents.length} học sinh!`)
+      loadStudentsData()
+      notifyStudentDataChanged()
+    } catch (err: any) {
+      toast.error(err?.message || 'Có lỗi xảy ra khi lưu đánh giá')
+    } finally {
+      setSavingQuickAssess(false)
+    }
   }
 
   // Create Student Handler
@@ -381,62 +526,79 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
   const handleDeleteStudent = async () => {
     if (!deleteTarget) return
     try {
-      await deleteStudent(deleteTarget.id)
+      const res = await deleteStudent(deleteTarget.id)
       setDeleteTarget(null)
-      toast.success(`Đã rút học sinh ${deleteTarget.name} khỏi lớp (lịch sử vẫn được lưu trữ)`)
+      toast.success(res.message || 'Đã rút học sinh khỏi lớp')
       loadStudentsData()
       notifyStudentDataChanged()
+      if (selectedStudentId === deleteTarget.id) {
+        setSelectedStudentId(null)
+      }
     } catch (err: any) {
       toast.error(err?.message || 'Lỗi khi rút học sinh')
     }
   }
 
-  // Parse Import Text
-  const handleParseImport = (text: string) => {
-    setImportText(text)
-    if (!text.trim()) {
-      setImportRows([])
-      return
-    }
-    const lines = text.trim().split('\n')
-    const parsed: typeof importRows = []
-    lines.forEach((line) => {
-      const parts = line.split(/[,\t|]/).map((p) => p.trim())
-      if (parts.length > 0 && parts[0]) {
-        const fullName = parts[0]
-        const studentCode = parts[1] || ''
-        const gender = parts[2] || 'Nam'
-        const dob = parts[3] || ''
-        const parentName = parts[4] || ''
-        const parentPhone = parts[5] || ''
-        const note = parts[6] || ''
-        const error = !fullName ? 'Thiếu họ và tên' : undefined
-        parsed.push({ fullName, studentCode, gender, dob, parentName, parentPhone, note, error })
+  // Analyze Import File
+  const handleAnalyzeFile = async (file: File) => {
+    if (!file) return
+    setImportAnalyzing(true)
+    try {
+      const res = await analyzeStudentImportFile(file, importTargetClassId)
+      if (res?.students && Array.isArray(res.students)) {
+        setImportRows(res.students)
+        toast.success(`AI đã nhận diện ${res.students.length} học sinh từ file!`)
+      } else {
+        toast.info('Vui lòng dán danh sách theo định dạng bảng')
       }
-    })
-    setImportRows(parsed)
+    } catch (err: any) {
+      toast.error(err?.message || 'Không thể phân tích file import')
+    } finally {
+      setImportAnalyzing(false)
+    }
   }
 
-  const updateImportRow = (index: number, field: 'fullName' | 'studentCode' | 'dob' | 'gender' | 'parentName' | 'parentPhone' | 'note', value: string) => {
-    setImportRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value, error: field === 'fullName' && !value.trim() ? 'Thiếu họ và tên' : undefined } : row))
+  const handleParseImportText = () => {
+    if (!importText.trim()) return
+    const lines = importText.trim().split('\n')
+    const rows = lines.map((line) => {
+      const parts = line.split(/[\t,;|]/).map((p) => p.trim())
+      return {
+        fullName: parts[0] || '',
+        studentCode: parts[1] || undefined,
+        gender: parts[2] || 'Nam',
+        dob: parts[3] || undefined,
+        parentName: parts[4] || undefined,
+        parentPhone: parts[5] || undefined,
+        note: parts[6] || undefined,
+      }
+    })
+    setImportRows(rows)
+    toast.success(`Đã phân tích ${rows.length} dòng dữ liệu`)
   }
-  const handleExecuteImport = async () => {
-    if (importRows.length === 0 || !importTargetClassId) {
-      toast.error('Vui lòng chọn lớp và nhập dữ liệu import')
+
+  const handleConfirmImport = async () => {
+    if (!importTargetClassId) {
+      toast.error('Vui lòng chọn lớp học tiếp nhận')
       return
     }
+    if (importRows.length === 0) {
+      toast.error('Chưa có dữ liệu học sinh để import')
+      return
+    }
+
     setImporting(true)
     try {
       const res = await importStudents(importTargetClassId, importRows)
       if (res.success) {
-        toast.success(res.message || `Đã import thành công ${res.importedCount} học sinh`)
+        toast.success(res.message || `Đã import thành công ${res.importedCount} học sinh!`)
         setImportDialogOpen(false)
-        setImportText('')
         setImportRows([])
+        setImportText('')
         loadStudentsData()
         notifyStudentDataChanged()
       } else {
-        toast.error(`Import không thành công: ${res.errorCount} lỗi`)
+        toast.error(`Import thất bại: ${res.errorCount} lỗi`)
       }
     } catch (err: any) {
       toast.error(err?.message || 'Lỗi khi import học sinh')
@@ -445,7 +607,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
     }
   }
 
-  // If a student is selected for Detail View
+  // Active student for Detail View
   const activeStudent = students.find((s) => s.id === selectedStudentId)
 
   return (
@@ -460,6 +622,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
           onOpenEdit={() => openEditModal(activeStudent)}
           onOpenTransfer={() => openTransferModal(activeStudent)}
           onOpenDelete={() => setDeleteTarget(activeStudent)}
+          onOpenQuickAssess={() => openQuickAssessmentModal([activeStudent])}
         />
       ) : (
         /* DIRECTORY VIEW */
@@ -474,11 +637,20 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                 Danh sách học sinh
               </h1>
               <p className="text-xs sm:text-sm text-slate-500 mt-1">
-                Quản lý hồ sơ, lớp học, quá trình học tập và theo dõi chuyên cần của toàn bộ học sinh.
+                Quản lý hồ sơ, lớp chủ nhiệm & lớp bộ môn, theo dõi chuyên cần và đánh giá học lực toàn diện.
               </p>
             </div>
 
             <div className="flex items-center gap-2.5 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportXlsx}
+                disabled={exportingXlsx || loading}
+                className="text-xs h-9 gap-1.5 font-semibold text-slate-700 border-slate-300 hover:bg-slate-50 cursor-pointer"
+              >
+                {exportingXlsx ? <Loader2 className="size-4 animate-spin text-teal-600" /> : <Download className="size-4 text-teal-600" />} Tải danh sách (.xlsx)
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -503,7 +675,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                 <div>
                   <p className="text-xs font-medium text-slate-500">Tổng học sinh</p>
                   <p className="text-2xl font-bold text-slate-900 mt-0.5">{summary.totalStudents}</p>
-                  <p className="text-[11px] text-teal-700 font-medium mt-0.5">Tất cả lớp phụ trách</p>
+                  <p className="text-[11px] text-teal-700 font-medium mt-0.5">Lớp chủ nhiệm & Bộ môn</p>
                 </div>
                 <div className="size-10 rounded-xl bg-teal-50 text-teal-700 grid place-items-center">
                   <Users className="size-5" />
@@ -516,10 +688,10 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                 <div>
                   <p className="text-xs font-medium text-slate-500">Đang theo học</p>
                   <p className="text-2xl font-bold text-emerald-700 mt-0.5">{summary.activeStudents}</p>
-                  <p className="text-[11px] text-emerald-700 font-medium mt-0.5">Học lực Tốt & Khá</p>
+                  <p className="text-[11px] text-emerald-700 font-medium mt-0.5">Ghi danh chính thức</p>
                 </div>
                 <div className="size-10 rounded-xl bg-emerald-50 text-emerald-700 grid place-items-center">
-                  <CheckCircle2 className="size-5" />
+                  <GraduationCap className="size-5" />
                 </div>
               </CardContent>
             </Card>
@@ -528,10 +700,10 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
               <CardContent className="flex items-center justify-between p-4">
                 <div>
                   <p className="text-xs font-medium text-slate-500">Cần hỗ trợ</p>
-                  <p className="text-2xl font-bold text-rose-600 mt-0.5">{summary.needsSupportStudents}</p>
-                  <p className="text-[11px] text-rose-600 font-medium mt-0.5">Cần chú ý bổ trợ</p>
+                  <p className="text-2xl font-bold text-rose-700 mt-0.5">{summary.needsSupportStudents}</p>
+                  <p className="text-[11px] text-rose-700 font-medium mt-0.5">Học lực / Chuyên cần</p>
                 </div>
-                <div className="size-10 rounded-xl bg-rose-50 text-rose-600 grid place-items-center">
+                <div className="size-10 rounded-xl bg-rose-50 text-rose-700 grid place-items-center">
                   <Heart className="size-5" />
                 </div>
               </CardContent>
@@ -548,7 +720,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                   </p>
                   <p className="text-[11px] text-blue-700 font-medium mt-0.5">
                     {summary.avgAttendanceRate !== null && summary.avgAttendanceRate !== undefined
-                      ? 'Tháng này'
+                      ? 'Tổng thể các lớp'
                       : 'Chưa có dữ liệu'}
                   </p>
                 </div>
@@ -562,7 +734,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
           {/* Search and Filters Bar */}
           <Card className="border-slate-200 shadow-2xs">
             <CardContent className="p-3.5 sm:p-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
                 {/* Search */}
                 <div className="relative sm:col-span-2 lg:col-span-2">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
@@ -617,10 +789,24 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                     onChange={(e) => handleStatusChange(e.target.value)}
                     className="w-full h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 focus:outline-teal-500"
                   >
-                    <option value="ALL">Tất cả trạng thái</option>
+                    <option value="ALL">Tất cả học lực</option>
                     <option value="Tốt">Tốt</option>
                     <option value="Khá">Khá</option>
                     <option value="Cần cố gắng">Cần cố gắng</option>
+                  </select>
+                </div>
+
+                {/* Support Status Filter */}
+                <div>
+                  <select
+                    aria-label="Lọc theo diện cần hỗ trợ"
+                    value={selectedSupportStatus}
+                    onChange={(e) => handleSupportStatusChange(e.target.value)}
+                    className="w-full h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 focus:outline-teal-500"
+                  >
+                    <option value="ALL">Tất cả diện</option>
+                    <option value="NEED_SUPPORT">Cần hỗ trợ</option>
+                    <option value="NORMAL">Bình thường</option>
                   </select>
                 </div>
 
@@ -634,6 +820,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                   >
                     <option value="nameAsc">Tên A-Z</option>
                     <option value="nameDesc">Tên Z-A</option>
+                    <option value="codeAsc">Mã HS tăng dần</option>
                     <option value="attendanceLow">Chuyên cần thấp</option>
                     <option value="updatedAt">Mới cập nhật</option>
                   </select>
@@ -641,6 +828,36 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
               </div>
             </CardContent>
           </Card>
+
+          {/* Bulk Action Header Banner if rows selected */}
+          {selectedRowIds.size > 0 && (
+            <div className="flex items-center justify-between bg-teal-50 border border-teal-200 rounded-xl p-3 px-4 shadow-2xs">
+              <div className="flex items-center gap-2 text-xs font-bold text-teal-900">
+                <CheckCheck className="size-4 text-teal-600" />
+                <span>Đã chọn <strong className="text-teal-700">{selectedRowIds.size}</strong> học sinh</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const selected = students.filter((s) => selectedRowIds.has(s.id))
+                    openQuickAssessmentModal(selected)
+                  }}
+                  className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold h-8 gap-1.5 cursor-pointer"
+                >
+                  <ClipboardCheck className="size-3.5" /> Nhập đánh giá hàng loạt
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedRowIds(new Set())}
+                  className="text-xs h-8 text-slate-500 hover:text-slate-700 cursor-pointer"
+                >
+                  Bỏ chọn
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Student Table / Cards */}
           <Card className="border-slate-200 shadow-2xs">
@@ -684,87 +901,164 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                 <table className="w-full text-xs text-left">
                   <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
                     <tr>
-                      <th className="py-3 px-4 w-12 text-center">STT</th>
+                      <th className="py-3 px-3 w-10 text-center">
+                        <button
+                          type="button"
+                          onClick={handleToggleSelectAll}
+                          className="text-slate-400 hover:text-teal-600 transition"
+                        >
+                          {selectedRowIds.size === students.length && students.length > 0 ? (
+                            <CheckSquare className="size-4 text-teal-600" />
+                          ) : (
+                            <Square className="size-4" />
+                          )}
+                        </button>
+                      </th>
+                      <th className="py-3 px-3 w-10 text-center">STT</th>
                       <th className="py-3 px-4">Học sinh</th>
                       <th className="py-3 px-3">Mã HS</th>
-                      <th className="py-3 px-3">Lớp hiện tại</th>
-                      <th className="py-3 px-3">Giới tính</th>
+                      <th className="py-3 px-3">Lớp</th>
+                      <th className="py-3 px-3">Khối</th>
                       <th className="py-3 px-3">Ngày sinh</th>
-                      <th className="py-3 px-3">Học lực</th>
+                      <th className="py-3 px-3">Trạng thái</th>
                       <th className="py-3 px-3">Chuyên cần</th>
+                      <th className="py-3 px-3">Đánh giá gần nhất</th>
+                      <th className="py-3 px-3">Hỗ trợ</th>
                       <th className="py-3 px-4 text-right">Thao tác</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {students.map((s, idx) => (
-                      <tr key={s.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-3 px-4 text-center font-bold text-slate-400">
-                          {(currentPage - 1) * 20 + idx + 1}
-                        </td>
-                        <td className="py-3 px-4">
-                          <button
-                            onClick={() => setSelectedStudentId(s.id)}
-                            className="flex items-center gap-2.5 text-left group cursor-pointer"
-                          >
-                            <Avatar className="size-8.5 border border-teal-100">
-                              <AvatarFallback className={s.color || 'bg-teal-100 text-teal-700 font-bold text-xs'}>
-                                {s.initials}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="font-bold text-slate-900 group-hover:text-teal-700 transition-colors">
-                                {s.name}
-                              </p>
-                              <p className="text-[10px] text-slate-400">
-                                {s.guardian || s.parentName} ({s.phone || s.parentPhone})
-                              </p>
-                            </div>
-                          </button>
-                        </td>
-                        <td className="py-3 px-3 font-mono font-semibold text-slate-700">
-                          {s.studentCode || '—'}
-                        </td>
-                        <td className="py-3 px-3">
-                          <span className="font-semibold text-slate-900">
-                            {(s as any).className || s.grade || '—'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-slate-600">{s.gender}</td>
-                        <td className="py-3 px-3 text-slate-600">{s.dob}</td>
-                        <td className="py-3 px-3">
-                          <Badge variant={statusVariant(s.status)} className="text-[10px]">
-                            {s.status}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-3 font-bold text-teal-700">
-                          {s.attendance !== null && s.attendance !== undefined ? `${s.attendance}%` : '—'}
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon-sm" className="size-8 text-slate-400 hover:text-slate-700 cursor-pointer">
-                                <MoreVertical className="size-4" />
+                    {students.map((s, idx) => {
+                      const isSelected = selectedRowIds.has(s.id)
+                      const isSupportNeeded =
+                        (s as any).isNeedSupport ||
+                        (s as any).needsSupport ||
+                        s.status === 'Cần cố gắng' ||
+                        (s.attendance !== null && s.attendance !== undefined && s.attendance < 80)
+                      return (
+                        <tr key={s.id} className={`hover:bg-slate-50/60 transition-colors ${isSelected ? 'bg-teal-50/40' : ''}`}>
+                          <td className="py-3 px-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSelectRow(s.id)}
+                              className="text-slate-400 hover:text-teal-600 transition"
+                            >
+                              {isSelected ? (
+                                <CheckSquare className="size-4 text-teal-600" />
+                              ) : (
+                                <Square className="size-4" />
+                              )}
+                            </button>
+                          </td>
+                          <td className="py-3 px-3 text-center font-bold text-slate-400">
+                            {(currentPage - 1) * 20 + idx + 1}
+                          </td>
+                          <td className="py-3 px-4">
+                            <button
+                              onClick={() => setSelectedStudentId(s.id)}
+                              className="flex items-center gap-2.5 text-left group cursor-pointer"
+                            >
+                              <Avatar className="size-8.5 border border-teal-100">
+                                <AvatarFallback className={s.color || 'bg-teal-100 text-teal-700 font-bold text-xs'}>
+                                  {s.initials}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <p className="font-bold text-slate-900 group-hover:text-teal-700 transition-colors">
+                                  {s.name}
+                                </p>
+                                <p className="text-[10px] text-slate-400">
+                                  {s.guardian || s.parentName} ({s.phone || s.parentPhone})
+                                </p>
+                              </div>
+                            </button>
+                          </td>
+                          <td className="py-3 px-3 font-mono font-semibold text-slate-700">
+                            {s.studentCode || '—'}
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className="font-semibold text-slate-900">
+                              {(s as any).className || s.grade || '—'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-slate-600">
+                            {(s as any).gradeName || '—'}
+                          </td>
+                          <td className="py-3 px-3 text-slate-600">{s.dob}</td>
+                          <td className="py-3 px-3">
+                            <Badge variant={statusVariant(s.status)} className="text-[10px]">
+                              {s.status}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-3 font-bold text-teal-700">
+                            {s.attendance !== null && s.attendance !== undefined ? `${s.attendance}%` : '—'}
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className="font-medium text-slate-700 text-[11px]">
+                              {(s as any).latestAssessment || (s as any).latestAssessmentText || 'Chưa có'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3">
+                            {isSupportNeeded ? (
+                              <Badge variant="destructive" className="text-[10px] bg-rose-50 text-rose-700 border-rose-200">
+                                Cần hỗ trợ
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                                Bình thường
+                              </Badge>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setSelectedStudentId(s.id)}
+                                title="Xem hồ sơ 360"
+                                className="h-7 px-2 text-slate-600 hover:text-teal-700 hover:bg-teal-50 text-xs font-semibold cursor-pointer"
+                              >
+                                <Eye className="size-3.5 mr-1" /> 360°
                               </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-44 text-xs">
-                              <DropdownMenuItem onClick={() => setSelectedStudentId(s.id)}>
-                                <Eye className="size-3.5 mr-2" /> Xem hồ sơ chi tiết
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => openEditModal(s)}>
-                                <Edit2 className="size-3.5 mr-2" /> Chỉnh sửa hồ sơ
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => openTransferModal(s)}>
-                                <ArrowRightLeft className="size-3.5 mr-2" /> Chuyển lớp
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => setDeleteTarget(s)} className="text-rose-600">
-                                <Trash2 className="size-3.5 mr-2" /> Rút khỏi lớp
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </td>
-                      </tr>
-                    ))}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openQuickAssessmentModal([s])}
+                                title="Nhập đánh giá nhanh"
+                                className="h-7 px-2 text-teal-700 hover:text-teal-800 hover:bg-teal-50 text-xs font-semibold cursor-pointer"
+                              >
+                                <ClipboardCheck className="size-3.5 mr-1" /> Đánh giá
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon-sm" className="size-7 text-slate-400 hover:text-slate-700 cursor-pointer">
+                                    <MoreVertical className="size-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-44 text-xs">
+                                  <DropdownMenuItem onClick={() => setSelectedStudentId(s.id)}>
+                                    <Eye className="size-3.5 mr-2" /> Xem hồ sơ chi tiết
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => openQuickAssessmentModal([s])}>
+                                    <ClipboardCheck className="size-3.5 mr-2" /> Nhập đánh giá
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => openEditModal(s)}>
+                                    <Edit2 className="size-3.5 mr-2" /> Chỉnh sửa hồ sơ
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => openTransferModal(s)}>
+                                    <ArrowRightLeft className="size-3.5 mr-2" /> Chuyển lớp
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem onClick={() => setDeleteTarget(s)} className="text-rose-600">
+                                    <Trash2 className="size-3.5 mr-2" /> Rút khỏi lớp
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               )}
@@ -776,6 +1070,145 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* GLOBAL MODALS */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
+
+      {/* QUICK ASSESSMENT DIALOG */}
+      <Dialog open={quickAssessOpen} onOpenChange={setQuickAssessOpen}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ClipboardCheck className="size-5 text-teal-600" />
+              Nhập đánh giá / Điểm số nhanh
+            </DialogTitle>
+            <DialogDescription>
+              {quickAssessStudents.length === 1
+                ? `Đánh giá kết quả cho học sinh ${quickAssessStudents[0].name}`
+                : `Đánh giá theo lô cho ${quickAssessStudents.length} học sinh đã chọn`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3.5 py-2 text-xs">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold">Lớp học *</Label>
+                <select
+                  value={quickAssessClassId}
+                  onChange={async (e) => {
+                    const cId = e.target.value
+                    setQuickAssessClassId(cId)
+                    try {
+                      const subs = await getConfiguredClassSubjects(cId)
+                      setQuickAssessSubjects(subs)
+                      if (subs.length > 0) setQuickAssessSubjectId(subs[0].id)
+                    } catch {
+                      setQuickAssessSubjects([])
+                    }
+                  }}
+                  className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs focus:outline-teal-500"
+                >
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.grade})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold">Môn học</Label>
+                <select
+                  value={quickAssessSubjectId}
+                  onChange={(e) => setQuickAssessSubjectId(e.target.value)}
+                  className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs focus:outline-teal-500"
+                >
+                  {quickAssessSubjects.length === 0 ? (
+                    <option value="">Chung / Toàn diện</option>
+                  ) : (
+                    quickAssessSubjects.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Tên bài / Loại đánh giá *</Label>
+              <Input
+                placeholder="Đánh giá thường xuyên, Kiểm tra 15 phút,..."
+                value={quickAssessTitle}
+                onChange={(e) => setQuickAssessTitle(e.target.value)}
+                className="mt-1 text-xs h-9"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold">Mức độ đạt chuẩn</Label>
+                <select
+                  value={quickAssessLevel}
+                  onChange={(e) => setQuickAssessLevel(e.target.value as any)}
+                  className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs focus:outline-teal-500"
+                >
+                  <option value="EXCELLENT">Hoàn thành tốt (Tốt)</option>
+                  <option value="COMPLETED">Hoàn thành (Đạt)</option>
+                  <option value="NEEDS_SUPPORT">Cần cố gắng (Chưa đạt)</option>
+                </select>
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold">Điểm số (0 - 10, tùy chọn)</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="10"
+                  placeholder="Ví dụ: 9.0"
+                  value={quickAssessScore}
+                  onChange={(e) => setQuickAssessScore(e.target.value)}
+                  className="mt-1 text-xs h-9"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Ngày đánh giá</Label>
+              <Input
+                type="date"
+                value={quickAssessDate}
+                onChange={(e) => setQuickAssessDate(e.target.value)}
+                className="mt-1 text-xs h-9"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Nhận xét của giáo viên (tùy chọn)</Label>
+              <Textarea
+                placeholder="Nhận xét sự tiến bộ, ưu điểm và điểm cần cố gắng..."
+                value={quickAssessComment}
+                onChange={(e) => setQuickAssessComment(e.target.value)}
+                rows={2}
+                className="mt-1 text-xs"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setQuickAssessOpen(false)} disabled={savingQuickAssess}>
+              Hủy
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSaveQuickAssessment}
+              disabled={savingQuickAssess || !quickAssessTitle.trim()}
+              className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs gap-1.5 cursor-pointer"
+            >
+              {savingQuickAssess ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} Lưu đánh giá
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* CREATE STUDENT DIALOG */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
@@ -790,7 +1223,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
           <div className="grid gap-3.5 py-2 text-xs">
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
-                <Label className="text-xs font-semibold">Họ và tên *</Label>
+                <Label className="text-xs font-semibold">Họ và tên học sinh *</Label>
                 <Input
                   placeholder="Nguyễn Văn An"
                   value={formName}
@@ -967,16 +1400,20 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs font-semibold">Họ tên phụ huynh</Label>
-                <Input
-                  value={editParentName}
-                  onChange={(e) => setEditParentName(e.target.value)}
-                  className="mt-1 text-xs h-9"
-                />
+                <Label className="text-xs font-semibold">Học lực / Trạng thái</Label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                  className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs focus:outline-teal-500"
+                >
+                  <option value="Tốt">Tốt</option>
+                  <option value="Khá">Khá</option>
+                  <option value="Cần cố gắng">Cần cố gắng</option>
+                </select>
               </div>
 
               <div>
-                <Label className="text-xs font-semibold">Điện thoại phụ huynh</Label>
+                <Label className="text-xs font-semibold">Số điện thoại phụ huynh</Label>
                 <Input
                   value={editParentPhone}
                   onChange={(e) => setEditParentPhone(e.target.value)}
@@ -986,16 +1423,21 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
             </div>
 
             <div>
-              <Label className="text-xs font-semibold">Trạng thái học lực</Label>
-              <select
-                value={editStatus}
-                onChange={(e) => setEditStatus(e.target.value)}
-                className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs focus:outline-teal-500"
-              >
-                <option value="Tốt">Tốt</option>
-                <option value="Khá">Khá</option>
-                <option value="Cần cố gắng">Cần cố gắng</option>
-              </select>
+              <Label className="text-xs font-semibold">Họ tên phụ huynh</Label>
+              <Input
+                value={editParentName}
+                onChange={(e) => setEditParentName(e.target.value)}
+                className="mt-1 text-xs h-9"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Ghi chú</Label>
+              <Input
+                value={editNote}
+                onChange={(e) => setEditNote(e.target.value)}
+                className="mt-1 text-xs h-9"
+              />
             </div>
           </div>
 
@@ -1019,15 +1461,20 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
       <Dialog open={!!transferTarget} onOpenChange={(val) => !val && setTransferTarget(null)}>
         <DialogContent className="sm:max-w-[440px]">
           <DialogHeader>
-            <DialogTitle>Chuyển lớp cho học sinh</DialogTitle>
+            <DialogTitle>Chuyển lớp học sinh</DialogTitle>
             <DialogDescription>
-              Chuyển học sinh <strong>{transferTarget?.name}</strong> sang lớp mới. Toàn bộ lịch sử điểm danh và đánh giá sẽ được bảo toàn.
+              Chuyển học sinh <strong>{transferTarget?.name}</strong> sang lớp mới trong cùng năm học.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3.5 py-2 text-xs">
+          <div className="grid gap-3.5 py-2 text-xs">
             <div>
-              <Label className="text-xs font-semibold">Chọn lớp chuyển đến *</Label>
+              <Label className="text-xs font-semibold">Lớp hiện tại</Label>
+              <Input value={(transferTarget as any)?.className || transferTarget?.grade || ''} disabled className="mt-1 bg-slate-50 text-xs h-9" />
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold">Lớp chuyển đến *</Label>
               <select
                 value={transferTargetClassId}
                 onChange={(e) => setTransferTargetClassId(e.target.value)}
@@ -1037,7 +1484,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                   .filter((c) => c.id !== transferTarget?.classId)
                   .map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name} ({c.grade} · {c.room})
+                      {c.name} ({c.grade})
                     </option>
                   ))}
               </select>
@@ -1046,7 +1493,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
             <div>
               <Label className="text-xs font-semibold">Lý do chuyển lớp (tùy chọn)</Label>
               <Input
-                placeholder="Chuyển phân ban / theo nguyện vọng phụ huynh..."
+                placeholder="Theo nguyện vọng phụ huynh, điều chỉnh sĩ số..."
                 value={transferReason}
                 onChange={(e) => setTransferReason(e.target.value)}
                 className="mt-1 text-xs h-9"
@@ -1055,14 +1502,39 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
           </div>
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" size="sm" onClick={() => setTransferTarget(null)}>Hủy</Button>
+            <Button variant="outline" size="sm" onClick={() => setTransferTarget(null)} disabled={transferring}>
+              Hủy
+            </Button>
             <Button
               size="sm"
               onClick={handleTransferStudent}
               disabled={transferring || !transferTargetClassId}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs cursor-pointer"
+              className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs gap-1.5 cursor-pointer"
             >
-              {transferring ? 'Đang chuyển...' : 'Xác nhận chuyển'}
+              {transferring ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowRightLeft className="size-3.5" />} Xác nhận chuyển lớp
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* WITHDRAW / DELETE DIALOG */}
+      <Dialog open={!!deleteTarget} onOpenChange={(val) => !val && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-rose-600 flex items-center gap-2">
+              <AlertCircle className="size-5" /> Rút học sinh khỏi lớp
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Bạn có chắc chắn muốn rút học sinh <strong>{deleteTarget?.name}</strong> khỏi lớp? Dữ liệu lịch sử học tập vẫn được bảo lưu an toàn.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="gap-2 mt-2">
+            <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)}>
+              Hủy
+            </Button>
+            <Button size="sm" onClick={handleDeleteStudent} className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold">
+              Xác nhận rút
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1070,51 +1542,20 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
 
       {/* IMPORT EXCEL DIALOG */}
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-[650px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Import danh sách học sinh</DialogTitle>
-            <DialogDescription>
-              Tải file .xlsx/.xls/.csv/.docx/.pdf/.jpg hoặc dán bảng. Hệ thống chỉ đề xuất dữ liệu; bạn xem trước rồi mới xác nhận lưu.
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="size-5 text-emerald-600" />
+              Import danh sách học sinh từ Excel
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Hỗ trợ tải lên file Excel hoặc dán trực tiếp danh sách học sinh vào lớp học.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3 py-2 text-xs">
+          <div className="space-y-4 py-2 text-xs">
             <div>
-              <Label className="text-xs font-semibold">Tải tệp (xlsx, xls, docx, pdf, ảnh)</Label>
-              <input
-                type="file"
-                accept=".xlsx,.xls,.csv,.docx,.pdf,.png,.jpg,.jpeg"
-                className="mt-1 block w-full text-xs"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0]
-                  if (!file) return
-                  setImportAnalyzing(true)
-                  try {
-                    const result = await analyzeStudentImportFile(file, importTargetClassId || undefined)
-                    const rows = (result.rows || []).map((r) => ({
-                      fullName: r.fullName,
-                      studentCode: r.studentCode,
-                      gender: r.gender,
-                      dob: r.dob,
-                      parentName: r.parentName,
-                      parentPhone: r.parentPhone,
-                      note: r.note,
-                      error: r.valid ? undefined : (r.errors || []).join(', '),
-                    }))
-                    setImportRows(rows)
-                    toast.success(result.message || `Phát hiện ${result.totalRows || rows.length} dòng`)
-                  } catch (err: any) {
-                    toast.error(err?.message || 'Không phân tích được tệp')
-                  } finally {
-                    setImportAnalyzing(false)
-                    e.target.value = ''
-                  }
-                }}
-              />
-              {importAnalyzing && <p className="mt-1 text-teal-700 flex items-center gap-1"><Loader2 className="size-3 animate-spin" /> AI đang đọc tệp...</p>}
-            </div>
-            <div>
-              <Label className="text-xs font-semibold">Lớp học ghi danh đích *</Label>
+              <Label className="text-xs font-semibold">Chọn lớp học tiếp nhận *</Label>
               <select
                 value={importTargetClassId}
                 onChange={(e) => setImportTargetClassId(e.target.value)}
@@ -1128,65 +1569,97 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
               </select>
             </div>
 
-            <Textarea
-              placeholder="Nguyễn Văn An	HS001	Nam	12/04/2016	Nguyễn Thị Hoa	0901234567	Chủ động phát biểu
-Trần Thị Bình	HS002	Nữ	25/08/2016	Trần Văn Cường	0912345678	Tiếp thu nhanh"
-              value={importText}
-              onChange={(e) => handleParseImport(e.target.value)}
-              rows={5}
-              className="text-xs font-mono"
-            />
+            {/* File Upload Zone */}
+            <div className="border-2 border-dashed border-slate-200 hover:border-teal-400 rounded-xl p-5 text-center bg-slate-50/50 transition">
+              <UploadCloud className="size-8 mx-auto text-slate-400 mb-2" />
+              <p className="text-xs font-semibold text-slate-700">Tải lên tệp Excel (.xlsx, .xls, .csv)</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">AI sẽ tự động nhận diện các cột dữ liệu họ tên, ngày sinh, phụ huynh</p>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                id="import-file"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) handleAnalyzeFile(f)
+                }}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => document.getElementById('import-file')?.click()}
+                disabled={importAnalyzing}
+                className="mt-3 text-xs gap-1.5 font-semibold text-teal-700 border-teal-200"
+              >
+                {importAnalyzing ? <Loader2 className="size-3.5 animate-spin" /> : <UploadCloud className="size-3.5" />} Chọn tệp từ máy tính
+              </Button>
+            </div>
 
+            {/* Or Paste Table */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">Hoặc dán văn bản phân tách bằng tab/dấu phẩy:</Label>
+              <Textarea
+                placeholder="Nguyễn Văn An, HS001, Nam, 12/04/2016, Nguyễn Thị Hoa, 0901234567&#10;Trần Thị Bình, HS002, Nữ, 15/06/2016, Trần Văn Cường, 0902345678"
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+                rows={3}
+                className="text-xs font-mono"
+              />
+              <div className="flex justify-end">
+                <Button size="sm" variant="outline" onClick={handleParseImportText} className="text-xs h-7">
+                  Phân tích văn bản
+                </Button>
+              </div>
+            </div>
+
+            {/* Preview Table */}
             {importRows.length > 0 && (
-              <div className="border rounded-xl p-3 bg-slate-50 max-h-56 overflow-y-auto space-y-1.5">
-                <p className="font-bold text-slate-700">
-                  Xem trước: {importRows.length} dòng phát hiện · {importRows.filter((r) => !r.error).length} hợp lệ · {importRows.filter((r) => r.error).length} lỗi
-                </p>
-                                {importRows.map((r, i) => (
-                  <div key={i} className={`grid gap-2 rounded-lg border p-2 text-[11px] ${r.error ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-white'}`}>
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                      <input aria-label={`Họ và tên dòng ${i + 1}`} className="rounded border px-2 py-1" placeholder="Họ và tên *" value={r.fullName || ''} onChange={(e) => updateImportRow(i, 'fullName', e.target.value)} />
-                      <input aria-label={`Mã học sinh dòng ${i + 1}`} className="rounded border px-2 py-1" placeholder="Mã học sinh" value={r.studentCode || ''} onChange={(e) => updateImportRow(i, 'studentCode', e.target.value)} />
-                      <input aria-label={`Ngày sinh dòng ${i + 1}`} className="rounded border px-2 py-1" placeholder="Ngày sinh" value={r.dob || ''} onChange={(e) => updateImportRow(i, 'dob', e.target.value)} />
-                      <input aria-label={`Giới tính dòng ${i + 1}`} className="rounded border px-2 py-1" placeholder="Giới tính" value={r.gender || ''} onChange={(e) => updateImportRow(i, 'gender', e.target.value)} />
-                      <input aria-label={`Tên phụ huynh dòng ${i + 1}`} className="rounded border px-2 py-1" placeholder="Tên phụ huynh" value={r.parentName || ''} onChange={(e) => updateImportRow(i, 'parentName', e.target.value)} />
-                      <input aria-label={`Số điện thoại dòng ${i + 1}`} className="rounded border px-2 py-1" placeholder="Số điện thoại" value={r.parentPhone || ''} onChange={(e) => updateImportRow(i, 'parentPhone', e.target.value)} />
-                      <input aria-label={`Ghi chú dòng ${i + 1}`} className="rounded border px-2 py-1 sm:col-span-2" placeholder="Ghi chú" value={r.note || ''} onChange={(e) => updateImportRow(i, 'note', e.target.value)} />
-                    </div>
-                    <div className="flex items-center justify-between gap-2">{r.error ? <strong className="text-rose-600">Lỗi: {r.error}</strong> : <span className="text-emerald-700">Hợp lệ</span>}<span className="text-slate-400">Dòng {i + 1}</span></div>
-                  </div>
-                ))}
+              <div className="space-y-2 border border-slate-200 rounded-lg p-3 bg-white">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                  <span>Xem trước danh sách ({importRows.length} học sinh)</span>
+                  <button onClick={() => setImportRows([])} className="text-rose-600 hover:underline text-[11px]">
+                    Xóa danh sách
+                  </button>
+                </div>
+                <div className="max-h-48 overflow-y-auto">
+                  <table className="w-full text-left text-[11px]">
+                    <thead className="bg-slate-50 text-slate-500 font-semibold border-b">
+                      <tr>
+                        <th className="p-1.5">Họ và tên</th>
+                        <th className="p-1.5">Mã HS</th>
+                        <th className="p-1.5">Giới tính</th>
+                        <th className="p-1.5">Ngày sinh</th>
+                        <th className="p-1.5">Phụ huynh</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {importRows.map((r, i) => (
+                        <tr key={i}>
+                          <td className="p-1.5 font-bold">{r.fullName}</td>
+                          <td className="p-1.5 font-mono">{r.studentCode || 'Tự sinh'}</td>
+                          <td className="p-1.5">{r.gender || 'Nam'}</td>
+                          <td className="p-1.5">{r.dob || '—'}</td>
+                          <td className="p-1.5">{r.parentName || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(false)}>Hủy</Button>
+            <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(false)} disabled={importing}>
+              Hủy
+            </Button>
             <Button
               size="sm"
-              onClick={handleExecuteImport}
+              onClick={handleConfirmImport}
               disabled={importing || importRows.length === 0 || !importTargetClassId}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs cursor-pointer"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs gap-1.5"
             >
-              {importing ? <Loader2 className="size-3.5 animate-spin" /> : <UploadCloud className="size-3.5" />} Xác nhận Import ({importRows.length})
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* WITHDRAW / DELETE DIALOG */}
-      <Dialog open={!!deleteTarget} onOpenChange={(val) => !val && setDeleteTarget(null)}>
-        <DialogContent className="sm:max-w-[420px]">
-          <DialogHeader>
-            <DialogTitle>Rút học sinh khỏi lớp</DialogTitle>
-            <DialogDescription>
-              Bạn có chắc chắn muốn rút học sinh <strong>{deleteTarget?.name}</strong> khỏi lớp? Toàn bộ hồ sơ và dữ liệu chuyên cần, đánh giá lịch sử vẫn được lưu trữ an toàn trong hệ thống.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)}>Hủy</Button>
-            <Button variant="destructive" size="sm" onClick={handleDeleteStudent} className="cursor-pointer">
-              Xác nhận rút học sinh
+              {importing ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} Xác nhận import {importRows.length} HS
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1196,7 +1669,7 @@ Trần Thị Bình	HS002	Nữ	25/08/2016	Trần Văn Cường	0912345678	Tiếp 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// STUDENT DETAIL VIEW WITH 6 LAZY-LOADED TABS
+// STUDENT DETAIL 360 VIEW
 // ═══════════════════════════════════════════════════════════════════════════
 
 function StudentDetailView({
@@ -1207,6 +1680,7 @@ function StudentDetailView({
   onOpenEdit,
   onOpenTransfer,
   onOpenDelete,
+  onOpenQuickAssess,
 }: {
   student: StudentRecord
   classes: ClassRecord[]
@@ -1215,6 +1689,7 @@ function StudentDetailView({
   onOpenEdit: () => void
   onOpenTransfer: () => void
   onOpenDelete: () => void
+  onOpenQuickAssess: () => void
 }) {
   const [activeTab, setActiveTab] = useState('overview')
 
@@ -1241,6 +1716,11 @@ function StudentDetailView({
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900">{student.name}</h2>
                 <Badge variant={statusVariant(student.status)} className="text-xs">{student.status}</Badge>
+                {((student as any).isNeedSupport || (student as any).needsSupport || student.status === 'Cần cố gắng') && (
+                  <Badge variant="destructive" className="text-xs bg-rose-50 text-rose-700 border-rose-200">
+                    Cần hỗ trợ
+                  </Badge>
+                )}
               </div>
               <p className="text-xs sm:text-sm text-slate-500 mt-1">
                 Lớp: <strong className="text-slate-800">{(student as any).className || student.grade}</strong> · Mã HS:{' '}
@@ -1250,6 +1730,9 @@ function StudentDetailView({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            <Button size="sm" onClick={onOpenQuickAssess} className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs h-9 gap-1.5 shadow-sm cursor-pointer">
+              <ClipboardCheck className="size-3.5" /> Nhập đánh giá
+            </Button>
             <Button variant="outline" size="sm" onClick={onOpenEdit} className="text-xs h-9 gap-1.5 cursor-pointer">
               <Edit2 className="size-3.5" /> Sửa hồ sơ
             </Button>
@@ -1263,15 +1746,15 @@ function StudentDetailView({
         </CardContent>
       </Card>
 
-      {/* 6 Tabs */}
+      {/* 6 Tabs for Student 360 */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid grid-cols-3 sm:grid-cols-6 h-auto p-1 bg-slate-100 rounded-xl">
           <TabsTrigger value="overview" className="text-xs py-2 font-medium">Tổng quan</TabsTrigger>
           <TabsTrigger value="attendance" className="text-xs py-2 font-medium">Chuyên cần</TabsTrigger>
           <TabsTrigger value="assessments" className="text-xs py-2 font-medium">Đánh giá</TabsTrigger>
-          <TabsTrigger value="enrollments" className="text-xs py-2 font-medium">Lịch sử lớp</TabsTrigger>
-          <TabsTrigger value="worksheets" className="text-xs py-2 font-medium">Phiếu học tập</TabsTrigger>
-          <TabsTrigger value="comments" className="text-xs py-2 font-medium">Ghi chú & Nhận xét</TabsTrigger>
+          <TabsTrigger value="comments" className="text-xs py-2 font-medium">Nhận xét</TabsTrigger>
+          <TabsTrigger value="behaviors" className="text-xs py-2 font-medium">Nề nếp</TabsTrigger>
+          <TabsTrigger value="worksheets" className="text-xs py-2 font-medium">Bài tập</TabsTrigger>
         </TabsList>
 
         {/* TAB 1: TỔNG QUAN */}
@@ -1289,19 +1772,19 @@ function StudentDetailView({
           <StudentTabAssessments studentId={student.id} />
         </TabsContent>
 
-        {/* TAB 4: LỊCH SỬ LỚP */}
-        <TabsContent value="enrollments" className="mt-5 space-y-5">
-          <StudentTabEnrollments studentId={student.id} />
-        </TabsContent>
-
-        {/* TAB 5: PHIẾU HỌC TẬP */}
-        <TabsContent value="worksheets" className="mt-5 space-y-5">
-          <StudentTabWorksheets student={student} />
-        </TabsContent>
-
-        {/* TAB 6: GHI CHÚ & NHẬN XÉT */}
+        {/* TAB 4: NHẬN XÉT */}
         <TabsContent value="comments" className="mt-5 space-y-5">
           <StudentTabComments student={student} />
+        </TabsContent>
+
+        {/* TAB 5: NỀ NẾP */}
+        <TabsContent value="behaviors" className="mt-5 space-y-5">
+          <StudentTabBehaviors student={student} />
+        </TabsContent>
+
+        {/* TAB 6: BÀI TẬP */}
+        <TabsContent value="worksheets" className="mt-5 space-y-5">
+          <StudentTabWorksheets student={student} />
         </TabsContent>
       </Tabs>
     </div>
@@ -1390,8 +1873,10 @@ function StudentTabOverview({ student }: { student: StudentRecord }) {
               <Badge variant={statusVariant(student.status)} className="text-[10px]">{student.status}</Badge>
             </div>
             <div className="flex justify-between py-1">
-              <span className="text-slate-500">Số nhận xét ghi nhận:</span>
-              <span className="font-bold text-slate-900">{data?.stats?.commentsCount || 0} nhận xét</span>
+              <span className="text-slate-500">Đánh giá gần nhất:</span>
+              <span className="font-semibold text-slate-900">
+                {(student as any).latestAssessment || (student as any).latestAssessmentText || 'Chưa có'}
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -1538,7 +2023,6 @@ function StudentTabAttendance({ studentId }: { studentId: string }) {
   )
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB 3: ĐÁNH GIÁ HỌC SINH (HỒ SƠ HỌC LỰC & SỔ ĐIỂM CÁ NHÂN)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1766,109 +2250,8 @@ function StudentTabAssessments({ studentId }: { studentId: string }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TAB 4: LỊCH SỬ LỚP HỌC & ENROLLMENT
+// TAB 4: NHẬN XÉT HỌC SINH
 // ═══════════════════════════════════════════════════════════════════════════
-
-function StudentTabEnrollments({ studentId }: { studentId: string }) {
-  const [enrollments, setEnrollments] = useState<StudentEnrollmentHistoryItem[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let isMounted = true
-    getStudentEnrollments(studentId)
-      .then((res) => {
-        if (isMounted) setEnrollments(res)
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (isMounted) setLoading(false)
-      })
-    return () => {
-      isMounted = false
-    }
-  }, [studentId])
-
-  return (
-    <Card className="border-slate-200 shadow-2xs">
-      <CardHeader className="p-4 sm:p-5 border-b border-slate-100">
-        <CardTitle className="text-base font-bold text-slate-900">
-          Lịch sử phân lớp & Ghi danh ({enrollments.length} lần)
-        </CardTitle>
-        <CardDescription className="text-xs mt-0.5">
-          Ghi nhận quá trình học tập và chuyển lớp qua từng năm học.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="p-4 sm:p-5">
-        {loading ? (
-          <div className="py-16 text-center text-slate-400">
-            <Loader2 className="size-6 animate-spin mx-auto text-teal-600 mb-2" />
-            <p className="text-xs">Đang tải lịch sử lớp...</p>
-          </div>
-        ) : enrollments.length === 0 ? (
-          <p className="text-xs text-slate-400 py-8 text-center">Chưa có lịch sử ghi danh</p>
-        ) : (
-          <div className="space-y-4 relative before:absolute before:left-3.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
-            {enrollments.map((e) => (
-              <div key={e.id} className="relative flex items-start gap-4 pl-8">
-                <div className="absolute left-1.5 top-1 size-4.5 rounded-full border-2 border-white bg-teal-600 shadow-xs" />
-                <div className="flex-1 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-extrabold text-slate-900">
-                      {e.classroom?.name || 'Lớp học'} ({e.classroom?.gradeName || 'Khối'})
-                    </span>
-                    <Badge
-                      className={`text-[10px] ${
-                        e.status === 'ACTIVE'
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                          : e.status === 'TRANSFERRED'
-                          ? 'bg-blue-50 text-blue-800 border-blue-200'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      {e.status === 'ACTIVE' ? 'Đang học' : e.status === 'TRANSFERRED' ? 'Đã chuyển' : 'Đã rút'}
-                    </Badge>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Năm học: <strong>{e.schoolYear?.name || 'Năm học'}</strong> · Ngày ghi danh:{' '}
-                    {new Date(e.enrolledAt).toLocaleDateString('vi-VN')}
-                    {e.leftAt && ` → ${new Date(e.leftAt).toLocaleDateString('vi-VN')}`}
-                  </p>
-                  {e.transferReason && (
-                    <p className="text-[11px] text-slate-600 bg-white p-2 rounded border border-slate-100 mt-2">
-                      Lý do: {e.transferReason}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// TAB 5: PHIẾU HỌC TẬP HỌC SINH
-// ═══════════════════════════════════════════════════════════════════════════
-
-function StudentTabWorksheets({ student }: { student: StudentRecord }) {
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => { getStudentProfile(student.id).then(setData).catch(() => setData(null)).finally(() => setLoading(false)); }, [student.id]);
-  const assignments = data?.recent?.assignments || [];
-  const behaviors = data?.recent?.behaviors || [];
-  return <div className="space-y-4">
-    <Card className="border-slate-200 shadow-2xs">
-      <CardHeader className="p-4 sm:p-5 border-b border-slate-100"><CardTitle className="text-base font-bold">Phiếu đã giao</CardTitle><CardDescription className="text-xs">Dữ liệu lấy từ các WorksheetAssignment đang hoạt động của lớp.</CardDescription></CardHeader>
-      <CardContent className="p-4 sm:p-5">{loading ? <div className="py-8 text-center"><Loader2 className="mx-auto size-5 animate-spin text-teal-600" /></div> : assignments.length === 0 ? <p className="py-8 text-center text-xs text-slate-400">Chưa có phiếu nào được giao cho lớp của học sinh.</p> : <div className="space-y-2">{assignments.map((item:any) => <div key={item.id} className="rounded-lg border border-slate-200 p-3 text-xs"><div className="flex justify-between gap-2"><b>{item.worksheet?.title || 'Phiếu học tập'}</b><Badge variant="outline">{item.status}</Badge></div><p className="mt-1 text-slate-500">Lớp {item.classroom?.name} · Giao {new Date(item.assignedAt).toLocaleDateString('vi-VN')}</p>{item.dueAt && <p className="mt-1 text-amber-700">Hạn: {new Date(item.dueAt).toLocaleDateString('vi-VN')}</p>}</div>)}</div>}</CardContent>
-    </Card>
-    <Card className="border-slate-200 shadow-2xs">
-      <CardHeader className="p-4 border-b border-slate-100"><CardTitle className="text-sm font-bold">Nề nếp gần đây</CardTitle></CardHeader>
-      <CardContent className="p-4">{behaviors.length === 0 ? <p className="text-center text-xs text-slate-400">Chưa có ghi nhận nề nếp nào.</p> : <div className="space-y-2">{behaviors.map((item:any) => <div key={item.id} className="rounded-lg bg-slate-50 p-3 text-xs"><b>{item.category}</b><span className="ml-2 text-slate-500">{new Date(item.recordDate).toLocaleDateString('vi-VN')}</span><p className="mt-1 text-slate-700">{item.content}</p></div>)}</div>}</CardContent>
-    </Card>
-  </div>
-}
 
 function StudentTabComments({ student }: { student: StudentRecord }) {
   const [comments, setComments] = useState<StudentCommentItem[]>([])
@@ -1982,6 +2365,158 @@ function StudentTabComments({ student }: { student: StudentRecord }) {
             ))
           )}
         </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 5: NỀ NẾP & HÀNH VI (STUDENT BEHAVIOR RECORDS)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function StudentTabBehaviors({ student }: { student: StudentRecord }) {
+  const [profileData, setProfileData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let isMounted = true
+    getStudentProfile(student.id)
+      .then((res) => {
+        if (isMounted) setProfileData(res)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (isMounted) setLoading(false)
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [student.id])
+
+  const behaviors = profileData?.recent?.behaviors || []
+
+  return (
+    <Card className="border-slate-200 shadow-2xs">
+      <CardHeader className="p-4 sm:p-5 border-b border-slate-100">
+        <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+          <ShieldAlert className="size-4 text-amber-600" /> Nhật ký nề nếp & Tác phong ({behaviors.length} ghi nhận)
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Theo dõi ý thức kỷ luật, tinh thần tự giác và các hoạt động rèn luyện của học sinh.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-4 sm:p-5">
+        {loading ? (
+          <div className="py-12 text-center text-slate-400">
+            <Loader2 className="size-5 animate-spin mx-auto text-teal-600 mb-1" />
+            <p className="text-xs">Đang tải nhật ký nề nếp...</p>
+          </div>
+        ) : behaviors.length === 0 ? (
+          <p className="text-xs text-slate-400 py-8 text-center">Học sinh có nề nếp tốt, chưa có ghi nhận cần lưu ý.</p>
+        ) : (
+          <div className="space-y-3">
+            {behaviors.map((item: any) => (
+              <div key={item.id} className="rounded-xl border border-slate-200 p-3.5 bg-slate-50/50 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] font-bold ${
+                        item.level === 'POSITIVE'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : item.level === 'REMINDER'
+                          ? 'bg-amber-50 text-amber-700 border-amber-200'
+                          : 'bg-rose-50 text-rose-700 border-rose-200'
+                      }`}
+                    >
+                      {item.level === 'POSITIVE' ? 'Khen ngợi' : item.level === 'REMINDER' ? 'Nhắc nhở' : 'Cần lưu ý'}
+                    </Badge>
+                    <span className="font-bold text-xs text-slate-800">{item.category}</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400">
+                    {new Date(item.recordDate).toLocaleDateString('vi-VN')}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-700 leading-relaxed">{item.content}</p>
+                {item.resolution && (
+                  <p className="text-[11px] text-teal-700 bg-white p-2 rounded-lg border border-slate-100">
+                    <strong>Biện pháp:</strong> {item.resolution}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 6: PHIẾU HỌC TẬP & BÀI TẬP (WORKSHEET ASSIGNMENTS)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function StudentTabWorksheets({ student }: { student: StudentRecord }) {
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let isMounted = true
+    getStudentProfile(student.id)
+      .then((res) => {
+        if (isMounted) setData(res)
+      })
+      .catch(() => setData(null))
+      .finally(() => {
+        if (isMounted) setLoading(false)
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [student.id])
+
+  const assignments = data?.recent?.assignments || []
+
+  return (
+    <Card className="border-slate-200 shadow-2xs">
+      <CardHeader className="p-4 sm:p-5 border-b border-slate-100">
+        <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+          <BookOpen className="size-4 text-teal-600" /> Phiếu học tập & Bài tập giao lớp ({assignments.length} bài)
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Dữ liệu lấy từ các nhiệm vụ học tập của lớp {(student as any).className || student.grade}.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-4 sm:p-5">
+        {loading ? (
+          <div className="py-8 text-center">
+            <Loader2 className="mx-auto size-5 animate-spin text-teal-600" />
+            <p className="text-xs text-slate-400 mt-1">Đang tải phiếu học tập...</p>
+          </div>
+        ) : assignments.length === 0 ? (
+          <p className="py-8 text-center text-xs text-slate-400">Chưa có phiếu học tập nào được giao cho lớp của học sinh.</p>
+        ) : (
+          <div className="space-y-2.5">
+            {assignments.map((item: any) => (
+              <div key={item.id} className="rounded-xl border border-slate-200 p-3.5 bg-slate-50/50 text-xs space-y-1">
+                <div className="flex justify-between items-start gap-2">
+                  <b className="text-slate-900 font-bold text-sm">{item.worksheet?.title || 'Phiếu học tập'}</b>
+                  <Badge variant="outline" className="text-[10px] font-semibold bg-white">
+                    {item.status === 'ASSIGNED' ? 'Đã giao' : item.status === 'COMPLETED' ? 'Đã thu' : item.status}
+                  </Badge>
+                </div>
+                <p className="text-slate-500 text-[11px]">
+                  Lớp {item.classroom?.name} · Ngày giao: {new Date(item.assignedAt).toLocaleDateString('vi-VN')}
+                </p>
+                {item.dueAt && (
+                  <p className="text-amber-700 font-medium text-[11px]">
+                    Hạn nộp: {new Date(item.dueAt).toLocaleDateString('vi-VN')}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   )
