@@ -7,7 +7,7 @@ import {
   Plus, Search, Settings, Sparkles, Users, X, ArrowUpRight, CircleHelp, School, Send,
   SlidersHorizontal, Flame, UserRound, ChevronRight, ChevronLeft, Calendar, BookMarked, LogIn, LogOut, KeyRound,
   Loader2, Copy, Bookmark, BookmarkPlus, HelpCircle, Gamepad2, FileQuestion, MessageSquarePlus, Shield,
-  Edit2, Trash2, Paperclip, Activity, History
+  Edit2, Trash2, Paperclip, Activity, History, RefreshCw
 } from 'lucide-react'
 import { navItems } from '@/lib/mock-data'
 import { LessonView } from '@/components/lesson-editor'
@@ -1560,8 +1560,17 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
         },
       ])
     } catch (err: any) {
-      toast.error(err?.message || 'Không thể tạo nội dung lúc này. Vui lòng thử lại.')
-      setMessages((m) => [...m, { from: 'ai', text: 'Không thể tạo nội dung lúc này. Vui lòng kiểm tra lại kết nối hoặc thử lại sau.' }])
+      const errMsg = err?.message || 'Dịch vụ AI đang tạm quá tải. Vui lòng thử lại sau.'
+      toast.error(errMsg)
+      setMessages((m) => [
+        ...m,
+        {
+          from: 'ai',
+          text: errMsg,
+          isError: true,
+          retry: () => handleCreateLessonPlan(subject, lessonTitle),
+        },
+      ])
     } finally {
       setLoading(false)
     }
@@ -1588,8 +1597,17 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
         },
       ])
     } catch (err: any) {
-      toast.error(err?.message || 'Không thể tạo nội dung lúc này. Vui lòng thử lại.')
-      setMessages((m) => [...m, { from: 'ai', text: 'Không thể tạo nội dung lúc này. Vui lòng thử lại.' }])
+      const errMsg = err?.message || 'Dịch vụ AI đang tạm quá tải. Vui lòng thử lại sau.'
+      toast.error(errMsg)
+      setMessages((m) => [
+        ...m,
+        {
+          from: 'ai',
+          text: errMsg,
+          isError: true,
+          retry: () => handleCreateActivity(actionTitle, activityType, requirement),
+        },
+      ])
     } finally {
       setLoading(false)
     }
@@ -1615,8 +1633,17 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
         },
       ])
     } catch (err: any) {
-      toast.error(err?.message || 'Không thể tạo nội dung lúc này. Vui lòng thử lại.')
-      setMessages((m) => [...m, { from: 'ai', text: 'Không thể tạo nội dung lúc này. Vui lòng thử lại.' }])
+      const errMsg = err?.message || 'Dịch vụ AI đang tạm quá tải. Vui lòng thử lại sau.'
+      toast.error(errMsg)
+      setMessages((m) => [
+        ...m,
+        {
+          from: 'ai',
+          text: errMsg,
+          isError: true,
+          retry: () => handleCreateWorksheet(),
+        },
+      ])
     } finally {
       setLoading(false)
     }
@@ -1641,8 +1668,17 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
         },
       ])
     } catch (err: any) {
-      toast.error(err?.message || 'Không thể tạo nội dung lúc này. Vui lòng thử lại.')
-      setMessages((m) => [...m, { from: 'ai', text: 'Không thể tạo nội dung lúc này. Vui lòng thử lại.' }])
+      const errMsg = err?.message || 'Dịch vụ AI đang tạm quá tải. Vui lòng thử lại sau.'
+      toast.error(errMsg)
+      setMessages((m) => [
+        ...m,
+        {
+          from: 'ai',
+          text: errMsg,
+          isError: true,
+          retry: () => handleCreateComments(),
+        },
+      ])
     } finally {
       setLoading(false)
     }
@@ -1685,12 +1721,15 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
         },
       ])
     } catch (err: any) {
-      toast.error(err?.message || 'Không thể gửi tin nhắn đến Trợ lý AI.')
+      const errMsg = err?.message || 'Dịch vụ AI đang tạm quá tải. Vui lòng thử lại sau.'
+      toast.error(errMsg)
       setMessages((m) => [
         ...m,
         {
           from: 'ai',
-          text: 'Rất tiếc, đã có lỗi xảy ra khi xử lý yêu cầu của thầy/cô. Vui lòng kiểm tra lại kết nối mạng hoặc thử lại.',
+          text: errMsg,
+          isError: true,
+          retry: () => handleCustomSend(query),
         },
       ])
     } finally {
@@ -1821,7 +1860,21 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
                     {m.from === 'ai' ? <Sparkles className="size-4" /> : <UserRound className="size-4" />}
                   </span>
                   <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-6 ${m.from === 'ai' ? 'rounded-tl-sm bg-slate-50 text-slate-700' : 'rounded-tr-sm bg-teal-600 text-white'}`}>
-                    <p className="whitespace-pre-line">{m.text}</p>
+                    <p className={`whitespace-pre-line ${m.isError ? 'text-red-700 font-medium' : ''}`}>{m.text}</p>
+
+                    {m.isError && m.retry && (
+                      <div className="mt-2.5 flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={loading}
+                          onClick={m.retry}
+                          className="h-7 border-red-200 bg-red-50 text-xs font-medium text-red-800 hover:bg-red-100"
+                        >
+                          <RefreshCw className="mr-1.5 size-3" /> Thử lại
+                        </Button>
+                      </div>
+                    )}
 
                     {/* Lesson Plan Card */}
                     {m.payload?.type === 'lesson-plan' && m.payload.data && (
