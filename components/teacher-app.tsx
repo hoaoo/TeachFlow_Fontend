@@ -1806,7 +1806,7 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
               <div>
                 <b className="block text-sm text-slate-800">TeachFlow AI · Google Gemini</b>
                 <span className="flex items-center gap-1.5 text-xs text-teal-600">
-                  <span className="size-1.5 rounded-full bg-teal-500" /> Đang trực tuyến (Gemini 2.5 Flash)
+                  <span className="size-1.5 rounded-full bg-teal-500" /> Đang trực tuyến (Google Gemini)
                 </span>
               </div>
             </div>

@@ -189,7 +189,7 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
 
   const handleApplyAiSummary = () => {
     if (activeTab === 'monthly') {
-      if (aiStrengths) setMonthlyAchievements(aiStrengths);
+      if (aiStrengths) setMonthlyHighlights(aiStrengths);
       if (aiConcerns) setMonthlyLimitations(aiConcerns);
       if (aiNextSteps) setMonthlyNextPlan(aiNextSteps);
       setMonthlyIsDirty(true);
