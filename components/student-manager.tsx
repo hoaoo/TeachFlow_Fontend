@@ -56,7 +56,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
 import {
-  ArrowLeft, BarChart3, CalendarCheck2, Check, CheckCircle2, ChevronRight, Clock,
+  ArrowLeft, BarChart3, CalendarCheck2, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock,
   Copy, Edit2, Eye, FileSpreadsheet, FileText, Filter, GraduationCap, Heart,
   History, LayoutGrid, Loader2, MessageSquare, MoreVertical, Plus, RefreshCw,
   Search, Sparkles, Trash2, TrendingUp, UploadCloud, User, UserPlus, Users,
@@ -79,12 +79,11 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Filters & Pagination State
+  // Filter States
+  const [search, setSearch] = useState('')
   const [classes, setClasses] = useState<ClassRecord[]>([])
   const [schoolYears, setSchoolYears] = useState<SchoolYearOption[]>([])
   const [grades, setGrades] = useState<GradeOption[]>([])
-
-  const [search, setSearch] = useState('')
   const [selectedClassId, setSelectedClassId] = useState<string>('ALL')
   const [selectedGradeId, setSelectedGradeId] = useState<string>('ALL')
   const [selectedSchoolYearId, setSelectedSchoolYearId] = useState<string>('ALL')
@@ -92,6 +91,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
   const [selectedSupportStatus, setSelectedSupportStatus] = useState<string>('ALL')
   const [selectedSort, setSelectedSort] = useState<string>('nameAsc')
   const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState<number>(20)
   const [totalPages, setTotalPages] = useState(1)
   const [totalItems, setTotalItems] = useState(0)
 
@@ -209,6 +209,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
       supportStatus?: string
       sort?: string
       page?: number
+      pageSize?: number
     }) => {
       setLoading(true)
       setError(null)
@@ -222,13 +223,13 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
           supportStatus: params?.supportStatus ?? (selectedSupportStatus !== 'ALL' ? selectedSupportStatus : undefined),
           sort: params?.sort ?? selectedSort,
           page: params?.page ?? currentPage,
-          pageSize: 20,
+          pageSize: params?.pageSize ?? pageSize,
         }
 
         const res = await getStudents(queryParams)
-        setStudents(res.items)
+        setStudents(res.items || [])
         setSummary(res.summary)
-        setTotalItems(res.totalItems)
+        setTotalItems(res.totalItems || 0)
         setTotalPages(res.totalPages || 1)
         setCurrentPage(res.page || 1)
         setSelectedRowIds(new Set())
@@ -238,7 +239,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
         setLoading(false)
       }
     },
-    [search, selectedClassId, selectedGradeId, selectedSchoolYearId, selectedStatus, selectedSupportStatus, selectedSort, currentPage],
+    [search, selectedClassId, selectedGradeId, selectedSchoolYearId, selectedStatus, selectedSupportStatus, selectedSort, currentPage, pageSize],
   )
 
   useEffect(() => {
@@ -256,7 +257,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
     }
   }, [loadStudentsData, loadOptions])
 
-  // Handlers for Filters
+  // Handlers for Filters - Reset to page 1 on filter changes
   const handleSearchChange = (kw: string) => {
     setSearch(kw)
     setCurrentPage(1)
@@ -296,6 +297,18 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
   const handleSortChange = (sort: string) => {
     setSelectedSort(sort)
     loadStudentsData({ sort })
+  }
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages || newPage === currentPage) return
+    setCurrentPage(newPage)
+    loadStudentsData({ page: newPage })
+  }
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize)
+    setCurrentPage(1)
+    loadStudentsData({ page: 1, pageSize: newSize })
   }
 
   // Export XLSX Handler
@@ -742,7 +755,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
         />
       ) : (
         /* DIRECTORY VIEW */
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 space-y-6">
+        <div className="w-full space-y-6">
           {/* Top Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -1014,169 +1027,245 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                   </div>
                 </div>
               ) : (
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
-                    <tr>
-                      <th className="py-3 px-3 w-10 text-center">
-                        <button
-                          type="button"
-                          onClick={handleToggleSelectAllStudents}
-                          className="text-slate-400 hover:text-teal-600 transition"
-                        >
-                          {selectedRowIds.size === students.length && students.length > 0 ? (
-                            <CheckSquare className="size-4 text-teal-600" />
-                          ) : (
-                            <Square className="size-4" />
-                          )}
-                        </button>
-                      </th>
-                      <th className="py-3 px-3 w-10 text-center">STT</th>
-                      <th className="py-3 px-4">Học sinh</th>
-                      <th className="py-3 px-3">Mã HS</th>
-                      <th className="py-3 px-3">Lớp</th>
-                      <th className="py-3 px-3">Khối</th>
-                      <th className="py-3 px-3">Ngày sinh</th>
-                      <th className="py-3 px-3">Trạng thái</th>
-                      <th className="py-3 px-3">Chuyên cần</th>
-                      <th className="py-3 px-3">Đánh giá gần nhất</th>
-                      <th className="py-3 px-3">Hỗ trợ</th>
-                      <th className="py-3 px-4 text-right">Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {students.map((s, idx) => {
-                      const isSelected = selectedRowIds.has(s.id)
-                      const isSupportNeeded =
-                        (s as any).isNeedSupport ||
-                        (s as any).needsSupport ||
-                        s.status === 'Cần cố gắng' ||
-                        (s.attendance !== null && s.attendance !== undefined && s.attendance < 80)
-                      return (
-                        <tr key={s.id} className={`hover:bg-slate-50/60 transition-colors ${isSelected ? 'bg-teal-50/40' : ''}`}>
-                          <td className="py-3 px-3 text-center">
+                <div className="flex flex-col">
+                  <div className="overflow-x-auto min-w-full">
+                    <table className="w-full text-xs text-left min-w-[960px]">
+                      <thead className="bg-slate-50/90 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
+                        <tr>
+                          <th className="py-3 px-3 w-10 text-center">
                             <button
                               type="button"
-                              onClick={() => handleToggleSelectStudent(s.id)}
+                              onClick={handleToggleSelectAllStudents}
                               className="text-slate-400 hover:text-teal-600 transition"
                             >
-                              {isSelected ? (
+                              {selectedRowIds.size === students.length && students.length > 0 ? (
                                 <CheckSquare className="size-4 text-teal-600" />
                               ) : (
                                 <Square className="size-4" />
                               )}
                             </button>
-                          </td>
-                          <td className="py-3 px-3 text-center font-bold text-slate-400">
-                            {(currentPage - 1) * 20 + idx + 1}
-                          </td>
-                          <td className="py-3 px-4">
-                            <button
-                              onClick={() => setSelectedStudentId(s.id)}
-                              className="flex items-center gap-2.5 text-left group cursor-pointer"
-                            >
-                              <Avatar className="size-8.5 border border-teal-100">
-                                <AvatarFallback className={s.color || 'bg-teal-100 text-teal-700 font-bold text-xs'}>
-                                  {s.initials}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <p className="font-bold text-slate-900 group-hover:text-teal-700 transition-colors">
-                                  {s.name}
-                                </p>
-                                <p className="text-[10px] text-slate-400">
-                                  {s.guardian || s.parentName} ({s.phone || s.parentPhone})
-                                </p>
-                              </div>
-                            </button>
-                          </td>
-                          <td className="py-3 px-3 font-mono font-semibold text-slate-700">
-                            {s.studentCode || '—'}
-                          </td>
-                          <td className="py-3 px-3">
-                            <span className="font-semibold text-slate-900">
-                              {(s as any).className || s.grade || '—'}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3 text-slate-600">
-                            {(s as any).gradeName || '—'}
-                          </td>
-                          <td className="py-3 px-3 text-slate-600">{s.dob}</td>
-                          <td className="py-3 px-3">
-                            <Badge variant={statusVariant(s.status)} className="text-[10px]">
-                              {s.status}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-3 font-bold text-teal-700">
-                            {s.attendance !== null && s.attendance !== undefined ? `${s.attendance}%` : '—'}
-                          </td>
-                          <td className="py-3 px-3">
-                            <span className="font-medium text-slate-700 text-[11px]">
-                              {(s as any).latestAssessment || (s as any).latestAssessmentText || 'Chưa có'}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3">
-                            {isSupportNeeded ? (
-                              <Badge variant="destructive" className="text-[10px] bg-rose-50 text-rose-700 border-rose-200">
-                                Cần hỗ trợ
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
-                                Bình thường
-                              </Badge>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setSelectedStudentId(s.id)}
-                                title="Xem hồ sơ 360"
-                                className="h-7 px-2 text-slate-600 hover:text-teal-700 hover:bg-teal-50 text-xs font-semibold cursor-pointer"
-                              >
-                                <Eye className="size-3.5 mr-1" /> 360°
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => openQuickAssessmentModal([s])}
-                                title="Nhập đánh giá nhanh"
-                                className="h-7 px-2 text-teal-700 hover:text-teal-800 hover:bg-teal-50 text-xs font-semibold cursor-pointer"
-                              >
-                                <ClipboardCheck className="size-3.5 mr-1" /> Đánh giá
-                              </Button>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon-sm" className="size-7 text-slate-400 hover:text-slate-700 cursor-pointer">
-                                    <MoreVertical className="size-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-44 text-xs">
-                                  <DropdownMenuItem onClick={() => setSelectedStudentId(s.id)}>
-                                    <Eye className="size-3.5 mr-2" /> Xem hồ sơ chi tiết
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => openQuickAssessmentModal([s])}>
-                                    <ClipboardCheck className="size-3.5 mr-2" /> Nhập đánh giá
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => openEditModal(s)}>
-                                    <Edit2 className="size-3.5 mr-2" /> Chỉnh sửa hồ sơ
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => openTransferModal(s)}>
-                                    <ArrowRightLeft className="size-3.5 mr-2" /> Chuyển lớp
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem onClick={() => setDeleteTarget(s)} className="text-rose-600">
-                                    <Trash2 className="size-3.5 mr-2" /> Rút khỏi lớp
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </td>
+                          </th>
+                          <th className="py-3 px-3 w-10 text-center">STT</th>
+                          <th className="py-3 px-4 min-w-[200px]">Học sinh</th>
+                          <th className="py-3 px-3">Mã HS</th>
+                          <th className="py-3 px-3">Lớp</th>
+                          <th className="py-3 px-3">Khối</th>
+                          <th className="py-3 px-3">Ngày sinh</th>
+                          <th className="py-3 px-3">Trạng thái</th>
+                          <th className="py-3 px-3">Chuyên cần</th>
+                          <th className="py-3 px-3">Đánh giá gần nhất</th>
+                          <th className="py-3 px-3">Hỗ trợ</th>
+                          <th className="py-3 px-4 text-right">Thao tác</th>
                         </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {students.map((s, idx) => {
+                          const isSelected = selectedRowIds.has(s.id)
+                          const isSupportNeeded =
+                            (s as any).isNeedSupport ||
+                            (s as any).needsSupport ||
+                            s.status === 'Cần cố gắng' ||
+                            (s.attendance !== null && s.attendance !== undefined && s.attendance < 80)
+                          return (
+                            <tr key={s.id} className={`hover:bg-slate-50/60 transition-colors ${isSelected ? 'bg-teal-50/40' : ''}`}>
+                              <td className="py-3 px-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleSelectStudent(s.id)}
+                                  className="text-slate-400 hover:text-teal-600 transition"
+                                >
+                                  {isSelected ? (
+                                    <CheckSquare className="size-4 text-teal-600" />
+                                  ) : (
+                                    <Square className="size-4" />
+                                  )}
+                                </button>
+                              </td>
+                              <td className="py-3 px-3 text-center font-bold text-slate-400">
+                                {(currentPage - 1) * pageSize + idx + 1}
+                              </td>
+                              <td className="py-3 px-4">
+                                <button
+                                  onClick={() => setSelectedStudentId(s.id)}
+                                  className="flex items-center gap-2.5 text-left group cursor-pointer"
+                                >
+                                  <Avatar className="size-8.5 border border-teal-100">
+                                    <AvatarFallback className={s.color || 'bg-teal-100 text-teal-700 font-bold text-xs'}>
+                                      {s.initials}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <p className="font-bold text-slate-900 group-hover:text-teal-700 transition-colors leading-tight">
+                                      {s.name}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400 truncate">
+                                      {s.guardian || s.parentName || 'Chưa cập nhật PH'} {s.phone || s.parentPhone ? `(${s.phone || s.parentPhone})` : ''}
+                                    </p>
+                                  </div>
+                                </button>
+                              </td>
+                              <td className="py-3 px-3 font-mono font-semibold text-slate-700">
+                                {s.studentCode || '—'}
+                              </td>
+                              <td className="py-3 px-3">
+                                <span className="font-semibold text-slate-900">
+                                  {(s as any).className || s.grade || '—'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 text-slate-600">
+                                {(s as any).gradeName || '—'}
+                              </td>
+                              <td className="py-3 px-3 text-slate-600">{s.dob || '—'}</td>
+                              <td className="py-3 px-3">
+                                <Badge variant={statusVariant(s.status)} className="text-[10px]">
+                                  {s.status}
+                                </Badge>
+                              </td>
+                              <td className="py-3 px-3 font-bold text-teal-700">
+                                {s.attendance !== null && s.attendance !== undefined ? `${s.attendance}%` : '—'}
+                              </td>
+                              <td className="py-3 px-3">
+                                <span className="font-medium text-slate-700 text-[11px]">
+                                  {(s as any).latestAssessment || (s as any).latestAssessmentText || 'Chưa có'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3">
+                                {isSupportNeeded ? (
+                                  <Badge variant="destructive" className="text-[10px] bg-rose-50 text-rose-700 border-rose-200">
+                                    Cần hỗ trợ
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                                    Bình thường
+                                  </Badge>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <div className="flex items-center justify-end gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setSelectedStudentId(s.id)}
+                                    title="Xem hồ sơ 360"
+                                    className="h-7 px-2 text-slate-600 hover:text-teal-700 hover:bg-teal-50 text-xs font-semibold cursor-pointer"
+                                  >
+                                    <Eye className="size-3.5 mr-1" /> 360°
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => openQuickAssessmentModal([s])}
+                                    title="Nhập đánh giá nhanh"
+                                    className="h-7 px-2 text-teal-700 hover:text-teal-800 hover:bg-teal-50 text-xs font-semibold cursor-pointer"
+                                  >
+                                    <ClipboardCheck className="size-3.5 mr-1" /> Đánh giá
+                                  </Button>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon-sm" className="size-7 text-slate-400 hover:text-slate-700 cursor-pointer">
+                                        <MoreVertical className="size-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-44 text-xs">
+                                      <DropdownMenuItem onClick={() => setSelectedStudentId(s.id)}>
+                                        <Eye className="size-3.5 mr-2" /> Xem hồ sơ chi tiết
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => openQuickAssessmentModal([s])}>
+                                        <ClipboardCheck className="size-3.5 mr-2" /> Nhập đánh giá
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => openEditModal(s)}>
+                                        <Edit2 className="size-3.5 mr-2" /> Chỉnh sửa hồ sơ
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => openTransferModal(s)}>
+                                        <ArrowRightLeft className="size-3.5 mr-2" /> Chuyển lớp
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem onClick={() => setDeleteTarget(s)} className="text-rose-600">
+                                        <Trash2 className="size-3.5 mr-2" /> Rút khỏi lớp
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Real Pagination Footer */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3.5 border-t border-slate-100 bg-slate-50/70 text-xs text-slate-600">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span>
+                        Hiển thị <strong>{totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalItems)}</strong> / <strong>{totalItems}</strong> học sinh
+                      </span>
+                      <span className="text-slate-300 hidden sm:inline">|</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-500 text-[11px]">Hiển thị:</span>
+                        <select
+                          aria-label="Số dòng mỗi trang"
+                          value={pageSize}
+                          onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                          className="h-7 px-2 bg-white border border-slate-200 rounded-md text-xs font-semibold focus:border-teal-500 outline-none cursor-pointer"
+                        >
+                          <option value={20}>20 học sinh / trang</option>
+                          <option value={50}>50 học sinh / trang</option>
+                          <option value={100}>100 học sinh / trang</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage <= 1 || loading}
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        className="h-7 px-2.5 text-xs font-medium gap-1 text-slate-600 cursor-pointer disabled:opacity-40"
+                      >
+                        <ChevronLeft className="size-3.5" /> Trước
+                      </Button>
+
+                      {/* Page number buttons */}
+                      {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                        let p = i + 1
+                        if (totalPages > 5) {
+                          if (currentPage > 3 && currentPage < totalPages - 2) {
+                            p = currentPage - 2 + i
+                          } else if (currentPage >= totalPages - 2) {
+                            p = totalPages - 4 + i
+                          }
+                        }
+                        return (
+                          <Button
+                            key={p}
+                            variant={currentPage === p ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => handlePageChange(p)}
+                            className={`h-7 w-7 p-0 text-xs font-bold cursor-pointer ${
+                              currentPage === p
+                                ? 'bg-teal-600 hover:bg-teal-700 text-white'
+                                : 'text-slate-600 hover:bg-slate-100'
+                            }`}
+                          >
+                            {p}
+                          </Button>
+                        )
+                      })}
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage >= totalPages || loading}
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        className="h-7 px-2.5 text-xs font-medium gap-1 text-slate-600 cursor-pointer disabled:opacity-40"
+                      >
+                        Sau <ChevronRight className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>

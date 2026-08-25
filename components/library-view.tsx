@@ -166,7 +166,7 @@ export function LibraryView({ onNavigate }: { onNavigate?: (view: any) => void }
   }
 
   return (
-    <div className="mx-auto max-w-6xl flex flex-col gap-6">
+    <div className="w-full flex flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>

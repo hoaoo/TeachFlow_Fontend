@@ -315,7 +315,7 @@ export function WorkspaceModule({ view }: { view: View }) {
   }
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <div className="w-full flex flex-col gap-6">
       {notice && (
         <div
           role="status"

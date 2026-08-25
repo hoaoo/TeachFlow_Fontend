@@ -191,12 +191,25 @@ export async function apiClient<T = any>(
         errorData = { message: response.statusText };
       }
 
-      const errorMessage =
+      let rawMessage =
         Array.isArray(errorData.message)
           ? errorData.message.join(', ')
-          : errorData.message || `Lỗi ${response.status}: ${response.statusText}`;
+          : errorData.message || (response.status === 404 ? 'Không tìm thấy dữ liệu yêu cầu' : `Lỗi ${response.status}: ${response.statusText}`);
 
-      throw new ApiError(errorMessage, response.status, errorData.error, errorData);
+      // Map any raw English or fallback error messages to clear Vietnamese
+      if (rawMessage.toLowerCase().includes('no translation found') || rawMessage.toLowerCase().includes('oops')) {
+        rawMessage = 'Không tìm thấy dữ liệu yêu cầu hoặc thao tác không hợp lệ.';
+      } else if (rawMessage === 'Unauthorized' || rawMessage === 'jwt expired') {
+        rawMessage = 'Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.';
+      } else if (rawMessage === 'Forbidden' || rawMessage === 'Forbidden resource') {
+        rawMessage = 'Bạn không có quyền thực hiện thao tác này.';
+      } else if (rawMessage === 'Not Found') {
+        rawMessage = 'Không tìm thấy tài nguyên yêu cầu.';
+      } else if (rawMessage === 'Internal server error') {
+        rawMessage = 'Hệ thống đang bận. Vui lòng thử lại sau.';
+      }
+
+      throw new ApiError(rawMessage, response.status, errorData.error, errorData);
     }
 
     // Handle 204 No Content
@@ -209,7 +222,11 @@ export async function apiClient<T = any>(
     if (error instanceof ApiError) {
       throw error;
     }
-    throw new ApiError((error as Error).message || 'Không thể kết nối đến máy chủ', 500);
+    let msg = (error as Error).message || 'Không thể kết nối đến máy chủ';
+    if (msg.toLowerCase().includes('no translation found') || msg.toLowerCase().includes('oops')) {
+      msg = 'Không tìm thấy dữ liệu yêu cầu.';
+    }
+    throw new ApiError(msg, 500);
   }
 }
 

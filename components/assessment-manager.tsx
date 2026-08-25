@@ -309,58 +309,60 @@ function GradingDialog({
               Lớp học này chưa có học sinh nào.
             </div>
           ) : (
-            <div className="divide-y border rounded-xl overflow-hidden">
-              <div className="grid grid-cols-[1.5fr_1fr_1fr_2fr] gap-2 p-3 bg-slate-50 text-xs font-semibold text-slate-600">
-                <span>Học sinh</span>
-                <span>Điểm (0-10)</span>
-                <span>Mức đạt</span>
-                <span>Nhận xét sư phạm</span>
-              </div>
-              {students.map((s, idx) => (
-                <div key={s.studentId} className="grid grid-cols-[1.5fr_1fr_1fr_2fr] gap-2 p-3 items-center text-sm hover:bg-slate-50/60 transition">
-                  <span className="font-medium text-slate-800 truncate">{s.studentName}</span>
-                  <div>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="10"
-                      step="0.5"
-                      placeholder="Điểm"
-                      className="h-8 text-xs"
-                      value={s.score}
-                      onChange={(e) => {
-                        const val = e.target.value
-                        setStudents((prev) => prev.map((item, j) => j === idx ? { ...item, score: val } : item))
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <select
-                      className="h-8 w-full rounded-md border bg-background px-2 text-xs"
-                      value={s.level}
-                      onChange={(e) => {
-                        const val = e.target.value
-                        setStudents((prev) => prev.map((item, j) => j === idx ? { ...item, level: val } : item))
-                      }}
-                    >
-                      <option value="EXCELLENT">Tốt (HT Tốt)</option>
-                      <option value="COMPLETED">Đạt (Hoàn thành)</option>
-                      <option value="NEEDS_SUPPORT">Cần cố gắng</option>
-                    </select>
-                  </div>
-                  <div>
-                    <Input
-                      placeholder="Ghi nhận xét..."
-                      className="h-8 text-xs"
-                      value={s.comment}
-                      onChange={(e) => {
-                        const val = e.target.value
-                        setStudents((prev) => prev.map((item, j) => j === idx ? { ...item, comment: val } : item))
-                      }}
-                    />
-                  </div>
+            <div className="border rounded-xl overflow-hidden overflow-x-auto">
+              <div className="min-w-[560px] divide-y">
+                <div className="grid grid-cols-[1.5fr_1fr_1.2fr_2fr] gap-2 p-3 bg-slate-50 text-xs font-semibold text-slate-600">
+                  <span>Học sinh</span>
+                  <span>Điểm (0-10)</span>
+                  <span>Mức đạt</span>
+                  <span>Nhận xét sư phạm</span>
                 </div>
-              ))}
+                {students.map((s, idx) => (
+                  <div key={s.studentId} className="grid grid-cols-[1.5fr_1fr_1.2fr_2fr] gap-2 p-3 items-center text-sm hover:bg-slate-50/60 transition">
+                    <span className="font-medium text-slate-800 break-words leading-tight">{s.studentName}</span>
+                    <div>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="10"
+                        step="0.5"
+                        placeholder="Điểm"
+                        className="h-8 text-xs"
+                        value={s.score}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setStudents((prev) => prev.map((item, j) => j === idx ? { ...item, score: val } : item))
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <select
+                        className="h-8 w-full rounded-md border bg-background px-2 text-xs"
+                        value={s.level}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setStudents((prev) => prev.map((item, j) => j === idx ? { ...item, level: val } : item))
+                        }}
+                      >
+                        <option value="EXCELLENT">Tốt (HT Tốt)</option>
+                        <option value="COMPLETED">Đạt (Hoàn thành)</option>
+                        <option value="NEEDS_SUPPORT">Cần cố gắng</option>
+                      </select>
+                    </div>
+                    <div>
+                      <Input
+                        placeholder="Ghi nhận xét..."
+                        className="h-8 text-xs"
+                        value={s.comment}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setStudents((prev) => prev.map((item, j) => j === idx ? { ...item, comment: val } : item))
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -432,7 +434,7 @@ export function AssessmentManager() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl flex flex-col gap-6">
+    <div className="w-full flex flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>

@@ -299,82 +299,98 @@ export function AttendanceView() {
 
   // ─── Step 2: Mark attendance ──────────────────────────────────────────────
   if (step === 'mark') return (
-    <div className="mx-auto max-w-3xl flex flex-col gap-6">
+    <div className="mx-auto w-full max-w-4xl flex flex-col gap-6 pb-12">
       <div className="flex items-center gap-3">
-        <button onClick={() => setStep('select')} className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50">
+        <button onClick={() => setStep('select')} className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50 cursor-pointer">
           <ChevronLeft className="size-4" />
         </button>
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">
+          <h1 className="text-xl font-bold text-slate-900">
             Điểm danh {selectedClass?.name} — {new Date(selectedDate + 'T00:00:00').toLocaleDateString('vi-VN')}
           </h1>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
             {sessionPeriod === 'MORNING' ? 'Buổi sáng' : 'Buổi chiều'} · {students.length} học sinh
           </p>
         </div>
       </div>
 
       {/* Quick mark all */}
-      <div className="flex flex-wrap gap-2 items-center">
-        <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Đánh dấu tất cả:</span>
-        {(Object.entries(STATUS_LABELS) as Array<[AttendanceStatus, string]>).map(([s, label]) => (
-          <button
-            key={s}
-            onClick={() => markAll(s)}
-            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${STATUS_COLORS[s]}`}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="flex flex-wrap gap-2 items-center p-3.5 bg-slate-100/80 rounded-xl border border-slate-200/80">
+        <span className="text-xs font-bold text-slate-600 uppercase tracking-wider shrink-0">Đánh dấu tất cả:</span>
+        <div className="flex flex-wrap gap-1.5">
+          {(Object.entries(STATUS_LABELS) as Array<[AttendanceStatus, string]>).map(([s, label]) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => markAll(s)}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${STATUS_COLORS[s]} hover:opacity-90 active:scale-95`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Stats bar */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Tổng', value: stats.total, color: 'text-slate-900' },
+          { label: 'Tổng số', value: stats.total, color: 'text-slate-900' },
           { label: 'Có mặt', value: stats.present, color: 'text-teal-700' },
-          { label: 'Đi muộn', value: stats.late, color: 'text-orange-600' },
-          { label: 'Vắng', value: stats.absent, color: 'text-red-600' },
+          { label: 'Đi muộn', value: stats.late, color: 'text-amber-600' },
+          { label: 'Vắng mặt', value: stats.absent, color: 'text-rose-600' },
         ].map(({ label, value, color }) => (
-          <div key={label} className="rounded-xl border border-slate-200 bg-white p-3 text-center shadow-sm">
-            <p className="text-xs text-slate-500">{label}</p>
-            <p className={`text-xl font-bold ${color}`}>{value}</p>
+          <div key={label} className="rounded-xl border border-slate-200 bg-white p-3.5 text-center shadow-xs">
+            <p className="text-xs font-medium text-slate-500">{label}</p>
+            <p className={`text-xl font-bold mt-0.5 ${color}`}>{value}</p>
           </div>
         ))}
       </div>
 
       {/* Student list */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2.5">
         {entries.map((entry, idx) => (
-          <div key={entry.studentId} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="grid size-9 shrink-0 place-items-center rounded-full bg-teal-50 text-sm font-semibold text-teal-700">
-                {idx + 1}
+          <div key={entry.studentId} className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs transition hover:border-slate-300">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {/* Index & Student Name */}
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="grid size-8 sm:size-9 shrink-0 place-items-center rounded-full bg-teal-50 text-xs sm:text-sm font-bold text-teal-700 border border-teal-100">
+                  {idx + 1}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-slate-900 break-words leading-tight">
+                    {entry.studentName}
+                  </p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-800 truncate">{entry.studentName}</p>
-              </div>
-              {/* Status buttons */}
-              <div className="flex gap-1 flex-wrap justify-end">
+
+              {/* Status buttons: Responsive 2x2 grid on mobile (<sm), inline on desktop (sm+) */}
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5 shrink-0">
                 {(Object.entries(STATUS_LABELS) as Array<[AttendanceStatus, string]>).map(([s, label]) => (
                   <button
                     key={s}
+                    type="button"
                     onClick={() => setStatus(entry.studentId, s)}
-                    className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${entry.status === s ? STATUS_COLORS[s] + ' shadow-sm' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'}`}
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-semibold text-center transition cursor-pointer ${
+                      entry.status === s
+                        ? STATUS_COLORS[s] + ' shadow-xs ring-1 ring-teal-600/30 font-bold'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
                   >
                     {label}
                   </button>
                 ))}
               </div>
             </div>
+
+            {/* Note input if absent or late */}
             {(entry.status === 'EXCUSED_ABSENCE' || entry.status === 'UNEXCUSED_ABSENCE' || entry.status === 'LATE') && (
-              <div className="mt-2 ml-12">
+              <div className="mt-3 pt-2.5 border-t border-slate-100 sm:ml-11">
                 <input
                   type="text"
                   value={entry.note}
                   onChange={(e) => setNote(entry.studentId, e.target.value)}
-                  placeholder="Ghi chú lý do..."
-                  className="h-8 w-full rounded-md border bg-slate-50 px-3 text-xs outline-none focus:border-teal-400"
+                  placeholder="Ghi chú lý do vắng / đi muộn..."
+                  className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-xs outline-none focus:border-teal-500 focus:bg-white transition"
                 />
               </div>
             )}
@@ -382,10 +398,21 @@ export function AttendanceView() {
         ))}
       </div>
 
-      {/* Save */}
-      <div className="flex gap-3 justify-end sticky bottom-4">
-        <Button variant="outline" onClick={() => setStep('select')}>Hủy</Button>
-        <Button onClick={saveSession} disabled={saving} className="shadow-md">
+      {/* Save and Cancel Action Bar - In normal document flow, never covering content */}
+      <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-200 bg-white p-4 rounded-xl shadow-xs">
+        <Button
+          variant="outline"
+          size="default"
+          onClick={() => setStep('select')}
+          className="w-full sm:w-auto text-xs sm:text-sm font-semibold cursor-pointer"
+        >
+          Hủy và quay lại
+        </Button>
+        <Button
+          onClick={saveSession}
+          disabled={saving}
+          className="w-full sm:w-auto bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs sm:text-sm gap-2 shadow-xs cursor-pointer"
+        >
           {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
           {editSessionId ? 'Cập nhật điểm danh' : 'Lưu điểm danh'}
         </Button>

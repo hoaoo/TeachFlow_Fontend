@@ -584,7 +584,7 @@ export function WorksheetManager() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl flex flex-col gap-6">
+    <div className="w-full flex flex-col gap-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-teal-600">

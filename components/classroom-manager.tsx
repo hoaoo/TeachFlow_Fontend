@@ -509,7 +509,7 @@ export function ClassroomManager({
         />
       ) : (
         /* 3. DIRECTORY VIEW */
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 space-y-6">
+        <div className="w-full space-y-6">
           {/* Top Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -1342,55 +1342,55 @@ function ClassDetailView({
       </div>
 
       {/* 2. Menu Tab Bar - Normal document flow (không sticky/fixed) */}
-      <div>
+      <div className="w-full">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="w-full max-sm:overflow-x-auto max-sm:no-scrollbar max-sm:pb-1 sm:overflow-visible">
-            <TabsList className="flex sm:grid sm:grid-cols-7 h-auto w-full min-w-max sm:min-w-0 p-1.5 bg-slate-100/90 rounded-xl border border-slate-200/80 gap-1.5 shadow-2xs">
+            <TabsList className="flex sm:grid sm:grid-cols-7 !h-[52px] min-h-[52px] w-full min-w-max sm:min-w-0 p-1.5 bg-slate-100/95 rounded-xl border border-slate-200/90 gap-1.5 shadow-2xs items-center">
               <TabsTrigger
                 value="overview"
-                className="h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+                className="h-10 min-h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:font-bold data-[state=active]:shadow-xs data-[state=active]:border data-[state=active]:border-slate-200/60 text-slate-600 hover:text-slate-900 transition flex items-center justify-center cursor-pointer"
               >
                 <LayoutGrid className="size-3.5 shrink-0" />
                 <span>Tổng quan</span>
               </TabsTrigger>
               <TabsTrigger
                 value="students"
-                className="h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+                className="h-10 min-h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:font-bold data-[state=active]:shadow-xs data-[state=active]:border data-[state=active]:border-slate-200/60 text-slate-600 hover:text-slate-900 transition flex items-center justify-center cursor-pointer"
               >
                 <Users className="size-3.5 shrink-0" />
                 <span>Học sinh</span>
               </TabsTrigger>
               <TabsTrigger
                 value="schedules"
-                className="h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+                className="h-10 min-h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:font-bold data-[state=active]:shadow-xs data-[state=active]:border data-[state=active]:border-slate-200/60 text-slate-600 hover:text-slate-900 transition flex items-center justify-center cursor-pointer"
               >
                 <CalendarDays className="size-3.5 shrink-0" />
                 <span>Lịch dạy</span>
               </TabsTrigger>
               <TabsTrigger
                 value="attendance"
-                className="h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+                className="h-10 min-h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:font-bold data-[state=active]:shadow-xs data-[state=active]:border data-[state=active]:border-slate-200/60 text-slate-600 hover:text-slate-900 transition flex items-center justify-center cursor-pointer"
               >
                 <CalendarCheck2 className="size-3.5 shrink-0" />
                 <span>Điểm danh</span>
               </TabsTrigger>
               <TabsTrigger
                 value="assessments"
-                className="h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+                className="h-10 min-h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:font-bold data-[state=active]:shadow-xs data-[state=active]:border data-[state=active]:border-slate-200/60 text-slate-600 hover:text-slate-900 transition flex items-center justify-center cursor-pointer"
               >
                 <Award className="size-3.5 shrink-0" />
                 <span>Đánh giá</span>
               </TabsTrigger>
               <TabsTrigger
                 value="lesson-plans"
-                className="h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+                className="h-10 min-h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:font-bold data-[state=active]:shadow-xs data-[state=active]:border data-[state=active]:border-slate-200/60 text-slate-600 hover:text-slate-900 transition flex items-center justify-center cursor-pointer"
               >
                 <FileText className="size-3.5 shrink-0" />
                 <span>Giáo án</span>
               </TabsTrigger>
               <TabsTrigger
                 value="statistics"
-                className="h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
+                className="h-10 min-h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:font-bold data-[state=active]:shadow-xs data-[state=active]:border data-[state=active]:border-slate-200/60 text-slate-600 hover:text-slate-900 transition flex items-center justify-center cursor-pointer"
               >
                 <TrendingUp className="size-3.5 shrink-0" />
                 <span>Thống kê</span>
@@ -2097,7 +2097,7 @@ function TabStudents({
             onClick={() => setImportModalOpen(true)}
             className="text-xs h-8.5 gap-1.5 cursor-pointer"
           >
-            <FileSpreadsheet className="size-3.5 text-emerald-600" /> Import Excel
+            <FileSpreadsheet className="size-3.5 text-emerald-600" /> Tải lên file danh sách
           </Button>
           <Button
             size="sm"

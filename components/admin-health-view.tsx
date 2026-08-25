@@ -48,7 +48,7 @@ export function AdminHealthView() {
   const isHealthy = health?.status === 'ok' && health?.database === 'up'
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <div className="w-full flex flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>

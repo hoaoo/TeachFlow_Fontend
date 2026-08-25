@@ -2229,8 +2229,8 @@ export function TeacherApp() {
       <Sidebar active={active} onSelect={handleNavigate} open={menuOpen} onClose={() => setMenuOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col h-[100dvh] max-h-[100dvh] overflow-hidden">
         <Header onMenu={() => setMenuOpen(true)} onOpenLogin={() => setAuthModalOpen(true)} onNavigate={handleNavigate} />
-        <main className="flex-1 min-h-0 overflow-y-auto px-5 py-8 sm:px-8 lg:px-10">
-          <div className="mx-auto max-w-7xl">
+        <main className="flex-1 min-h-0 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
+          <div className="mx-auto w-full max-w-[1600px]">
             {isAdmin ? (
               <GenericView view={active} selectedClassId={selectedClassId} onNavigate={handleNavigate} />
             ) : active === 'Tổng quan' ? (
