@@ -328,8 +328,8 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
     }
   }
 
-  // Multi-select Handlers
-  const handleToggleSelectAll = () => {
+  // Directory Multi-select Handlers
+  const handleToggleSelectAllStudents = () => {
     if (selectedRowIds.size === students.length && students.length > 0) {
       setSelectedRowIds(new Set())
     } else {
@@ -337,7 +337,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
     }
   }
 
-  const handleToggleSelectRow = (id: string) => {
+  const handleToggleSelectStudent = (id: string) => {
     const next = new Set(selectedRowIds)
     if (next.has(id)) next.delete(id)
     else next.add(id)
@@ -1020,7 +1020,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                       <th className="py-3 px-3 w-10 text-center">
                         <button
                           type="button"
-                          onClick={handleToggleSelectAll}
+                          onClick={handleToggleSelectAllStudents}
                           className="text-slate-400 hover:text-teal-600 transition"
                         >
                           {selectedRowIds.size === students.length && students.length > 0 ? (
@@ -1056,7 +1056,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                           <td className="py-3 px-3 text-center">
                             <button
                               type="button"
-                              onClick={() => handleToggleSelectRow(s.id)}
+                              onClick={() => handleToggleSelectStudent(s.id)}
                               className="text-slate-400 hover:text-teal-600 transition"
                             >
                               {isSelected ? (
