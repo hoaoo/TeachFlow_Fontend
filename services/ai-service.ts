@@ -228,3 +228,28 @@ export async function analyzeImportFile(formData: FormData): Promise<{
 
 
 export async function generateHomeroomSummary(payload: { classroomId: string; period: 'WEEK' | 'MONTH'; weekNumber?: number }) { return api.post<any>('/ai/homeroom-summary', payload); }
+
+export async function sendAiChat(payload: {
+  message: string;
+  history?: string;
+  context?: string;
+  file?: File;
+}): Promise<{ reply: string; data?: any }> {
+  try {
+    if (payload.file) {
+      const formData = new FormData();
+      formData.append('message', payload.message);
+      formData.append('file', payload.file);
+      if (payload.history) formData.append('history', payload.history);
+      if (payload.context) formData.append('context', payload.context);
+      return await api.postForm<{ reply: string; data?: any }>('/ai/chat', formData);
+    }
+    return await api.post<{ reply: string; data?: any }>('/ai/chat', {
+      message: payload.message,
+      history: payload.history,
+      context: payload.context,
+    });
+  } catch (error: any) {
+    throw new Error(error?.message || 'Không thể kết nối đến Trợ lý AI. Vui lòng thử lại.');
+  }
+}

@@ -717,7 +717,7 @@ export function WorkspaceModule({ view }: { view: View }) {
                       Kéo thả tập tin vào đây hoặc <span className="text-primary underline">duyệt tệp</span>
                     </p>
                     <p className="text-[11px] text-muted-foreground">
-                      Hỗ trợ PDF, Word, PPTX, Excel, PNG, JPG, MP4 (Tối đa 25MB)
+                      Hỗ trợ PDF, Word, PPTX, Excel, PNG, JPG, MP4 (Tài liệu: 50MB, Trình chiếu: 100MB, Video: 500MB, Ảnh: 20MB)
                     </p>
                   </div>
                 )}

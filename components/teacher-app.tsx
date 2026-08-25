@@ -7,7 +7,7 @@ import {
   Plus, Search, Settings, Sparkles, Users, X, ArrowUpRight, CircleHelp, School, Send,
   SlidersHorizontal, Flame, UserRound, ChevronRight, ChevronLeft, Calendar, BookMarked, LogIn, LogOut, KeyRound,
   Loader2, Copy, Bookmark, BookmarkPlus, HelpCircle, Gamepad2, FileQuestion, MessageSquarePlus, Shield,
-  Edit2, Trash2, Paperclip
+  Edit2, Trash2, Paperclip, Activity, History
 } from 'lucide-react'
 import { navItems } from '@/lib/mock-data'
 import { LessonView } from '@/components/lesson-editor'
@@ -58,6 +58,7 @@ import {
   generateQuestions,
   generateStudentComment,
   analyzeImportFile,
+  sendAiChat,
   type GeneratedActivity,
   type GeneratedLessonPlan,
   type GeneratedWorksheet,
@@ -72,7 +73,6 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { Activity, History } from 'lucide-react'
 
 const iconMap = { LayoutDashboard, CalendarDays, BookOpen, Library, Users, GraduationCap, Files, ClipboardCheck, School, CheckCircle2, Settings, Sparkles, FileText, Bookmark, MessageSquarePlus, Grid2X2 }
 
@@ -99,7 +99,6 @@ type View =
   | 'Quản lý giáo viên'
   | 'Nhật ký hệ thống'
   | 'Sức khỏe hệ thống'
-
 function Sidebar({
   active,
   onSelect,
@@ -166,8 +165,8 @@ function Sidebar({
   return (
     <>
       {open && <button aria-label="Đóng menu" className="fixed inset-0 z-30 bg-slate-950/20 lg:hidden" onClick={onClose} />}
-      <aside className={`fixed inset-y-0 left-0 z-40 flex h-[100dvh] max-h-[100dvh] shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white transition-transform lg:static lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex h-20 items-center gap-3 border-b border-slate-100 px-6">
+      <aside className={`fixed inset-y-0 left-0 z-40 flex h-[100dvh] max-h-[100dvh] w-64 shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white transition-transform lg:static lg:h-[100dvh] lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex h-20 shrink-0 items-center gap-3 border-b border-slate-100 px-6">
           <div className="grid size-10 place-items-center rounded-xl bg-teal-600 text-white shadow-sm">
             {isAdmin ? <Shield className="size-5" /> : <School />}
           </div>
@@ -180,7 +179,7 @@ function Sidebar({
 
         {/* Sidebar Content */}
         {isAdmin ? (
-          <div className="flex-1 overflow-y-auto px-3 py-5">
+          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-5">
             <p className="px-3 pb-3 text-[11px] font-semibold uppercase tracking-widest text-teal-600 flex items-center gap-1.5">
               <Shield className="size-3.5" /> Quản trị hệ thống
             </p>
@@ -216,7 +215,7 @@ function Sidebar({
             </nav>
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto px-3 py-5">
+          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-5">
             <p className="px-3 pb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Workspace</p>
             <nav className="flex flex-col gap-1">
               {navItems.map((item) => {
@@ -285,7 +284,7 @@ function Sidebar({
           </div>
         )}
 
-        <div className="border-t border-slate-100 p-4">
+        <div className="shrink-0 mt-auto border-t border-slate-100 p-4">
           <div className="flex w-full items-center gap-3 rounded-xl p-2 text-left">
             <span className="grid size-9 place-items-center rounded-full bg-teal-100 font-semibold text-teal-700">{initials}</span>
             <span className="min-w-0 flex-1">
@@ -1530,29 +1529,28 @@ type AIMessage = {
 
 function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
   const { user } = useAuth()
-  const teacherName = user?.teacher?.fullName || 'thầy cô'
+  const teacherName = user?.teacher?.fullName || (user?.role === 'ADMIN' ? 'Quản trị viên' : 'thầy/cô')
   const [messages, setMessages] = useState<AIMessage[]>([
     {
       from: 'ai',
-      text: `Chào ${teacherName}! Tôi là Trợ lý AI sư phạm TeachFlow. Tôi có thể hỗ trợ thầy/cô soạn giáo án, thiết kế hoạt động, tạo phiếu học tập, biên soạn câu hỏi hoặc gợi ý nhận xét học sinh. Thầy/cô muốn bắt đầu với nội dung gì?`,
+      text: `Chào ${teacherName}! Tôi là Trợ lý AI sư phạm TeachFlow. Tôi có thể hỗ trợ thầy/cô soạn giáo án, thiết kế hoạt động, tạo phiếu học tập, biên soạn câu hỏi, giải đáp chuyên môn hoặc nhận xét học sinh. Thầy/cô có thể nhập câu hỏi hoặc đính kèm tài liệu (PDF, Word, Excel, ảnh) để phân tích trực tiếp.`,
     },
-  ]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
-  const [attachmentTarget, setAttachmentTarget] = useState<'students' | 'lesson-plan' | 'worksheet'>('lesson-plan');
-  const [analyzingAttachment, setAnalyzingAttachment] = useState(false);
+  ])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [attachedFile, setAttachedFile] = useState<File | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success('Đã sao chép nội dung vào bộ nhớ tạm');
-  };
+    navigator.clipboard.writeText(text)
+    toast.success('Đã sao chép nội dung vào bộ nhớ tạm')
+  }
 
   const handleCreateLessonPlan = async (subject = 'Tiếng Việt', lessonTitle = 'Trong lời mẹ hát') => {
-    setLoading(true);
-    setMessages((m) => [...m, { from: 'user', text: `Soạn giáo án bài "${lessonTitle}" môn ${subject} Lớp 4` }]);
+    setLoading(true)
+    setMessages((m) => [...m, { from: 'user', text: `Soạn giáo án bài "${lessonTitle}" môn ${subject} Lớp 4` }])
     try {
-      const result = await generateLessonPlan({ grade: 4, subject, lessonTitle, durationMinutes: 35 });
+      const result = await generateLessonPlan({ grade: 4, subject, lessonTitle, durationMinutes: 35 })
       setMessages((m) => [
         ...m,
         {
@@ -1560,18 +1558,18 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
           text: `Tôi đã hoàn thành Kế hoạch bài dạy "${result.title}". Kế hoạch bao gồm ${result.activities.length} hoạt động với đầy đủ mục tiêu, thiết bị dạy học và chi tiết hoạt động của giáo viên - học sinh:`,
           payload: { type: 'lesson-plan', data: result },
         },
-      ]);
+      ])
     } catch (err: any) {
-      toast.error(err?.message || 'Không thể tạo nội dung lúc này. Vui lòng thử lại.');
-      setMessages((m) => [...m, { from: 'ai', text: 'Không thể tạo nội dung lúc này. Vui lòng kiểm tra lại cấu hình GEMINI_API_KEY hoặc thử lại sau giây lát.' }]);
+      toast.error(err?.message || 'Không thể tạo nội dung lúc này. Vui lòng thử lại.')
+      setMessages((m) => [...m, { from: 'ai', text: 'Không thể tạo nội dung lúc này. Vui lòng kiểm tra lại kết nối hoặc thử lại sau.' }])
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const handleCreateActivity = async (actionTitle: string, activityType = 'WARM_UP', requirement = 'Thiết kế trò chơi khởi động 5 phút phát triển năng lực giao tiếp') => {
-    setLoading(true);
-    setMessages((m) => [...m, { from: 'user', text: actionTitle }]);
+    setLoading(true)
+    setMessages((m) => [...m, { from: 'user', text: actionTitle }])
     try {
       const result = await generateActivity({
         grade: 4,
@@ -1580,7 +1578,7 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
         activityType,
         durationMinutes: 5,
         requirement,
-      });
+      })
       setMessages((m) => [
         ...m,
         {
@@ -1588,18 +1586,18 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
           text: `Tôi đã thiết kế hoạt động "${result.title}" (${result.durationMinutes} phút). Chi tiết phương pháp, kỹ thuật và hoạt động như sau:`,
           payload: { type: 'activity', data: result },
         },
-      ]);
+      ])
     } catch (err: any) {
-      toast.error(err?.message || 'Không thể tạo nội dung lúc này. Vui lòng thử lại.');
-      setMessages((m) => [...m, { from: 'ai', text: 'Không thể tạo nội dung lúc này. Vui lòng thử lại.' }]);
+      toast.error(err?.message || 'Không thể tạo nội dung lúc này. Vui lòng thử lại.')
+      setMessages((m) => [...m, { from: 'ai', text: 'Không thể tạo nội dung lúc này. Vui lòng thử lại.' }])
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const handleCreateWorksheet = async () => {
-    setLoading(true);
-    setMessages((m) => [...m, { from: 'user', text: 'Tạo phiếu học tập Toán 4 - Phân số bằng nhau' }]);
+    setLoading(true)
+    setMessages((m) => [...m, { from: 'user', text: 'Tạo phiếu học tập Toán 4 - Phân số bằng nhau' }])
     try {
       const result = await generateWorksheet({
         grade: 4,
@@ -1607,7 +1605,7 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
         lesson: 'Phân số bằng nhau',
         numberOfQuestions: 4,
         difficulty: 'Trung bình',
-      });
+      })
       setMessages((m) => [
         ...m,
         {
@@ -1615,113 +1613,97 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
           text: `Tôi đã biên soạn "${result.title}" gồm ${result.questions.length} câu hỏi có đáp án và lời giải chi tiết:`,
           payload: { type: 'worksheet', data: result },
         },
-      ]);
+      ])
     } catch (err: any) {
-      toast.error(err?.message || 'Không thể tạo nội dung lúc này. Vui lòng thử lại.');
-      setMessages((m) => [...m, { from: 'ai', text: 'Không thể tạo nội dung lúc này. Vui lòng thử lại.' }]);
+      toast.error(err?.message || 'Không thể tạo nội dung lúc này. Vui lòng thử lại.')
+      setMessages((m) => [...m, { from: 'ai', text: 'Không thể tạo nội dung lúc này. Vui lòng thử lại.' }])
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
-
-  const handleCreateQuestions = async () => {
-    setLoading(true);
-    setMessages((m) => [...m, { from: 'user', text: 'Tạo bộ câu hỏi theo thang Bloom bài Phân số bằng nhau' }]);
-    try {
-      const result = await generateQuestions({
-        grade: 4,
-        subject: 'Toán',
-        topic: 'Phân số bằng nhau',
-        numberOfQuestions: 4,
-        levels: ['Nhận biết', 'Thông hiểu', 'Vận dụng'],
-      });
-      setMessages((m) => [
-        ...m,
-        {
-          from: 'ai',
-          text: `Tôi đã tạo bộ câu hỏi chủ đề "${result.topic}" theo các mức độ nhận thức:`,
-          payload: { type: 'questions', data: result },
-        },
-      ]);
-    } catch (err: any) {
-      toast.error(err?.message || 'Không thể tạo nội dung lúc này. Vui lòng thử lại.');
-      setMessages((m) => [...m, { from: 'ai', text: 'Không thể tạo nội dung lúc này. Vui lòng thử lại.' }]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }
 
   const handleCreateComments = async () => {
-    setLoading(true);
-    setMessages((m) => [...m, { from: 'user', text: 'Gợi ý nhận xét học sinh tháng này' }]);
+    setLoading(true)
+    setMessages((m) => [...m, { from: 'user', text: 'Gợi ý nhận xét học sinh tháng này' }])
     try {
       const result = await generateStudentComment({
         subject: 'Tiếng Việt',
         criteria: { 'Đọc hiểu': 'Tốt', 'Viết đoạn văn': 'Cần rèn luyện thêm tính liên kết câu', 'Giao tiếp': 'Tích cực' },
         assessmentLevel: 'Hoàn thành tốt',
         notes: 'Chủ động phát biểu trong giờ học',
-      });
+      })
       setMessages((m) => [
         ...m,
         {
           from: 'ai',
-          text: `Dưới đây là các gợi ý nhận xét sư phạm dành cho học sinh (đã ẩn danh thông tin):`,
+          text: 'Dưới đây là các gợi ý nhận xét sư phạm dành cho học sinh (đã ẩn danh thông tin):',
           payload: { type: 'student-comment', data: result },
         },
-      ]);
+      ])
     } catch (err: any) {
-      toast.error(err?.message || 'Không thể tạo nội dung lúc này. Vui lòng thử lại.');
-      setMessages((m) => [...m, { from: 'ai', text: 'Không thể tạo nội dung lúc này. Vui lòng thử lại.' }]);
+      toast.error(err?.message || 'Không thể tạo nội dung lúc này. Vui lòng thử lại.')
+      setMessages((m) => [...m, { from: 'ai', text: 'Không thể tạo nội dung lúc này. Vui lòng thử lại.' }])
     } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAttachmentAnalyze = async (file: File) => {
-    setAttachmentFile(file)
-    setAnalyzingAttachment(true)
-    setMessages((m) => [...m, { from: 'user', text: `Đã đính kèm ${file.name} để phân tích (${attachmentTarget}).` }])
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('target', attachmentTarget)
-      const result = await analyzeImportFile(formData)
-      const summary = result.target === 'students'
-        ? `Đã đọc ${result.totalRows || 0} dòng danh sách học sinh: ${result.validCount || 0} dòng hợp lệ, ${result.errorCount || 0} dòng cần kiểm tra. Đây chỉ là bản xem trước; chưa ghi vào cơ sở dữ liệu.`
-        : `Đã phân tích tài liệu và tạo bản nháp ${result.target === 'lesson-plan' ? 'giáo án' : 'phiếu học tập'}. Thầy/cô hãy kiểm tra rồi mới lưu.`
-      setMessages((m) => [...m, { from: 'ai', text: summary }])
-    } catch (err: any) {
-      toast.error(err?.message || 'Không thể phân tích tệp đính kèm')
-      setMessages((m) => [...m, { from: 'ai', text: 'Không thể phân tích tệp. Vui lòng kiểm tra định dạng, dung lượng và thử lại.' }])
-    } finally {
-      setAnalyzingAttachment(false)
+      setLoading(false)
     }
   }
-  const handleCustomSend = async (text = input) => {
-    if (!text.trim() || loading) return;
-    const query = text.trim();
-    setInput('');
-    const lower = query.toLowerCase();
 
-    if (lower.includes('giáo án') || lower.includes('bài dạy')) {
-      await handleCreateLessonPlan('Tiếng Việt', query.replace(/soạn giáo án|giáo án|bài/gi, '').trim() || 'Trong lời mẹ hát');
-    } else if (lower.includes('phiếu') || lower.includes('bài tập')) {
-      await handleCreateWorksheet();
-    } else if (lower.includes('câu hỏi')) {
-      await handleCreateQuestions();
-    } else if (lower.includes('nhận xét') || lower.includes('học bạ')) {
-      await handleCreateComments();
-    } else {
-      await handleCreateActivity(query, 'WARM_UP', query);
+  const handleCustomSend = async (text = input) => {
+    if ((!text.trim() && !attachedFile) || loading) return
+    const query = text.trim() || (attachedFile ? `Phân tích tệp đính kèm ${attachedFile.name}` : '')
+    const fileToSend = attachedFile
+    setInput('')
+    setAttachedFile(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+
+    setMessages((m) => [
+      ...m,
+      {
+        from: 'user',
+        text: fileToSend ? `[Đính kèm: ${fileToSend.name}]\n${query}` : query,
+      },
+    ])
+    setLoading(true)
+
+    try {
+      const historyContext = messages
+        .slice(-6)
+        .map((m) => `${m.from === 'user' ? 'Teacher' : 'AI'}: ${m.text}`)
+        .join('\n')
+
+      const response = await sendAiChat({
+        message: query,
+        history: historyContext,
+        file: fileToSend || undefined,
+      })
+
+      setMessages((m) => [
+        ...m,
+        {
+          from: 'ai',
+          text: response.reply,
+        },
+      ])
+    } catch (err: any) {
+      toast.error(err?.message || 'Không thể gửi tin nhắn đến Trợ lý AI.')
+      setMessages((m) => [
+        ...m,
+        {
+          from: 'ai',
+          text: 'Rất tiếc, đã có lỗi xảy ra khi xử lý yêu cầu của thầy/cô. Vui lòng kiểm tra lại kết nối mạng hoặc thử lại.',
+        },
+      ])
+    } finally {
+      setLoading(false)
     }
-  };
+  }
 
   const saveLessonPlanFromAI = async (plan: GeneratedLessonPlan) => {
     try {
       await saveLessonPlan({
         title: plan.title,
         subject: 'Tiếng Việt',
-        grade: 'Lớp 4A',
+        grade: 'Lớp 4',
         date: new Date().toISOString().split('T')[0],
         duration: 35,
         objective: plan.objectives,
@@ -1739,51 +1721,77 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
           teacher: a.teacherActivity || '',
           students: a.studentActivity || '',
         })),
-      });
-      toast.success('Đã lưu giáo án AI vào cơ sở dữ liệu!');
-      if (onNavigate) onNavigate('Giáo án');
+      })
+      toast.success('Đã lưu giáo án AI vào cơ sở dữ liệu!')
+      if (onNavigate) onNavigate('Giáo án')
     } catch {
-      toast.error('Không thể lưu giáo án. Vui lòng thử lại.');
+      toast.error('Không thể lưu giáo án. Vui lòng thử lại.')
     }
-  };
+  }
 
   const saveWorksheetFromAI = async (sheet: GeneratedWorksheet) => {
     try {
       await saveWorkspaceRecord('Phiếu học tập', {
         id: '',
         title: sheet.title,
-        subtitle: `Toán · Khối 4 · ${sheet.questions.length} câu hỏi`,
+        subtitle: `Toán · ${sheet.questions.length} câu hỏi`,
         status: 'Bản nháp',
         meta: 'Tạo bởi AI',
         tone: 'teal',
-      });
-      toast.success('Đã lưu phiếu học tập vào workspace!');
-      if (onNavigate) onNavigate('Phiếu học tập');
+      })
+      toast.success('Đã lưu phiếu học tập vào workspace!')
+      if (onNavigate) onNavigate('Phiếu học tập')
     } catch {
-      toast.error('Không thể lưu phiếu học tập.');
+      toast.error('Không thể lưu phiếu học tập.')
     }
-  };
+  }
 
   return (
     <div className="flex min-h-[calc(100vh-10rem)] flex-col gap-6">
-      <PageTitle eyebrow="TeachFlow AI · Google Gemini" title="Trợ lý AI của cô Mai" description="Trợ lý sư phạm tiểu học thông minh giúp soạn bài, tạo trò chơi và đánh giá học sinh." />
+      <PageTitle
+        eyebrow="TeachFlow AI · Google Gemini"
+        title={`Trợ lý AI của ${teacherName}`}
+        description="Trợ lý sư phạm thông minh hỗ trợ soạn bài, phân tích tài liệu (PDF, Word, Excel, Ảnh), tạo trò chơi và đánh giá học sinh."
+      />
       <div className="grid min-h-[580px] flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-100 lg:grid-cols-[260px_1fr]">
         <div className="hidden border-r border-slate-100 bg-slate-50/70 p-4 lg:block">
-          <button onClick={() => setMessages([{ from: 'ai', text: 'Chào cô Mai! Tôi có thể giúp cô việc gì tiếp theo?' }])} className="mb-5 flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-3 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-teal-700">
+          <button
+            onClick={() =>
+              setMessages([
+                {
+                  from: 'ai',
+                  text: `Chào ${teacherName}! Tôi có thể giúp thầy/cô việc gì tiếp theo?`,
+                },
+              ])
+            }
+            className="mb-5 flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-3 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-teal-700 transition"
+          >
             <Plus className="size-4" /> Cuộc trò chuyện mới
           </button>
           <p className="px-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Tác vụ nhanh</p>
           <div className="mt-2 flex flex-col gap-1.5 text-left">
-            <button onClick={() => handleCreateLessonPlan('Tiếng Việt', 'Trong lời mẹ hát')} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm hover:text-teal-700">
+            <button
+              onClick={() => handleCreateLessonPlan('Tiếng Việt', 'Trong lời mẹ hát')}
+              className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm hover:text-teal-700 transition"
+            >
               <BookOpen className="size-3.5 text-teal-600" /> Soạn giáo án bài mới
             </button>
-            <button onClick={() => handleCreateActivity('Tạo hoạt động khởi động', 'WARM_UP', 'Thiết kế trò chơi khởi động 5 phút môn Toán')} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm hover:text-teal-700">
+            <button
+              onClick={() => handleCreateActivity('Tạo hoạt động khởi động', 'WARM_UP', 'Thiết kế trò chơi khởi động 5 phút')}
+              className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm hover:text-teal-700 transition"
+            >
               <Gamepad2 className="size-3.5 text-orange-600" /> Tạo trò chơi khởi động
             </button>
-            <button onClick={() => handleCreateWorksheet()} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm hover:text-teal-700">
+            <button
+              onClick={() => handleCreateWorksheet()}
+              className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm hover:text-teal-700 transition"
+            >
               <FileQuestion className="size-3.5 text-blue-600" /> Tạo phiếu học tập
             </button>
-            <button onClick={() => handleCreateComments()} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm hover:text-teal-700">
+            <button
+              onClick={() => handleCreateComments()}
+              className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm hover:text-teal-700 transition"
+            >
               <MessageSquarePlus className="size-3.5 text-violet-600" /> Viết nhận xét học sinh
             </button>
           </div>
@@ -1798,7 +1806,7 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
               <div>
                 <b className="block text-sm text-slate-800">TeachFlow AI · Google Gemini</b>
                 <span className="flex items-center gap-1.5 text-xs text-teal-600">
-                  <span className="size-1.5 rounded-full bg-teal-500" /> Đang trực tuyến (Gemini Flash)
+                  <span className="size-1.5 rounded-full bg-teal-500" /> Đang trực tuyến (Gemini 2.5 Flash)
                 </span>
               </div>
             </div>
@@ -1912,30 +1920,6 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
                       </div>
                     )}
 
-                    {/* Questions Card */}
-                    {m.payload?.type === 'questions' && m.payload.data && (
-                      <div className="mt-3 rounded-xl border border-slate-200 bg-white p-4 text-slate-800 shadow-sm">
-                        <h4 className="border-b pb-2 font-bold text-teal-700">Bộ câu hỏi: {m.payload.data.topic}</h4>
-                        <div className="mt-3 space-y-2.5">
-                          {m.payload.data.questions?.map((q: any, idx: number) => (
-                            <div key={idx} className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs">
-                              <div className="flex items-center justify-between font-semibold">
-                                <span>Câu {idx + 1} ({q.level})</span>
-                                <span className="text-slate-400">{q.questionType}</span>
-                              </div>
-                              <p className="mt-1 text-slate-800">{q.content}</p>
-                              <p className="mt-1.5 text-teal-800"><b>Đáp án:</b> {q.answer}</p>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="mt-3 flex gap-2">
-                          <Button size="sm" variant="outline" onClick={() => copyToClipboard(JSON.stringify(m.payload!.data, null, 2))}>
-                            <Copy className="mr-1.5 size-3.5" /> Sao chép câu hỏi
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
                     {/* Student Comment Card */}
                     {m.payload?.type === 'student-comment' && m.payload.data && (
                       <div className="mt-3 rounded-xl border border-slate-200 bg-white p-4 text-slate-800 shadow-sm">
@@ -1967,29 +1951,45 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
                   </span>
                   <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm bg-slate-50 px-4 py-3 text-xs font-medium text-slate-500">
                     <Loader2 className="size-4 animate-spin text-teal-600" />
-                    TeachFlow AI đang phân tích và tạo nội dung với Google Gemini...
+                    TeachFlow AI đang phân tích và tạo phản hồi trực tiếp từ Google Gemini...
                   </div>
                 </div>
               )}
 
-              {/* 8 Quick Actions Grid */}
+              {/* 4 Quick Actions Grid */}
               <div className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-                <button disabled={loading} onClick={() => handleCreateLessonPlan('Tiếng Việt', 'Trong lời mẹ hát')} className="flex flex-col items-start rounded-xl border border-slate-200 p-3 text-left transition hover:border-teal-300 hover:bg-teal-50">
+                <button
+                  disabled={loading}
+                  onClick={() => handleCreateLessonPlan('Tiếng Việt', 'Trong lời mẹ hát')}
+                  className="flex flex-col items-start rounded-xl border border-slate-200 p-3 text-left transition hover:border-teal-300 hover:bg-teal-50 cursor-pointer"
+                >
                   <BookOpen className="mb-2 size-4 text-teal-600" />
                   <b className="text-xs font-semibold text-slate-800">Soạn giáo án</b>
                   <span className="mt-0.5 text-[11px] text-slate-400">Tiếng Việt 4 · Chuẩn GDPT</span>
                 </button>
-                <button disabled={loading} onClick={() => handleCreateActivity('Tạo hoạt động khởi động 5 phút', 'WARM_UP', 'Trò chơi nhận diện nhanh phân số')} className="flex flex-col items-start rounded-xl border border-slate-200 p-3 text-left transition hover:border-teal-300 hover:bg-teal-50">
+                <button
+                  disabled={loading}
+                  onClick={() => handleCreateActivity('Tạo hoạt động khởi động 5 phút', 'WARM_UP', 'Trò chơi nhận diện nhanh phân số')}
+                  className="flex flex-col items-start rounded-xl border border-slate-200 p-3 text-left transition hover:border-teal-300 hover:bg-teal-50 cursor-pointer"
+                >
                   <Gamepad2 className="mb-2 size-4 text-orange-600" />
                   <b className="text-xs font-semibold text-slate-800">Hoạt động khởi động</b>
                   <span className="mt-0.5 text-[11px] text-slate-400">Trò chơi 5 phút đầu giờ</span>
                 </button>
-                <button disabled={loading} onClick={() => handleCreateWorksheet()} className="flex flex-col items-start rounded-xl border border-slate-200 p-3 text-left transition hover:border-teal-300 hover:bg-teal-50">
+                <button
+                  disabled={loading}
+                  onClick={() => handleCreateWorksheet()}
+                  className="flex flex-col items-start rounded-xl border border-slate-200 p-3 text-left transition hover:border-teal-300 hover:bg-teal-50 cursor-pointer"
+                >
                   <FileQuestion className="mb-2 size-4 text-blue-600" />
                   <b className="text-xs font-semibold text-slate-800">Tạo phiếu học tập</b>
                   <span className="mt-0.5 text-[11px] text-slate-400">4 câu hỏi có lời giải</span>
                 </button>
-                <button disabled={loading} onClick={() => handleCreateComments()} className="flex flex-col items-start rounded-xl border border-slate-200 p-3 text-left transition hover:border-teal-300 hover:bg-teal-50">
+                <button
+                  disabled={loading}
+                  onClick={() => handleCreateComments()}
+                  className="flex flex-col items-start rounded-xl border border-slate-200 p-3 text-left transition hover:border-teal-300 hover:bg-teal-50 cursor-pointer"
+                >
                   <MessageSquarePlus className="mb-2 size-4 text-violet-600" />
                   <b className="text-xs font-semibold text-slate-800">Nhận xét học sinh</b>
                   <span className="mt-0.5 text-[11px] text-slate-400">Ẩn danh & nhân văn</span>
@@ -1999,41 +1999,79 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
           </div>
 
           <div className="border-t border-slate-100 p-4 sm:p-5">
+            {attachedFile && (
+              <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between rounded-lg bg-teal-50 px-3 py-1.5 text-xs text-teal-800 border border-teal-200">
+                <span className="flex items-center gap-1.5 truncate">
+                  <Paperclip className="size-3.5 shrink-0" />
+                  <b className="truncate font-medium">{attachedFile.name}</b>
+                  <span className="text-slate-400">({(attachedFile.size / 1024).toFixed(0)} KB)</span>
+                </span>
+                <button
+                  onClick={() => {
+                    setAttachedFile(null)
+                    if (fileInputRef.current) fileInputRef.current.value = ''
+                  }}
+                  className="ml-2 rounded p-0.5 text-teal-600 hover:bg-teal-100 hover:text-teal-900 transition"
+                  title="Xóa tệp đính kèm"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            )}
             <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 focus-within:border-teal-400">
-                          <div className="mx-auto mb-2 flex max-w-3xl items-center gap-2">
-              <input id="ai-attachment" type="file" className="hidden" accept=".pdf,.docx,.xlsx,.xls,.csv,.png,.jpg,.jpeg" disabled={loading || analyzingAttachment} onChange={(e) => { const file = e.target.files?.[0]; if (file) void handleAttachmentAnalyze(file); e.target.value = '' }} />
-              <label htmlFor="ai-attachment" className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:border-teal-300 hover:text-teal-700"><Paperclip className="size-3.5" /> Đính kèm file</label>
-              <select value={attachmentTarget} onChange={(e) => setAttachmentTarget(e.target.value as typeof attachmentTarget)} className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs" disabled={loading || analyzingAttachment}><option value="lesson-plan">Phân tích thành giáo án</option><option value="worksheet">Phân tích thành phiếu</option><option value="students">Tạo bảng import học sinh</option></select>
-              {attachmentFile && <span className="truncate text-[11px] text-slate-500">{analyzingAttachment ? 'Đang phân tích…' : attachmentFile.name}</span>}
-            </div><textarea
+              <input
+                ref={fileInputRef}
+                id="ai-file-input"
+                type="file"
+                className="hidden"
+                accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.png,.jpg,.jpeg,.webp"
+                disabled={loading}
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) {
+                    setAttachedFile(f)
+                    toast.info(`Đã chọn tệp: ${f.name}`)
+                  }
+                }}
+              />
+              <label
+                htmlFor="ai-file-input"
+                className="grid size-10 shrink-0 cursor-pointer place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:border-teal-400 hover:text-teal-700 transition"
+                title="Đính kèm tài liệu (PDF, Word, Excel, Ảnh)"
+              >
+                <Paperclip className="size-4" />
+              </label>
+
+              <textarea
                 value={input}
                 disabled={loading}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
-                    e.preventDefault();
-                    handleCustomSend();
+                    e.preventDefault()
+                    handleCustomSend()
                   }
                 }}
-                placeholder="Nhắn tin cho trợ lý AI (Ví dụ: Soạn giáo án Toán 4, tạo trò chơi khởi động, tạo câu hỏi...)"
+                placeholder="Nhắn tin cho trợ lý AI (Ví dụ: Soạn bài dạy Toán 4, phân tích bảng điểm đính kèm, tạo câu hỏi...)"
                 rows={1}
                 className="min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-400"
               />
+
               <button
-                disabled={loading || !input.trim()}
+                disabled={loading || (!input.trim() && !attachedFile)}
                 onClick={() => handleCustomSend()}
                 aria-label="Gửi tin nhắn"
-                className="grid size-10 place-items-center rounded-lg bg-teal-600 text-white transition hover:bg-teal-700 disabled:opacity-50"
+                className="grid size-10 shrink-0 place-items-center rounded-lg bg-teal-600 text-white transition hover:bg-teal-700 disabled:opacity-50 cursor-pointer"
               >
                 {loading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
               </button>
             </div>
-            <p className="mt-2 text-center text-[11px] text-slate-400">TeachFlow AI sử dụng Google Gemini. Giáo viên kiểm tra và xác nhận trước khi lưu vào giáo án.</p>
+            <p className="mt-2 text-center text-[11px] text-slate-400">TeachFlow AI kết nối trực tiếp với Google Gemini.</p>
           </div>
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -2122,11 +2160,11 @@ export function TeacherApp() {
   }
 
   return (
-    <div className="flex min-h-[100dvh] bg-slate-50 text-slate-900">
+    <div className="flex h-[100dvh] max-h-[100dvh] w-full overflow-hidden bg-slate-50 text-slate-900">
       <Sidebar active={active} onSelect={handleNavigate} open={menuOpen} onClose={() => setMenuOpen(false)} />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col h-[100dvh] max-h-[100dvh] overflow-hidden">
         <Header onMenu={() => setMenuOpen(true)} onOpenLogin={() => setAuthModalOpen(true)} onNavigate={handleNavigate} />
-        <main className="flex-1 overflow-y-auto px-5 py-8 sm:px-8 lg:px-10">
+        <main className="flex-1 min-h-0 overflow-y-auto px-5 py-8 sm:px-8 lg:px-10">
           <div className="mx-auto max-w-7xl">
             {isAdmin ? (
               <GenericView view={active} selectedClassId={selectedClassId} onNavigate={handleNavigate} />
@@ -2143,4 +2181,4 @@ export function TeacherApp() {
   )
 }
 
-export default TeacherApp
+export default TeacherApp;

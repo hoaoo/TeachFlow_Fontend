@@ -28,6 +28,7 @@ import {
   Loader2,
   FileDown,
   Info,
+  Copy,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -146,18 +147,57 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
   const [exportingMonthlyDocx, setExportingMonthlyDocx] = useState(false);
   const [exportingMonthlyPdf, setExportingMonthlyPdf] = useState(false);
   const [generatingAiSummary, setGeneratingAiSummary] = useState(false);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiSummary, setAiSummary] = useState('');
+  const [aiStrengths, setAiStrengths] = useState('');
+  const [aiConcerns, setAiConcerns] = useState('');
+  const [aiNextSteps, setAiNextSteps] = useState('');
 
   const handleGenerateAiSummary = async () => {
     if (!selectedClassId) return;
     setGeneratingAiSummary(true);
     try {
-      const result = await generateHomeroomSummary({ classroomId: selectedClassId, period: activeTab === 'monthly' ? 'MONTH' : 'WEEK', weekNumber: selectedWeek });
-      toast.success(result?.summary || 'Đã tạo bản nháp tổng hợp bằng AI. Hãy rà soát trước khi dùng.');
+      const result = await generateHomeroomSummary({
+        classroomId: selectedClassId,
+        period: activeTab === 'monthly' ? 'MONTH' : 'WEEK',
+        weekNumber: selectedWeek,
+      });
+      setAiSummary(result?.summary || '');
+      setAiStrengths(result?.strengths || '');
+      setAiConcerns(result?.concerns || '');
+      setAiNextSteps(result?.nextSteps || '');
+      setAiModalOpen(true);
+      toast.success('Đã tổng hợp phân tích AI thành công!');
     } catch (error: any) {
       toast.error(error?.message || 'Không thể tạo bản nháp AI');
     } finally {
       setGeneratingAiSummary(false);
     }
+  };
+
+  const handleCopyAiSummary = () => {
+    const text = [
+      `=== TỔNG HỢP SƯ PHẠM CHỦ NHIỆM (AI) ===`,
+      `Đánh giá chung:\n${aiSummary}`,
+      `Ưu điểm nổi bật:\n${aiStrengths}`,
+      `Tồn tại / Cần lưu ý:\n${aiConcerns}`,
+      `Phương hướng / Kế hoạch:\n${aiNextSteps}`,
+    ].join('\n\n');
+    navigator.clipboard.writeText(text);
+    toast.success('Đã sao chép toàn bộ nội dung gợi ý AI vào bộ nhớ tạm');
+  };
+
+  const handleApplyAiSummary = () => {
+    if (activeTab === 'monthly') {
+      if (aiStrengths) setMonthlyAchievements(aiStrengths);
+      if (aiConcerns) setMonthlyLimitations(aiConcerns);
+      if (aiNextSteps) setMonthlyNextPlan(aiNextSteps);
+      setMonthlyIsDirty(true);
+      toast.success('Đã áp dụng nội dung AI vào biểu mẫu tổng kết tháng!');
+    } else {
+      toast.success('Đã áp dụng gợi ý AI vào kế hoạch chủ nhiệm!');
+    }
+    setAiModalOpen(false);
   };
 
   // 1. Initial Load Classes
@@ -1623,6 +1663,82 @@ export function HomeroomView({ initialTab = 'overview', onNavigate }: { initialT
             >
               {deletingRecord ? <Loader2 className="size-4 animate-spin" /> : 'Xác nhận xóa'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ========================================================
+          MODAL: AI HOMEROOM SUMMARY
+      ======================================================== */}
+      <Dialog open={aiModalOpen} onOpenChange={(open) => !open && setAiModalOpen(false)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-teal-700">
+              <Sparkles className="size-5" /> Gợi ý tổng kết sư phạm AI · TeachFlow
+            </DialogTitle>
+            <DialogDescription>
+              Dữ liệu được tổng hợp tự động từ sĩ số, điểm danh chuyên cần, nề nếp thi đua và nhận xét môn học của lớp {dashboardData?.classroom?.name || ''} ({activeTab === 'monthly' ? `Tháng ${selectedMonth}` : `Tuần ${selectedWeek}`}).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">1. Đánh giá chung</label>
+              <textarea
+                value={aiSummary}
+                onChange={(e) => setAiSummary(e.target.value)}
+                rows={3}
+                className="w-full rounded-xl border border-slate-200 p-3 text-xs leading-relaxed outline-none focus:border-teal-500"
+                placeholder="Nội dung đánh giá chung..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-emerald-700 mb-1">2. Ưu điểm nổi bật</label>
+              <textarea
+                value={aiStrengths}
+                onChange={(e) => setAiStrengths(e.target.value)}
+                rows={3}
+                className="w-full rounded-xl border border-emerald-200 bg-emerald-50/30 p-3 text-xs leading-relaxed outline-none focus:border-emerald-500"
+                placeholder="Các ưu điểm nổi bật..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-amber-700 mb-1">3. Tồn tại / Cần lưu ý</label>
+              <textarea
+                value={aiConcerns}
+                onChange={(e) => setAiConcerns(e.target.value)}
+                rows={3}
+                className="w-full rounded-xl border border-amber-200 bg-amber-50/30 p-3 text-xs leading-relaxed outline-none focus:border-amber-500"
+                placeholder="Các điểm tồn tại cần nhắc nhở..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-blue-700 mb-1">4. Phương hướng / Biện pháp tuần tới</label>
+              <textarea
+                value={aiNextSteps}
+                onChange={(e) => setAiNextSteps(e.target.value)}
+                rows={3}
+                className="w-full rounded-xl border border-blue-200 bg-blue-50/30 p-3 text-xs leading-relaxed outline-none focus:border-blue-500"
+                placeholder="Kế hoạch và phương hướng tới..."
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:justify-between pt-2 border-t border-slate-100">
+            <Button type="button" variant="outline" onClick={() => setAiModalOpen(false)}>
+              Hủy
+            </Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={handleCopyAiSummary}>
+                <Copy className="size-3.5 mr-1.5" /> Sao chép
+              </Button>
+              <Button type="button" onClick={handleApplyAiSummary} className="bg-teal-600 hover:bg-teal-700 text-white">
+                <Check className="size-3.5 mr-1.5" /> Áp dụng vào biểu mẫu
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

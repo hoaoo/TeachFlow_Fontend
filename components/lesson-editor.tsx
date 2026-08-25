@@ -1611,8 +1611,8 @@ function UploadLessonPlanDialog({
       return
     }
 
-    if (selectedFile.size > 25 * 1024 * 1024) {
-      toast.error('Dung lượng tập tin không được vượt quá 25MB')
+    if (selectedFile.size > 50 * 1024 * 1024) {
+      toast.error('Dung lượng tập tin không được vượt quá 50MB')
       return
     }
 
@@ -1735,7 +1735,7 @@ function UploadLessonPlanDialog({
                   Kéo thả file vào đây hoặc <span className="text-teal-600 underline">chọn file</span>
                 </p>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Hỗ trợ định dạng DOCX, PDF (tối đa 25MB)
+                  Hỗ trợ định dạng DOCX, PDF (tối đa 50MB)
                 </p>
               </>
             )}
