@@ -2097,7 +2097,7 @@ function TabStudents({
             onClick={() => setImportModalOpen(true)}
             className="text-xs h-8.5 gap-1.5 cursor-pointer"
           >
-            <FileSpreadsheet className="size-3.5 text-emerald-600" /> Tải lên file danh sách
+            <FileSpreadsheet className="size-3.5 text-emerald-600" /> Tải lên file danh sách 
           </Button>
           <Button
             size="sm"
@@ -2122,84 +2122,83 @@ function TabStudents({
             <p className="text-xs text-slate-400 mt-0.5">Nhấn "Thêm học sinh" hoặc "Import Excel" để bắt đầu.</p>
           </div>
         ) : (
-          <table className="w-full text-xs text-left">
-            <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
+          <table className="w-full text-xs text-left min-w-[760px]">
+            <thead className="bg-slate-50/90 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px] h-[46px]">
               <tr>
-                <th className="py-3 px-4 w-12 text-center">STT</th>
-                <th className="py-3 px-4">Họ và tên</th>
-                <th className="py-3 px-3">Mã HS</th>
-                <th className="py-3 px-3">Giới tính</th>
-                <th className="py-3 px-3">Ngày sinh</th>
-                <th className="py-3 px-3">Học lực</th>
-                <th className="py-3 px-3">Chuyên cần</th>
-                <th className="py-3 px-4 text-right">Thao tác</th>
+                <th className="py-2.5 px-4 w-12 text-center">STT</th>
+                <th className="py-2.5 px-4 min-w-[200px] text-left">Họ và tên</th>
+                <th className="py-2.5 px-3 w-28 text-center">Mã HS</th>
+                <th className="py-2.5 px-3 w-20 text-center">Giới tính</th>
+                <th className="py-2.5 px-3 w-28 text-center">Ngày sinh</th>
+                <th className="py-2.5 px-3 w-24 text-center">Học lực</th>
+                <th className="py-2.5 px-3 w-24 text-center">Chuyên cần</th>
+                <th className="py-2.5 px-4 w-28 text-right pr-4">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredStudents.map((s, idx) => (
-                <tr key={s.id} className="hover:bg-slate-50/60 transition-colors">
-                  <td className="py-3 px-4 text-center font-bold text-slate-400">#{idx + 1}</td>
-                  <td className="py-3 px-4">
-                    <button
-                      onClick={() => onOpenStudent(s)}
-                      className="flex items-center gap-2.5 text-left group cursor-pointer"
-                    >
-                      <Avatar className="size-8 border border-teal-100">
+                <tr
+                  key={s.id}
+                  tabIndex={0}
+                  onDoubleClick={() => onOpenStudent(s)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') onOpenStudent(s)
+                  }}
+                  className="group hover:bg-teal-50/40 transition-colors select-none cursor-pointer focus:bg-teal-50/60 focus:outline-none"
+                >
+                  <td className="py-3 px-4 text-center font-bold text-slate-400 text-xs">#{idx + 1}</td>
+                  <td className="py-3 px-4 text-left">
+                    <div className="flex items-center gap-2.5 text-left">
+                      <Avatar className="size-8 border border-teal-100 shrink-0">
                         <AvatarFallback className={s.color || 'bg-teal-100 text-teal-700 font-bold text-xs'}>
                           {s.initials}
                         </AvatarFallback>
                       </Avatar>
-                      <div>
-                        <p className="font-bold text-slate-900 group-hover:text-teal-700 transition-colors">
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-900 group-hover:text-teal-700 transition-colors truncate">
                           {s.name}
                         </p>
-                        <p className="text-[10px] text-slate-400">{s.guardian} ({s.phone})</p>
+                        <p className="text-[10px] text-slate-400 truncate">{s.guardian} ({s.phone})</p>
                       </div>
-                    </button>
+                    </div>
                   </td>
-                  <td className="py-3 px-3 font-mono text-slate-600 font-semibold">{s.studentCode || '—'}</td>
-                  <td className="py-3 px-3 text-slate-600">{s.gender}</td>
-                  <td className="py-3 px-3 text-slate-600">{s.dob}</td>
-                  <td className="py-3 px-3">
+                  <td className="py-3 px-3 text-center font-mono text-slate-600 font-semibold">{s.studentCode || '—'}</td>
+                  <td className="py-3 px-3 text-center text-slate-600">{s.gender}</td>
+                  <td className="py-3 px-3 text-center text-slate-600">{s.dob || '—'}</td>
+                  <td className="py-3 px-3 text-center">
                     <Badge variant={statusVariant(s.status)} className="text-[10px]">
                       {s.status}
                     </Badge>
                   </td>
-                  <td className="py-3 px-3 font-semibold text-teal-700">
+                  <td className="py-3 px-3 text-center font-semibold text-teal-700">
                     {s.attendance !== null && s.attendance !== undefined ? `${s.attendance}%` : '—'}
                   </td>
-                  <td className="py-3 px-4 text-right">
+                  <td className="py-3 px-4 text-right pr-4" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1">
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        onClick={() => onOpenStudent(s)}
-                        title="Xem hồ sơ"
-                        className="size-7 text-slate-500 hover:text-teal-700 cursor-pointer"
-                      >
-                        <Eye className="size-3.5" />
-                      </Button>
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setTransferTarget(s)
-                          if (otherClasses.length > 0) setTargetClassId(otherClasses[0].id)
-                        }}
-                        title="Chuyển lớp"
-                        className="size-7 text-slate-500 hover:text-blue-700 cursor-pointer"
-                      >
-                        <ArrowRightLeft className="size-3.5" />
-                      </Button>
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        onClick={() => setDeleteTarget(s)}
-                        title="Rút khỏi lớp"
-                        className="size-7 text-slate-500 hover:text-rose-700 cursor-pointer"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon-sm" className="size-7 text-slate-400 hover:text-slate-700 cursor-pointer">
+                            <MoreVertical className="size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-40 text-xs">
+                          <DropdownMenuItem onClick={() => onOpenStudent(s)}>
+                            <Eye className="size-3.5 mr-2" /> Xem hồ sơ 360°
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setTransferTarget(s)
+                              if (otherClasses.length > 0) setTargetClassId(otherClasses[0].id)
+                            }}
+                          >
+                            <ArrowRightLeft className="size-3.5 mr-2" /> Chuyển lớp
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => setDeleteTarget(s)} className="text-rose-600">
+                            <Trash2 className="size-3.5 mr-2" /> Rút khỏi lớp
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </td>
                 </tr>

@@ -1030,13 +1030,14 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                 <div className="flex flex-col">
                   <div className="overflow-x-auto min-w-full">
                     <table className="w-full text-xs text-left min-w-[960px]">
-                      <thead className="bg-slate-50/90 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
+                      <thead className="bg-slate-50/90 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px] h-[46px]">
                         <tr>
-                          <th className="py-3 px-3 w-10 text-center">
+                          <th className="py-2.5 px-3 w-10 text-center">
                             <button
                               type="button"
                               onClick={handleToggleSelectAllStudents}
-                              className="text-slate-400 hover:text-teal-600 transition"
+                              className="text-slate-400 hover:text-teal-600 transition inline-flex items-center justify-center"
+                              title="Chọn tất cả"
                             >
                               {selectedRowIds.size === students.length && students.length > 0 ? (
                                 <CheckSquare className="size-4 text-teal-600" />
@@ -1045,17 +1046,17 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                               )}
                             </button>
                           </th>
-                          <th className="py-3 px-3 w-10 text-center">STT</th>
-                          <th className="py-3 px-4 min-w-[200px]">Học sinh</th>
-                          <th className="py-3 px-3">Mã HS</th>
-                          <th className="py-3 px-3">Lớp</th>
-                          <th className="py-3 px-3">Khối</th>
-                          <th className="py-3 px-3">Ngày sinh</th>
-                          <th className="py-3 px-3">Trạng thái</th>
-                          <th className="py-3 px-3">Chuyên cần</th>
-                          <th className="py-3 px-3">Đánh giá gần nhất</th>
-                          <th className="py-3 px-3">Hỗ trợ</th>
-                          <th className="py-3 px-4 text-right">Thao tác</th>
+                          <th className="py-2.5 px-3 w-12 text-center">STT</th>
+                          <th className="py-2.5 px-4 min-w-[220px] text-left">Học sinh</th>
+                          <th className="py-2.5 px-3 w-28 text-center">Mã HS</th>
+                          <th className="py-2.5 px-3 w-20 text-center">Lớp</th>
+                          <th className="py-2.5 px-3 w-16 text-center">Khối</th>
+                          <th className="py-2.5 px-3 w-28 text-center">Ngày sinh</th>
+                          <th className="py-2.5 px-3 w-28 text-center">Trạng thái</th>
+                          <th className="py-2.5 px-3 w-24 text-center">Chuyên cần</th>
+                          <th className="py-2.5 px-3 min-w-[160px] text-left">Đánh giá gần nhất</th>
+                          <th className="py-2.5 px-3 w-28 text-center">Hỗ trợ</th>
+                          <th className="py-2.5 px-4 w-32 text-right pr-4">Thao tác</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -1067,12 +1068,24 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                             s.status === 'Cần cố gắng' ||
                             (s.attendance !== null && s.attendance !== undefined && s.attendance < 80)
                           return (
-                            <tr key={s.id} className={`hover:bg-slate-50/60 transition-colors ${isSelected ? 'bg-teal-50/40' : ''}`}>
-                              <td className="py-3 px-3 text-center">
+                            <tr
+                              key={s.id}
+                              tabIndex={0}
+                              onDoubleClick={() => setSelectedStudentId(s.id)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  setSelectedStudentId(s.id)
+                                }
+                              }}
+                              className={`group hover:bg-teal-50/40 transition-colors select-none cursor-pointer focus:bg-teal-50/60 focus:outline-none ${
+                                isSelected ? 'bg-teal-50/50' : ''
+                              }`}
+                            >
+                              <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                                 <button
                                   type="button"
                                   onClick={() => handleToggleSelectStudent(s.id)}
-                                  className="text-slate-400 hover:text-teal-600 transition"
+                                  className="text-slate-400 hover:text-teal-600 transition inline-flex items-center justify-center"
                                 >
                                   {isSelected ? (
                                     <CheckSquare className="size-4 text-teal-600" />
@@ -1081,55 +1094,52 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                                   )}
                                 </button>
                               </td>
-                              <td className="py-3 px-3 text-center font-bold text-slate-400">
+                              <td className="py-3 px-3 text-center font-bold text-slate-400 text-xs">
                                 {(currentPage - 1) * pageSize + idx + 1}
                               </td>
-                              <td className="py-3 px-4">
-                                <button
-                                  onClick={() => setSelectedStudentId(s.id)}
-                                  className="flex items-center gap-2.5 text-left group cursor-pointer"
-                                >
-                                  <Avatar className="size-8.5 border border-teal-100">
+                              <td className="py-3 px-4 text-left">
+                                <div className="flex items-center gap-2.5 text-left">
+                                  <Avatar className="size-8.5 border border-teal-100 shrink-0">
                                     <AvatarFallback className={s.color || 'bg-teal-100 text-teal-700 font-bold text-xs'}>
                                       {s.initials}
                                     </AvatarFallback>
                                   </Avatar>
                                   <div className="min-w-0">
-                                    <p className="font-bold text-slate-900 group-hover:text-teal-700 transition-colors leading-tight">
+                                    <p className="font-bold text-slate-900 group-hover:text-teal-700 transition-colors leading-tight truncate">
                                       {s.name}
                                     </p>
                                     <p className="text-[10px] text-slate-400 truncate">
                                       {s.guardian || s.parentName || 'Chưa cập nhật PH'} {s.phone || s.parentPhone ? `(${s.phone || s.parentPhone})` : ''}
                                     </p>
                                   </div>
-                                </button>
+                                </div>
                               </td>
-                              <td className="py-3 px-3 font-mono font-semibold text-slate-700">
+                              <td className="py-3 px-3 text-center font-mono font-semibold text-slate-700">
                                 {s.studentCode || '—'}
                               </td>
-                              <td className="py-3 px-3">
+                              <td className="py-3 px-3 text-center">
                                 <span className="font-semibold text-slate-900">
                                   {(s as any).className || s.grade || '—'}
                                 </span>
                               </td>
-                              <td className="py-3 px-3 text-slate-600">
+                              <td className="py-3 px-3 text-center text-slate-600">
                                 {(s as any).gradeName || '—'}
                               </td>
-                              <td className="py-3 px-3 text-slate-600">{s.dob || '—'}</td>
-                              <td className="py-3 px-3">
+                              <td className="py-3 px-3 text-center text-slate-600">{s.dob || '—'}</td>
+                              <td className="py-3 px-3 text-center">
                                 <Badge variant={statusVariant(s.status)} className="text-[10px]">
                                   {s.status}
                                 </Badge>
                               </td>
-                              <td className="py-3 px-3 font-bold text-teal-700">
+                              <td className="py-3 px-3 text-center font-bold text-teal-700">
                                 {s.attendance !== null && s.attendance !== undefined ? `${s.attendance}%` : '—'}
                               </td>
-                              <td className="py-3 px-3">
-                                <span className="font-medium text-slate-700 text-[11px]">
+                              <td className="py-3 px-3 text-left">
+                                <span className="font-medium text-slate-700 text-[11px] line-clamp-2">
                                   {(s as any).latestAssessment || (s as any).latestAssessmentText || 'Chưa có'}
                                 </span>
                               </td>
-                              <td className="py-3 px-3">
+                              <td className="py-3 px-3 text-center">
                                 {isSupportNeeded ? (
                                   <Badge variant="destructive" className="text-[10px] bg-rose-50 text-rose-700 border-rose-200">
                                     Cần hỗ trợ
@@ -1140,25 +1150,16 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                                   </Badge>
                                 )}
                               </td>
-                              <td className="py-3 px-4 text-right">
-                                <div className="flex items-center justify-end gap-1">
+                              <td className="py-3 px-4 text-right pr-4" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-end gap-1.5">
                                   <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setSelectedStudentId(s.id)}
-                                    title="Xem hồ sơ 360"
-                                    className="h-7 px-2 text-slate-600 hover:text-teal-700 hover:bg-teal-50 text-xs font-semibold cursor-pointer"
-                                  >
-                                    <Eye className="size-3.5 mr-1" /> 360°
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
+                                    variant="outline"
                                     size="sm"
                                     onClick={() => openQuickAssessmentModal([s])}
                                     title="Nhập đánh giá nhanh"
-                                    className="h-7 px-2 text-teal-700 hover:text-teal-800 hover:bg-teal-50 text-xs font-semibold cursor-pointer"
+                                    className="h-7 px-2.5 text-teal-700 border-teal-200 hover:bg-teal-50 hover:text-teal-800 text-xs font-semibold cursor-pointer shadow-2xs gap-1"
                                   >
-                                    <ClipboardCheck className="size-3.5 mr-1" /> Đánh giá
+                                    <ClipboardCheck className="size-3.5" /> Đánh giá
                                   </Button>
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
@@ -1168,7 +1169,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" className="w-44 text-xs">
                                       <DropdownMenuItem onClick={() => setSelectedStudentId(s.id)}>
-                                        <Eye className="size-3.5 mr-2" /> Xem hồ sơ chi tiết
+                                        <Eye className="size-3.5 mr-2" /> Xem hồ sơ 360°
                                       </DropdownMenuItem>
                                       <DropdownMenuItem onClick={() => openQuickAssessmentModal([s])}>
                                         <ClipboardCheck className="size-3.5 mr-2" /> Nhập đánh giá

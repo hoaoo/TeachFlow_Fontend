@@ -1,11 +1,14 @@
 'use client'
 
 import { useEffect, useMemo, useState, useRef } from 'react'
+import * as mammoth from 'mammoth'
+import * as XLSX from 'xlsx'
 import {
   Download,
   FileText,
   Filter,
   MoreHorizontal,
+  MoreVertical,
   Plus,
   Search,
   School,
@@ -26,6 +29,17 @@ import {
   X,
   BookOpen,
   CheckCircle2,
+  Eye,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  RotateCcw,
+  Play,
+  Music,
+  Volume2,
+  FileSpreadsheet,
+  AlertCircle,
+  ExternalLink,
 } from 'lucide-react'
 import {
   deleteWorkspaceRecord,
@@ -39,11 +53,23 @@ import {
   deleteResource as apiDeleteResource,
   downloadResourceFile,
   attachResourceToLessonPlan,
+  getResourceFileBlob,
+  getResourceFileArrayBuffer,
+  getResourceInlineUrl,
   type TeachingResource,
 } from '@/services/resource-service'
 import { getLessonPlans, type LessonPlan } from '@/services/lesson-service'
 import { exportService } from '@/services/export-service'
 import { generateImage } from '@/services/ai-service'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
 
 type View =
@@ -76,6 +102,495 @@ function getResourceIcon(type: string, ext?: string) {
   if (type === 'SPREADSHEET' || ['XLS', 'XLSX'].includes(ext || ''))
     return <TableIcon className="size-5 text-green-600" />
   return <FileText className="size-5 text-blue-600" />
+}
+
+function ResourcePreviewModal({
+  resource,
+  onClose,
+  onDownload,
+  onAttach,
+  onDelete,
+}: {
+  resource: TeachingResource
+  onClose: () => void
+  onDownload: () => void
+  onAttach: () => void
+  onDelete: () => void
+}) {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  const [docxHtml, setDocxHtml] = useState<string | null>(null)
+  const [xlsxSheets, setXlsxSheets] = useState<Array<{ name: string; rows: any[][] }>>([])
+  const [activeSheetIdx, setActiveSheetIdx] = useState(0)
+  const [zoom, setZoom] = useState(100)
+
+  const ext = (resource.extension || resource.originalFileName?.split('.').pop() || '').toUpperCase()
+  const isImage = resource.resourceType === 'IMAGE' || ['PNG', 'JPG', 'JPEG', 'WEBP', 'GIF'].includes(ext)
+  const isVideo = resource.resourceType === 'VIDEO' || ['MP4', 'WEBM', 'MOV'].includes(ext)
+  const isAudio = ['MP3', 'WAV', 'M4A', 'OGG'].includes(ext)
+  const isPdf = ext === 'PDF'
+  const isDocx = ['DOCX', 'DOC'].includes(ext)
+  const isXlsx = ['XLSX', 'XLS', 'CSV'].includes(ext)
+  const isPptx = resource.resourceType === 'PRESENTATION' || ['PPTX', 'PPT'].includes(ext)
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    setError(null)
+    setBlobUrl(null)
+    setDocxHtml(null)
+    setXlsxSheets([])
+
+    async function loadPreview() {
+      try {
+        if (isImage || isVideo || isAudio || isPdf) {
+          const { blob } = await getResourceFileBlob(resource.id)
+          if (!alive) return
+          const url = URL.createObjectURL(blob)
+          setBlobUrl(url)
+        } else if (isDocx) {
+          const { buffer } = await getResourceFileArrayBuffer(resource.id)
+          if (!alive) return
+          const result = await mammoth.convertToHtml({ arrayBuffer: buffer })
+          setDocxHtml(result.value || '<p class="text-slate-400 italic">Tài liệu không có nội dung văn bản.</p>')
+        } else if (isXlsx) {
+          const { buffer } = await getResourceFileArrayBuffer(resource.id)
+          if (!alive) return
+          const wb = XLSX.read(buffer, { type: 'array' })
+          const sheets = wb.SheetNames.map((name) => {
+            const ws = wb.Sheets[name]
+            const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as any[][]
+            return {
+              name,
+              rows: rawRows.slice(0, 100),
+            }
+          })
+          setXlsxSheets(sheets)
+        }
+      } catch (err: any) {
+        if (alive) {
+          setError(err?.message || 'Không thể tải bản xem trước tệp tin.')
+        }
+      } finally {
+        if (alive) {
+          setLoading(false)
+        }
+      }
+    }
+
+    loadPreview()
+
+    return () => {
+      alive = false
+      if (blobUrl) {
+        URL.revokeObjectURL(blobUrl)
+      }
+    }
+  }, [resource.id])
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 sm:p-5 backdrop-blur-xs animate-in fade-in duration-150"
+    >
+      <div className="flex flex-col w-full max-w-5xl max-h-[92vh] rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50/80">
+          <div className="flex items-center gap-3 min-w-0 pr-4">
+            <span className="grid size-9 place-items-center rounded-lg bg-white border border-slate-200 shrink-0 shadow-2xs">
+              {getResourceIcon(resource.resourceType, resource.extension)}
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-slate-900 truncate leading-tight">
+                {resource.name}
+              </h2>
+              <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+                <span className="font-semibold uppercase text-teal-700">{ext || resource.resourceType}</span>
+                <span>•</span>
+                <span>{resource.formattedSize || '0 KB'}</span>
+                <span>•</span>
+                <span>{new Date(resource.createdAt).toLocaleDateString('vi-VN')}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {isImage && (
+              <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs mr-2">
+                <button
+                  type="button"
+                  onClick={() => setZoom((z) => Math.max(50, z - 25))}
+                  className="p-1 text-slate-600 hover:bg-slate-100 rounded cursor-pointer"
+                  title="Thu nhỏ"
+                >
+                  <ZoomOut className="size-3.5" />
+                </button>
+                <span className="text-[10px] font-bold px-1.5 text-slate-600 min-w-[36px] text-center">
+                  {zoom}%
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setZoom((z) => Math.min(200, z + 25))}
+                  className="p-1 text-slate-600 hover:bg-slate-100 rounded cursor-pointer"
+                  title="Phóng to"
+                >
+                  <ZoomIn className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoom(100)}
+                  className="p-1 text-slate-600 hover:bg-slate-100 rounded cursor-pointer"
+                  title="Đặt lại"
+                >
+                  <RotateCcw className="size-3.5" />
+                </button>
+              </div>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg transition cursor-pointer"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Modal Body */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100/50 flex flex-col items-center justify-center min-h-[360px] max-h-[calc(92vh-130px)]">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center gap-2.5 py-16 text-slate-500">
+              <Loader2 className="size-8 animate-spin text-teal-600" />
+              <p className="text-xs font-semibold">Đang chuẩn bị bản xem trước trực tiếp...</p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-12 text-center max-w-md bg-white p-6 rounded-2xl border border-rose-100 shadow-2xs">
+              <AlertCircle className="size-9 text-rose-500" />
+              <div>
+                <p className="text-sm font-bold text-slate-800">Không thể hiển thị xem trước</p>
+                <p className="text-xs text-slate-500 mt-1">{error}</p>
+              </div>
+              <Button size="sm" onClick={onDownload} className="bg-teal-600 hover:bg-teal-700 text-xs font-semibold gap-1.5">
+                <Download className="size-3.5" /> Tải xuống file gốc
+              </Button>
+            </div>
+          ) : isImage && blobUrl ? (
+            <div className="w-full h-full flex items-center justify-center overflow-auto p-2">
+              <img
+                src={blobUrl}
+                alt={resource.name}
+                style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'center center' }}
+                className="max-h-[65vh] max-w-full rounded-xl object-contain shadow-md transition-transform duration-100"
+              />
+            </div>
+          ) : isVideo && blobUrl ? (
+            <div className="w-full flex items-center justify-center">
+              <video
+                src={blobUrl}
+                controls
+                playsInline
+                preload="metadata"
+                className="max-h-[65vh] w-full max-w-4xl rounded-xl bg-black object-contain shadow-lg"
+              >
+                Trình duyệt của bạn không hỗ trợ phát video trực tiếp.
+              </video>
+            </div>
+          ) : isAudio && blobUrl ? (
+            <div className="w-full max-w-md bg-white p-6 rounded-2xl border border-slate-200 shadow-md space-y-4 text-center">
+              <div className="size-16 mx-auto rounded-full bg-teal-50 text-teal-600 flex items-center justify-center shadow-inner">
+                <Volume2 className="size-8" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">{resource.name}</h3>
+                <p className="text-xs text-slate-400 mt-0.5">{resource.formattedSize} • {ext}</p>
+              </div>
+              <audio src={blobUrl} controls className="w-full" />
+            </div>
+          ) : isPdf && blobUrl ? (
+            <div className="w-full h-full flex flex-col">
+              <iframe
+                src={blobUrl}
+                title={resource.name}
+                className="w-full h-[65vh] rounded-xl border border-slate-200 bg-white shadow-sm"
+              />
+            </div>
+          ) : isDocx && docxHtml ? (
+            <div className="w-full h-full overflow-y-auto max-w-3xl bg-white p-6 sm:p-10 rounded-xl border border-slate-200 shadow-sm text-slate-800 text-sm leading-relaxed space-y-3 prose prose-slate max-w-none">
+              <div
+                dangerouslySetInnerHTML={{ __html: docxHtml }}
+                className="[&_table]:w-full [&_table]:border [&_table]:border-collapse [&_th]:border [&_th]:p-2 [&_th]:bg-slate-50 [&_td]:border [&_td]:p-2 [&_p]:mb-2.5 [&_h1]:text-xl [&_h1]:font-bold [&_h2]:text-lg [&_h2]:font-bold [&_h3]:text-base [&_h3]:font-semibold"
+              />
+            </div>
+          ) : isXlsx && xlsxSheets.length > 0 ? (
+            <div className="w-full h-full flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+              {/* Sheet tabs */}
+              {xlsxSheets.length > 1 && (
+                <div className="flex items-center gap-1 px-3 py-2 bg-slate-50 border-b border-slate-200 overflow-x-auto">
+                  {xlsxSheets.map((sh, idx) => (
+                    <button
+                      key={sh.name}
+                      onClick={() => setActiveSheetIdx(idx)}
+                      className={`px-3 py-1 text-xs font-semibold rounded-md transition cursor-pointer ${
+                        activeSheetIdx === idx
+                          ? 'bg-white text-teal-700 shadow-2xs border border-slate-200'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <FileSpreadsheet className="size-3 inline mr-1 text-emerald-600" />
+                      {sh.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Table Data */}
+              <div className="overflow-auto max-h-[58vh] flex-1">
+                <table className="w-full text-xs text-left border-collapse">
+                  <tbody>
+                    {xlsxSheets[activeSheetIdx]?.rows.map((row, rIdx) => (
+                      <tr
+                        key={rIdx}
+                        className={rIdx === 0 ? 'bg-slate-100 font-bold sticky top-0 border-b border-slate-300' : 'hover:bg-slate-50/70 border-b border-slate-100'}
+                      >
+                        <td className="py-1 px-2 text-center text-[10px] text-slate-400 bg-slate-50 border-r border-slate-200 select-none font-mono">
+                          {rIdx + 1}
+                        </td>
+                        {row.map((cell, cIdx) => (
+                          <td key={cIdx} className="py-1.5 px-3 border-r border-slate-100 whitespace-nowrap">
+                            {String(cell ?? '')}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="px-3 py-1.5 bg-slate-50 border-t border-slate-200 text-[11px] text-slate-500 flex justify-between">
+                <span>Trang tính: {xlsxSheets[activeSheetIdx]?.name}</span>
+                <span>Hiển thị tối đa 100 dòng đầu</span>
+              </div>
+            </div>
+          ) : isPptx ? (
+            <div className="w-full max-w-lg bg-white p-8 rounded-2xl border border-slate-200 shadow-md text-center space-y-4">
+              <div className="size-16 mx-auto rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center">
+                <Presentation className="size-8" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">{resource.name}</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Bài trình chiếu PowerPoint ({ext}) • {resource.formattedSize}
+                </p>
+                <p className="text-xs text-slate-400 mt-2">
+                  Tập tin PowerPoint cần được tải về để trình chiếu trực tiếp trên máy tính.
+                </p>
+              </div>
+              <div className="flex justify-center gap-2 pt-2">
+                <Button onClick={onDownload} className="bg-teal-600 hover:bg-teal-700 text-xs font-semibold gap-1.5 cursor-pointer">
+                  <Download className="size-3.5" /> Tải về trình chiếu
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="w-full max-w-md bg-white p-6 rounded-2xl border border-slate-200 shadow-md text-center space-y-3">
+              <File className="size-12 mx-auto text-slate-400" />
+              <h3 className="font-bold text-slate-900 text-sm">{resource.name}</h3>
+              <p className="text-xs text-slate-500">{resource.formattedSize} • {ext || resource.resourceType}</p>
+              <Button onClick={onDownload} className="bg-teal-600 text-xs font-semibold gap-1.5 mt-2 cursor-pointer">
+                <Download className="size-3.5" /> Tải xuống tệp tin
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-t border-slate-100 bg-white">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onDelete}
+            className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-xs font-semibold gap-1.5 cursor-pointer"
+          >
+            <Trash2 className="size-3.5" /> Xóa tệp
+          </Button>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onAttach}
+              className="text-xs font-semibold text-teal-700 border-teal-200 hover:bg-teal-50 gap-1.5 cursor-pointer"
+            >
+              <Link2 className="size-3.5" /> Gắn vào giáo án
+            </Button>
+            <Button
+              size="sm"
+              onClick={onDownload}
+              className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold gap-1.5 shadow-2xs cursor-pointer"
+            >
+              <Download className="size-3.5" /> Tải về máy
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onClose}
+              className="text-xs font-medium text-slate-600 cursor-pointer"
+            >
+              Đóng
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ResourceCard({
+  resource,
+  onPreview,
+  onDownload,
+  onAttach,
+  onDelete,
+}: {
+  resource: TeachingResource
+  onPreview: (res: TeachingResource) => void
+  onDownload: (res: TeachingResource) => void
+  onAttach: (res: TeachingResource) => void
+  onDelete: (res: TeachingResource) => void
+}) {
+  const ext = (resource.extension || resource.originalFileName?.split('.').pop() || '').toUpperCase()
+
+  return (
+    <article className="group flex flex-col rounded-2xl border border-slate-200/90 bg-white shadow-2xs hover:shadow-md hover:border-teal-300 transition-all duration-150 overflow-hidden">
+      {/* 1. Thumbnail Header */}
+      <div
+        onClick={() => onPreview(resource)}
+        className="relative aspect-16/9 w-full bg-slate-100 overflow-hidden flex items-center justify-center cursor-pointer group-hover:opacity-95 transition select-none"
+      >
+        {resource.resourceType === 'IMAGE' || ['PNG', 'JPG', 'JPEG', 'WEBP'].includes(ext) ? (
+          <div className="w-full h-full bg-slate-100 flex items-center justify-center relative">
+            <img
+              src={getResourceInlineUrl(resource.id)}
+              alt={resource.name}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                ;(e.target as HTMLElement).style.display = 'none'
+              }}
+            />
+            <div className="absolute inset-0 bg-slate-900/10 group-hover:bg-slate-900/20 transition flex items-center justify-center opacity-0 group-hover:opacity-100">
+              <span className="p-2 rounded-full bg-white/90 shadow-md text-teal-700">
+                <Eye className="size-4" />
+              </span>
+            </div>
+          </div>
+        ) : resource.resourceType === 'VIDEO' || ['MP4', 'WEBM'].includes(ext) ? (
+          <div className="w-full h-full bg-linear-to-br from-purple-900 via-indigo-900 to-slate-900 flex flex-col items-center justify-center text-white relative">
+            <div className="size-11 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center group-hover:scale-110 transition shadow-lg">
+              <Play className="size-5 fill-white text-white translate-x-0.5" />
+            </div>
+            <span className="absolute bottom-2 left-2 text-[10px] font-semibold bg-black/60 backdrop-blur-xs px-2 py-0.5 rounded text-white">
+              Video
+            </span>
+          </div>
+        ) : resource.resourceType === 'PRESENTATION' || ['PPTX', 'PPT'].includes(ext) ? (
+          <div className="w-full h-full bg-linear-to-br from-orange-500 to-amber-600 flex flex-col items-center justify-center text-white p-4">
+            <Presentation className="size-10 text-white/90 group-hover:scale-110 transition drop-shadow" />
+            <span className="text-[11px] font-bold text-white/90 mt-1">Bài giảng trình chiếu</span>
+          </div>
+        ) : ['XLSX', 'XLS', 'CSV'].includes(ext) ? (
+          <div className="w-full h-full bg-linear-to-br from-emerald-600 to-teal-700 flex flex-col items-center justify-center text-white p-4">
+            <TableIcon className="size-10 text-white/90 group-hover:scale-110 transition drop-shadow" />
+            <span className="text-[11px] font-bold text-white/90 mt-1">Bảng tính Excel</span>
+          </div>
+        ) : ext === 'PDF' ? (
+          <div className="w-full h-full bg-linear-to-br from-rose-600 to-red-700 flex flex-col items-center justify-center text-white p-4">
+            <FileText className="size-10 text-white/90 group-hover:scale-110 transition drop-shadow" />
+            <span className="text-[11px] font-bold text-white/90 mt-1">Tài liệu PDF</span>
+          </div>
+        ) : (
+          <div className="w-full h-full bg-linear-to-br from-blue-600 to-indigo-700 flex flex-col items-center justify-center text-white p-4">
+            <FileText className="size-10 text-white/90 group-hover:scale-110 transition drop-shadow" />
+            <span className="text-[11px] font-bold text-white/90 mt-1">Văn bản Word</span>
+          </div>
+        )}
+
+        {/* Extension Badge on Top Right */}
+        <span className="absolute top-2 right-2 rounded-md bg-slate-900/80 backdrop-blur-xs px-2 py-0.5 text-[10px] font-bold text-white uppercase shadow-2xs">
+          {ext || resource.resourceType}
+        </span>
+      </div>
+
+      {/* 2. Content */}
+      <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+        <div className="space-y-1">
+          <h2
+            onClick={() => onPreview(resource)}
+            title={resource.name}
+            className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug hover:text-teal-700 transition cursor-pointer"
+          >
+            {resource.name}
+          </h2>
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+            <span>{resource.formattedSize || '0 KB'}</span>
+            <span>•</span>
+            <span>{new Date(resource.createdAt).toLocaleDateString('vi-VN')}</span>
+          </div>
+          {resource.description && (
+            <p className="text-[11px] text-slate-400 line-clamp-1 leading-normal pt-0.5">
+              {resource.description}
+            </p>
+          )}
+        </div>
+
+        {/* 3. Actions Row */}
+        <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPreview(resource)}
+              className="h-7 px-2.5 text-xs font-semibold text-teal-700 border-teal-200 hover:bg-teal-50 gap-1 cursor-pointer shadow-2xs"
+            >
+              <Eye className="size-3" /> Xem
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onDownload(resource)}
+              title="Tải xuống tệp tin"
+              className="h-7 px-2 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 gap-1 cursor-pointer"
+            >
+              <Download className="size-3" /> Tải về
+            </Button>
+          </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-sm" className="size-7 text-slate-400 hover:text-slate-700 cursor-pointer">
+                <MoreVertical className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44 text-xs">
+              <DropdownMenuItem onClick={() => onPreview(resource)}>
+                <Eye className="size-3.5 mr-2 text-teal-600" /> Xem trực tiếp
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onDownload(resource)}>
+                <Download className="size-3.5 mr-2 text-slate-600" /> Tải về máy
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onAttach(resource)}>
+                <Link2 className="size-3.5 mr-2 text-blue-600" /> Gắn vào giáo án
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onDelete(resource)} className="text-rose-600">
+                <Trash2 className="size-3.5 mr-2" /> Xóa tệp
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </article>
+  )
 }
 
 export function WorkspaceModule({ view }: { view: View }) {
@@ -451,78 +966,20 @@ export function WorkspaceModule({ view }: { view: View }) {
           <span>Đang tải dữ liệu học liệu...</span>
         </div>
       ) : view === 'Tài nguyên' ? (
-        /* Real Teaching Resources Grid */
-        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        /* Real Teaching Resources Responsive Grid */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4.5 w-full">
           {filteredResources.map((res) => (
-            <article
+            <ResourceCard
               key={res.id}
-              className="group relative rounded-2xl border border-border bg-card p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-            >
-              <div className="flex items-start justify-between">
-                <span className="grid size-11 place-items-center rounded-xl bg-slate-100 dark:bg-slate-800">
-                  {getResourceIcon(res.resourceType, res.extension)}
-                </span>
-
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => handleDownloadResource(res)}
-                    title="Tải xuống tệp tin"
-                    className="grid size-8 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    <Download className="size-3.5" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      setAttachTargetResource(res)
-                      setAttachModalOpen(true)
-                    }}
-                    title="Gắn vào giáo án"
-                    className="grid size-8 place-items-center rounded-lg border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100"
-                  >
-                    <Link2 className="size-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setSelectedResource(res)}
-                className="mt-4 text-left w-full"
-              >
-                <h2 className="font-semibold text-foreground group-hover:text-primary line-clamp-1">
-                  {res.name}
-                </h2>
-                <p className="mt-1 text-xs text-muted-foreground line-clamp-1">
-                  {res.originalFileName || res.subtitle}
-                </p>
-                {res.description && (
-                  <p className="mt-2 text-xs text-slate-500 line-clamp-2 leading-4">
-                    {res.description}
-                  </p>
-                )}
-              </button>
-
-              <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-xs text-muted-foreground">
-                <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium uppercase">
-                  {res.extension || res.resourceType}
-                </span>
-                <span>{res.formattedSize || '0 KB'}</span>
-              </div>
-
-              <div className="mt-3 flex items-center justify-between">
-                <button
-                  onClick={() => handleDeleteResource(res)}
-                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 className="size-3.5" /> Xóa
-                </button>
-                <button
-                  onClick={() => setSelectedResource(res)}
-                  className="text-xs text-primary hover:underline"
-                >
-                  Xem chi tiết
-                </button>
-              </div>
-            </article>
+              resource={res}
+              onPreview={(target) => setSelectedResource(target)}
+              onDownload={(target) => handleDownloadResource(target)}
+              onAttach={(target) => {
+                setAttachTargetResource(target)
+                setAttachModalOpen(true)
+              }}
+              onDelete={(target) => handleDeleteResource(target)}
+            />
           ))}
         </div>
       ) : (
@@ -856,81 +1313,23 @@ export function WorkspaceModule({ view }: { view: View }) {
         </div>
       )}
 
-      {/* Resource Detail Modal */}
+      {/* Resource In-Browser Preview Modal */}
       {selectedResource && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
-        >
-          <div className="w-full max-w-lg rounded-2xl border bg-background p-6 shadow-xl">
-            <div className="flex items-start justify-between border-b pb-3">
-              <div className="flex items-center gap-3">
-                <span className="grid size-10 place-items-center rounded-xl bg-muted">
-                  {getResourceIcon(selectedResource.resourceType, selectedResource.extension)}
-                </span>
-                <div>
-                  <h2 className="text-base font-semibold text-foreground">{selectedResource.name}</h2>
-                  <p className="text-xs text-muted-foreground">{selectedResource.originalFileName}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedResource(null)}
-                className="text-muted-foreground hover:text-foreground text-lg"
-              >
-                <X className="size-5" />
-              </button>
-            </div>
-
-            <div className="mt-4 grid gap-2.5 rounded-xl bg-muted/60 p-4 text-xs">
-              <p>
-                <b>Loại học liệu:</b> {selectedResource.resourceType} ({selectedResource.extension})
-              </p>
-              <p>
-                <b>Dung lượng:</b> {selectedResource.formattedSize} ({selectedResource.size} bytes)
-              </p>
-              <p>
-                <b>MIME type:</b> {selectedResource.mimeType || 'application/octet-stream'}
-              </p>
-              {selectedResource.description && (
-                <p>
-                  <b>Mô tả:</b> {selectedResource.description}
-                </p>
-              )}
-              <p className="text-muted-foreground">
-                Tải lên lúc {new Date(selectedResource.createdAt).toLocaleString('vi-VN')}
-              </p>
-            </div>
-
-            <div className="mt-5 flex justify-between gap-2">
-              <button
-                onClick={() => handleDeleteResource(selectedResource)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
-              >
-                <Trash2 className="size-3.5" /> Xóa tệp
-              </button>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setAttachTargetResource(selectedResource)
-                    setSelectedResource(null)
-                    setAttachModalOpen(true)
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 hover:bg-teal-100"
-                >
-                  <Link2 className="size-3.5" /> Gắn vào giáo án
-                </button>
-                <button
-                  onClick={() => handleDownloadResource(selectedResource)}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
-                >
-                  <Download className="size-3.5" /> Tải về máy
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ResourcePreviewModal
+          resource={selectedResource}
+          onClose={() => setSelectedResource(null)}
+          onDownload={() => handleDownloadResource(selectedResource)}
+          onAttach={() => {
+            setAttachTargetResource(selectedResource)
+            setSelectedResource(null)
+            setAttachModalOpen(true)
+          }}
+          onDelete={() => {
+            const target = selectedResource
+            setSelectedResource(null)
+            handleDeleteResource(target)
+          }}
+        />
       )}
 
       {/* Generic Item Detail Modal */}

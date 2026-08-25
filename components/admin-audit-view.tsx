@@ -146,15 +146,15 @@ export function AdminAuditView() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-600">
-              <thead className="border-b border-slate-100 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            <table className="w-full text-left text-sm text-slate-600 min-w-[700px]">
+              <thead className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-semibold uppercase tracking-wider text-slate-600 h-[46px]">
                 <tr>
-                  <th className="px-5 py-3.5">Thời gian</th>
-                  <th className="px-5 py-3.5">Người thực hiện</th>
-                  <th className="px-5 py-3.5">Hành động</th>
-                  <th className="px-5 py-3.5">Đối tượng</th>
-                  <th className="px-5 py-3.5">Trạng thái</th>
-                  <th className="px-5 py-3.5 text-right">Chi tiết</th>
+                  <th className="px-5 py-2.5 text-left">Thời gian</th>
+                  <th className="px-5 py-2.5 text-left">Người thực hiện</th>
+                  <th className="px-5 py-2.5 text-left">Hành động</th>
+                  <th className="px-5 py-2.5 text-left">Đối tượng</th>
+                  <th className="px-5 py-2.5 text-center">Trạng thái</th>
+                  <th className="px-5 py-2.5 text-right pr-5">Chi tiết</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -162,39 +162,38 @@ export function AdminAuditView() {
                   const isSuccess = !log.status || log.status === 'SUCCESS'
                   return (
                     <tr key={log.id} className="hover:bg-slate-50/75 transition">
-                      <td className="whitespace-nowrap px-5 py-3.5 text-xs text-slate-500 font-mono">
+                      <td className="whitespace-nowrap px-5 py-3.5 text-xs text-slate-500 font-mono text-left">
                         {new Date(log.createdAt).toLocaleString('vi-VN')}
                       </td>
-                      <td className="px-5 py-3.5 font-medium text-slate-900 text-xs">
+                      <td className="px-5 py-3.5 font-medium text-slate-900 text-xs text-left">
                         {log.actorEmail || log.actorUserId || 'Hệ thống'}
                       </td>
-                      <td className="px-5 py-3.5 text-xs">
+                      <td className="px-5 py-3.5 text-xs text-left">
                         <span className="font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
                           {log.action}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 text-xs text-slate-500">
+                      <td className="px-5 py-3.5 text-xs text-slate-500 text-left">
                         {log.resourceType ? `${log.resourceType}${log.resourceId ? ` (#${log.resourceId.slice(0, 8)})` : ''}` : '—'}
                       </td>
-                      <td className="px-5 py-3.5 text-xs">
+                      <td className="px-5 py-3.5 text-xs text-center">
                         <span
-                          className={`inline-flex items-center gap-1 font-medium ${
-                            isSuccess ? 'text-emerald-700' : 'text-rose-700'
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                            isSuccess
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-rose-50 text-rose-700 border border-rose-200'
                           }`}
                         >
-                          {isSuccess ? <CheckCircle2 className="size-3.5" /> : <XCircle className="size-3.5" />}
-                          {log.status || 'SUCCESS'}
+                          {isSuccess ? 'SUCCESS' : 'FAILURE'}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                      <td className="px-5 py-3.5 text-right pr-5">
+                        <button
                           onClick={() => setSelectedLog(log)}
-                          className="h-8 px-2 text-slate-600 hover:text-teal-700"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-teal-600 hover:text-teal-800"
                         >
-                          <Eye className="size-3.5" />
-                        </Button>
+                          <Eye className="size-3.5" /> Chi tiết
+                        </button>
                       </td>
                     </tr>
                   )

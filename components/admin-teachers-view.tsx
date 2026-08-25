@@ -444,21 +444,21 @@ export function AdminTeachersView() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
+            <table className="w-full text-left text-sm min-w-[700px]">
+              <thead className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-semibold uppercase tracking-wider text-slate-600 h-[46px]">
                 <tr>
-                  <th className="px-5 py-3.5">Họ và tên</th>
-                  <th className="px-5 py-3.5">Email</th>
-                  <th className="px-5 py-3.5">Số điện thoại</th>
-                  <th className="px-5 py-3.5">Trạng thái</th>
-                  <th className="px-5 py-3.5">Ngày tạo</th>
-                  <th className="px-5 py-3.5 text-right">Thao tác</th>
+                  <th className="px-5 py-2.5 min-w-[200px] text-left">Họ và tên</th>
+                  <th className="px-5 py-2.5 text-left">Email</th>
+                  <th className="px-5 py-2.5 text-left">Số điện thoại</th>
+                  <th className="px-5 py-2.5 text-center">Trạng thái</th>
+                  <th className="px-5 py-2.5 text-center">Ngày tạo</th>
+                  <th className="px-5 py-2.5 text-right pr-5">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {teachers.map((teacher) => (
                   <tr key={teacher.id} className="hover:bg-slate-50/70 transition">
-                    <td className="px-5 py-4 font-medium text-slate-900">
+                    <td className="px-5 py-3.5 font-medium text-slate-900 text-left">
                       <div className="flex items-center gap-3">
                         <span className="grid size-9 place-items-center rounded-full bg-teal-100 text-xs font-bold text-teal-800 shrink-0">
                           {teacher.fullName
@@ -475,14 +475,14 @@ export function AdminTeachersView() {
                       </div>
                     </td>
 
-                    <td className="px-5 py-4 text-slate-600">
+                    <td className="px-5 py-3.5 text-slate-600 text-left">
                       <div className="flex items-center gap-1.5">
                         <Mail className="size-3.5 text-slate-400" />
                         <span>{teacher.email}</span>
                       </div>
                     </td>
 
-                    <td className="px-5 py-4 text-slate-600">
+                    <td className="px-5 py-3.5 text-slate-600 text-left">
                       {teacher.phone ? (
                         <div className="flex items-center gap-1.5">
                           <Phone className="size-3.5 text-slate-400" />
@@ -493,7 +493,7 @@ export function AdminTeachersView() {
                       )}
                     </td>
 
-                    <td className="px-5 py-4">
+                    <td className="px-5 py-3.5 text-center">
                       {teacher.isActive ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200">
                           <CheckCircle2 className="size-3" /> Hoạt động
@@ -505,11 +505,11 @@ export function AdminTeachersView() {
                       )}
                     </td>
 
-                    <td className="px-5 py-4 text-xs text-slate-500">
+                    <td className="px-5 py-3.5 text-xs text-slate-500 text-center">
                       {new Date(teacher.createdAt).toLocaleDateString('vi-VN')}
                     </td>
 
-                    <td className="px-5 py-4 text-right">
+                    <td className="px-5 py-3.5 text-right pr-5">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => openEditDialog(teacher)}

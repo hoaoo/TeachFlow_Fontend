@@ -125,6 +125,56 @@ export async function downloadResourceFile(id: string, fallbackName?: string): P
   window.URL.revokeObjectURL(blobUrl);
 }
 
+export async function getResourceFileBlob(id: string): Promise<{ blob: Blob; mimeType: string; filename: string }> {
+  const token = getAccessToken();
+  const url = `${API_BASE_URL}/resources/${id}/file`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    let errorMsg = 'Không thể tải tệp tin xem trước';
+    try {
+      const errorJson = await response.json();
+      errorMsg = errorJson.message || errorMsg;
+    } catch {}
+    throw new Error(errorMsg);
+  }
+
+  let filename = 'tai_nguyen';
+  const disposition = response.headers.get('content-disposition');
+  if (disposition) {
+    const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utf8Match && utf8Match[1]) {
+      filename = decodeURIComponent(utf8Match[1]);
+    } else {
+      const regularMatch = disposition.match(/filename="?([^";]+)"?/i);
+      if (regularMatch && regularMatch[1]) {
+        filename = regularMatch[1];
+      }
+    }
+  }
+
+  const mimeType = response.headers.get('content-type') || 'application/octet-stream';
+  const blob = await response.blob();
+  return { blob, mimeType, filename };
+}
+
+export async function getResourceFileArrayBuffer(id: string): Promise<{ buffer: ArrayBuffer; mimeType: string; filename: string }> {
+  const { blob, mimeType, filename } = await getResourceFileBlob(id);
+  const buffer = await blob.arrayBuffer();
+  return { buffer, mimeType, filename };
+}
+
+export function getResourceInlineUrl(id: string): string {
+  return `${API_BASE_URL}/resources/${id}/file`;
+}
+
 export async function attachResourceToLessonPlan(
   lessonPlanId: string,
   resourceId: string,
@@ -142,3 +192,4 @@ export async function detachResourceFromLessonPlan(
 export async function getLessonPlanResources(lessonPlanId: string): Promise<any[]> {
   return api.get(`/lesson-plans/${lessonPlanId}/resources`);
 }
+
