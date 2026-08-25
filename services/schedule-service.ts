@@ -192,6 +192,13 @@ export function formatDateVN(dateStr: string | null): string {
   return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+export function formatLongDateVN(dateStr: string | null): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return '';
+  return `${getDayOfWeekVN(dateStr)}, ${d.getDate()} tháng ${d.getMonth() + 1}, ${d.getFullYear()}`;
+}
+
 export function getDayOfWeekVN(dateStr: string | null): string {
   if (!dateStr) return '';
   const d = new Date(dateStr + 'T00:00:00');

@@ -8,7 +8,7 @@ import {
   Calendar, Layers, UserCheck, ArrowRight, Sparkles, HelpCircle
 } from 'lucide-react'
 import {
-  createSchedule, deleteSchedule, duplicateSchedule, formatDateVN, getDayOfWeekShortVN,
+  createSchedule, deleteSchedule, duplicateSchedule, formatDateVN, formatLongDateVN, getDayOfWeekShortVN,
   getDayOfWeekVN, getMonthCalendarMatrix, getMonthRange, getScheduleAttendance, getSchedules,
   getTodayISO, getWeekRange, linkScheduleLessonPlan, unlinkScheduleLessonPlan,
   updateSchedule, updateScheduleStatus, type CreateScheduleData, type DuplicateScheduleData,
@@ -1599,7 +1599,7 @@ export function ScheduleView({ onNavigate }: { onNavigate?: (view: any) => void 
       return {
         dateFrom: currentDate,
         dateTo: currentDate,
-        label: `${getDayOfWeekVN(currentDate)}, ${formatDateVN(currentDate)}`,
+        label: formatLongDateVN(currentDate),
         weekDays: [currentDate],
       }
     } else if (tab === 'week') {

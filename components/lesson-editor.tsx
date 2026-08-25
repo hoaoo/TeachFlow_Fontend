@@ -34,68 +34,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 // ─── Starter Templates ───────────────────────────────────────────────────────
-const starterActivities: Activity[] = [
-  {
-    id: 'warmup-1',
-    phase: 'Khởi động',
-    title: 'Trò chơi: Ai nhanh hơn?',
-    minutes: 5,
-    method: 'Trò chơi học tập',
-    technique: 'Động não',
-    competencies: 'Giao tiếp và hợp tác',
-    qualities: 'Chăm chỉ',
-    equipment: 'Thẻ số, máy chiếu',
-    objective: 'Tạo không khí hào hứng và kết nối kiến thức đã học với bài mới.',
-    teacher: 'GV tổ chức trò chơi nhận diện các cặp phân số bằng nhau. Đặt câu hỏi gợi mở và dẫn dắt vào bài mới.',
-    students: 'HS tham gia trò chơi theo đội, suy nghĩ nhanh và giải thích cách nhận biết của nhóm mình.',
-    sortOrder: 0,
-  },
-  {
-    id: 'explore-1',
-    phase: 'Khám phá',
-    title: 'Hình thành kiến thức mới',
-    minutes: 15,
-    method: 'Trực quan – thảo luận nhóm',
-    technique: 'Mảnh ghép',
-    competencies: 'Tư duy và lập luận toán học',
-    qualities: 'Trung thực',
-    equipment: 'Băng giấy, thước kẻ',
-    objective: 'Học sinh phát hiện và phát biểu được quy tắc tạo phân số bằng nhau.',
-    teacher: 'GV phát băng giấy chia phần, quan sát các nhóm thảo luận và đặt câu hỏi gợi mở: Em nhận thấy điều gì?',
-    students: 'HS gấp và tô màu các băng giấy; thảo luận nhóm đôi và rút ra quy tắc bằng ngôn ngữ của mình.',
-    sortOrder: 1,
-  },
-  {
-    id: 'practice-1',
-    phase: 'Luyện tập',
-    title: 'Thực hành bài tập',
-    minutes: 12,
-    method: 'Luyện tập cá nhân & cặp đôi',
-    technique: 'Khăn trải bàn',
-    competencies: 'Giải quyết vấn đề toán học',
-    qualities: 'Trách nhiệm',
-    equipment: 'Phiếu học tập số 1',
-    objective: 'Củng cố quy tắc qua các bài tập từ nhận biết đến thông hiểu.',
-    teacher: 'GV phát phiếu bài tập phân hóa, theo dõi và hỗ trợ học sinh gặp khó khăn.',
-    students: 'HS hoàn thành phiếu bài tập, đổi bài chấm chéo theo cặp và chia sẻ cách giải.',
-    sortOrder: 2,
-  },
-  {
-    id: 'apply-1',
-    phase: 'Vận dụng',
-    title: 'Vận dụng vào thực tế',
-    minutes: 8,
-    method: 'Dự án nhỏ',
-    technique: 'Trình bày 1 phút',
-    competencies: 'Vận dụng kiến thức vào thực tiễn',
-    qualities: 'Trách nhiệm',
-    equipment: 'Bảng phụ nhóm',
-    objective: 'Vận dụng kiến thức phân số bằng nhau để giải quyết tình huống thực tế.',
-    teacher: 'GV nêu tình huống chia bánh/trái cây thực tế và mời đại diện 2 nhóm trình bày.',
-    students: 'HS thảo luận nhóm nhanh, đưa ra giải pháp và trình bày ngắn gọn trước lớp.',
-    sortOrder: 3,
-  },
-]
+const starterActivities: Activity[] = []
 
 const emptyActivity = (index: number): Activity => ({
   id: `act-${Date.now()}-${index}`,
@@ -138,28 +77,28 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
 
   // Current Lesson Plan under edit
   const [lesson, setLesson] = useState<LessonPlan>({
-    title: 'Phân số bằng nhau',
-    topic: 'Chủ đề: Phân số',
-    subject: 'Toán',
-    grade: 'Lớp 4A',
+    title: '',
+    topic: '',
+    subject: '',
+    grade: '',
     date: new Date().toISOString().split('T')[0],
     duration: 40,
-    objective: 'Nhận biết được các phân số bằng nhau và vận dụng để giải quyết bài toán thực tế.',
-    specificCompetencies: 'Năng lực tư duy và lập luận toán học; Năng lực giải quyết vấn đề toán học.',
-    generalCompetencies: 'Năng lực tự chủ và tự học; Năng lực giao tiếp và hợp tác.',
-    qualities: 'Chăm chỉ, trung thực, trách nhiệm.',
-    teachingEquipment: 'Bộ đồ dùng học Toán 4, máy chiếu, phiếu học tập.',
+    objective: '',
+    specificCompetencies: '',
+    generalCompetencies: '',
+    qualities: '',
+    teachingEquipment: '',
     postLessonAdjustment: '',
     notes: '',
     status: 'DRAFT',
     sourceType: 'NATIVE',
     version: 1,
-    activities: starterActivities,
+    activities: [],
     resources: [],
     schedules: [],
   })
 
-  const [selectedActivityId, setSelectedActivityId] = useState<string>(starterActivities[0]?.id || 'warmup-1')
+  const [selectedActivityId, setSelectedActivityId] = useState<string>('')
   const [autosaveStatus, setAutosaveStatus] = useState<string>('Đã lưu')
   const [isAutosaving, setIsAutosaving] = useState(false)
 
@@ -1974,21 +1913,7 @@ function CreateLessonPlanDialog({
     try {
       const cls = classes.find((c) => c.id === classroomId)
       // Strip any UI-only id before sending to create API
-      const cleanActivities = starterActivities.map((act, index) => ({
-        phase: act.phase,
-        title: act.title,
-        minutes: act.minutes,
-        method: act.method,
-        technique: act.technique,
-        competencies: act.competencies,
-        qualities: act.qualities,
-        equipment: act.equipment,
-        objective: act.objective,
-        teacher: act.teacher,
-        students: act.students,
-        sortOrder: index,
-      }))
-
+      const cleanActivities: any[] = [];
       const created = await createLessonPlan({
         title: title.trim(),
         subject,
