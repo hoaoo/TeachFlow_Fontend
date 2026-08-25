@@ -1279,7 +1279,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
 
       {/* QUICK ASSESSMENT DIALOG */}
       <Dialog open={quickAssessOpen} onOpenChange={setQuickAssessOpen}>
-        <DialogContent className="sm:max-w-[520px]">
+        <DialogContent size="md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ClipboardCheck className="size-5 text-teal-600" />
@@ -1418,7 +1418,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
 
       {/* CREATE STUDENT DIALOG */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent size="md">
           <DialogHeader>
             <DialogTitle>Thêm học sinh mới</DialogTitle>
             <DialogDescription>
@@ -1554,7 +1554,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
 
       {/* EDIT STUDENT DIALOG */}
       <Dialog open={!!editTarget} onOpenChange={(val) => !val && setEditTarget(null)}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent size="md">
           <DialogHeader>
             <DialogTitle>Chỉnh sửa hồ sơ học sinh</DialogTitle>
             <DialogDescription>Cập nhật thông tin cá nhân và liên lạc của học sinh.</DialogDescription>
@@ -1665,7 +1665,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
 
       {/* TRANSFER STUDENT DIALOG */}
       <Dialog open={!!transferTarget} onOpenChange={(val) => !val && setTransferTarget(null)}>
-        <DialogContent className="sm:max-w-[440px]">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Chuyển lớp học sinh</DialogTitle>
             <DialogDescription>
@@ -1725,7 +1725,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
 
       {/* WITHDRAW / DELETE DIALOG */}
       <Dialog open={!!deleteTarget} onOpenChange={(val) => !val && setDeleteTarget(null)}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle className="text-rose-600 flex items-center gap-2">
               <AlertCircle className="size-5" /> Rút học sinh khỏi lớp
@@ -1748,7 +1748,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
 
       {/* IMPORT EXCEL & WORD DIALOG */}
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="sm:max-w-5xl max-h-[90vh] flex flex-col p-4 sm:p-6">
+        <DialogContent size="xl" className="p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
               <FileSpreadsheet className="size-5 text-emerald-600" />

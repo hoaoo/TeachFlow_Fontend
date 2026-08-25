@@ -175,7 +175,7 @@ export function ScheduleAttendanceDialog({
         onOpenChange(val)
       }}
     >
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-4xl sm:max-w-4xl md:max-w-[900px] max-h-[88vh] flex flex-col p-0 overflow-hidden rounded-2xl bg-slate-50 border border-slate-200 shadow-2xl">
+      <DialogContent size="xl" className="p-0 overflow-hidden bg-slate-50">
         {/* Header */}
         <div className="bg-white px-5 sm:px-6 py-4 border-b border-slate-200 shrink-0">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

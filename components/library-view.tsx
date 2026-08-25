@@ -594,7 +594,7 @@ export function LibraryView({ onNavigate }: { onNavigate?: (view: any) => void }
 
       {/* Modal: Interactive Game Player / Projector */}
       <Dialog open={!!playGamePayload} onOpenChange={(val) => !val && setPlayGamePayload(null)}>
-        <DialogContent className="max-w-4xl p-2 sm:p-4 bg-slate-950 border-slate-800 text-white">
+        <DialogContent size="xl" className="p-2 sm:p-4 bg-slate-950 border-slate-800 text-white">
           {playGamePayload && (
             <GameRenderer
               payload={playGamePayload}
@@ -608,7 +608,7 @@ export function LibraryView({ onNavigate }: { onNavigate?: (view: any) => void }
 
       {/* Modal: Delete Confirmation */}
       <Dialog open={!!deleteTarget} onOpenChange={(val) => !val && setDeleteTarget(null)}>
-        <DialogContent className="sm:max-w-[420px]">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Xác nhận xóa hoạt động</DialogTitle>
             <DialogDescription>
@@ -642,7 +642,7 @@ function ActivityDetailModal({
 
   return (
     <Dialog open={!!target} onOpenChange={(val) => !val && onClose()}>
-      <DialogContent className="sm:max-w-[650px] max-h-[85vh] flex flex-col p-6">
+      <DialogContent size="lg" className="p-6">
         <DialogHeader className="pb-3 border-b">
           <div className="flex items-center gap-2">
             <span className="rounded-lg bg-teal-50 px-2.5 py-0.5 text-xs font-bold text-teal-700 border border-teal-200">
@@ -828,7 +828,7 @@ function CreateEditActivityModal({
 
   return (
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
-      <DialogContent className="sm:max-w-[620px] max-h-[88vh] flex flex-col">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>{target ? 'Chỉnh sửa hoạt động' : 'Tạo hoạt động mới'}</DialogTitle>
           <DialogDescription>
@@ -1040,7 +1040,7 @@ function AddToLessonPlanModal({
 
   return (
     <Dialog open={!!target} onOpenChange={(val) => !val && onClose()}>
-      <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Thêm hoạt động vào Giáo án</DialogTitle>
           <DialogDescription>
@@ -1184,7 +1184,7 @@ function AiLibraryActivityModal({
 
   return (
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
-      <DialogContent className="sm:max-w-[580px] max-h-[85vh] flex flex-col">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-violet-900">
             <Sparkles className="size-5 text-violet-600" /> Trợ lý AI thiết kế hoạt động

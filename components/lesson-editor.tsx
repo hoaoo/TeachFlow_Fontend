@@ -1537,7 +1537,7 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
       />
 
       <Dialog open={aiOverwriteOpen} onOpenChange={(o) => !o && setAiOverwriteOpen(false)}>
-        <DialogContent className="sm:max-w-[440px]">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>AI sẽ thay nội dung đang soạn?</DialogTitle>
             <DialogDescription>
@@ -1592,7 +1592,7 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
 
       {/* Modal: Interactive Game Runner for Lesson Plan */}
       <Dialog open={!!playGamePayload} onOpenChange={(val) => !val && setPlayGamePayload(null)}>
-        <DialogContent className="max-w-4xl p-2 sm:p-4 bg-slate-950 border-slate-800 text-white">
+        <DialogContent size="xl" className="p-2 sm:p-4 bg-slate-950 border-slate-800 text-white">
           {playGamePayload && (
             <GameRenderer
               payload={playGamePayload}
@@ -1707,7 +1707,7 @@ function UploadLessonPlanDialog({
 
   return (
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-teal-900">
             <Upload className="size-5 text-teal-600" /> Tải giáo án có sẵn
@@ -1890,7 +1890,7 @@ function PdfPreviewDialog({
 
   return (
     <Dialog open={!!target} onOpenChange={(val) => !val && onClose()}>
-      <DialogContent className="sm:max-w-[850px] h-[85vh] flex flex-col p-4 sm:p-6">
+      <DialogContent size="xl" className="h-[85vh] p-4 sm:p-6">
         <DialogHeader className="flex flex-row items-center justify-between pb-2 border-b">
           <div>
             <DialogTitle className="text-base text-slate-900 truncate">
@@ -1991,7 +1991,7 @@ function CreateLessonPlanDialog({
 
   return (
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Tạo giáo án mới</DialogTitle>
           <DialogDescription>
@@ -2511,7 +2511,7 @@ function ActivityLibraryPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
-      <DialogContent className="sm:max-w-[620px] max-h-[85vh] flex flex-col">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>Thư viện hoạt động dạy học</DialogTitle>
           <DialogDescription>
@@ -2734,7 +2734,7 @@ function AiActivityAssistantModal({
 
   return (
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
-      <DialogContent className="sm:max-w-[560px] max-h-[85vh] flex flex-col">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-violet-900">
             <Sparkles className="size-4 text-violet-600" /> Trợ lý AI thiết kế hoạt động
@@ -2978,7 +2978,7 @@ function AiFullDraftModal({
 
   return (
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-violet-900">
             <Sparkles className="size-4 text-violet-600" /> Tạo bằng AI
@@ -3147,7 +3147,7 @@ function AiImageDialog({
 
   return (
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="size-4 text-violet-600" /> Tạo ảnh bằng AI

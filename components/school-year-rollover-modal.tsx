@@ -104,7 +104,7 @@ export function SchoolYearRolloverModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl p-6">
+      <DialogContent size="lg" className="p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg font-bold text-slate-900">
             <School className="size-5 text-teal-600" />

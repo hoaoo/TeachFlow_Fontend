@@ -195,7 +195,7 @@ function ResourcePreviewModal({
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 sm:p-5 backdrop-blur-xs animate-in fade-in duration-150"
     >
-      <div className="flex flex-col w-full max-w-5xl max-h-[92vh] rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+      <div className="flex flex-col w-[94vw] max-w-6xl max-h-[92vh] rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50/80">
           <div className="flex items-center gap-3 min-w-0 pr-4">
@@ -1109,7 +1109,7 @@ export function WorkspaceModule({ view }: { view: View }) {
           aria-modal="true"
           className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
         >
-          <div className="w-full max-w-lg rounded-2xl border bg-background p-6 shadow-xl">
+          <div className="w-full max-w-2xl sm:max-w-[720px] rounded-2xl border bg-background p-6 shadow-xl">
             <div className="flex items-start justify-between border-b pb-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-primary">
@@ -1241,7 +1241,7 @@ export function WorkspaceModule({ view }: { view: View }) {
           aria-modal="true"
           className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
         >
-          <div className="w-full max-w-md rounded-2xl border bg-background p-6 shadow-xl">
+          <div className="w-full max-w-lg sm:max-w-[540px] rounded-2xl border bg-background p-6 shadow-xl">
             <div className="flex items-start justify-between border-b pb-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-teal-600">
@@ -1339,7 +1339,7 @@ export function WorkspaceModule({ view }: { view: View }) {
           aria-modal="true"
           className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
         >
-          <div className="w-full max-w-lg rounded-2xl border bg-background p-6 shadow-xl">
+          <div className="w-full max-w-2xl sm:max-w-[720px] rounded-2xl border bg-background p-6 shadow-xl">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-primary">

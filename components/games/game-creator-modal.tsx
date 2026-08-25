@@ -192,7 +192,7 @@ export function GameCreatorModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-6 overflow-hidden">
+      <DialogContent size="xl" className="p-6">
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2 text-xl font-bold">
