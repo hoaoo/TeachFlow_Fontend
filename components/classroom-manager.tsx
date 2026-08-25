@@ -57,7 +57,7 @@ import {
   type AssessmentColumn,
   type StudentGradeRow,
 } from '@/services/assessment-service'
-import { notifyStudentDataChanged } from '@/services/student-service'
+import { notifyStudentDataChanged, analyzeStudentImportFile } from '@/services/student-service'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -1244,7 +1244,7 @@ function ClassDetailView({
   const [activeTab, setActiveTab] = useState(initialTab || 'overview')
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6">
+    <div className="w-full space-y-6">
       {/* 1. Header Lớp */}
       <div className="space-y-3 pb-5 border-b border-slate-200/80">
         <button
@@ -1341,11 +1341,11 @@ function ClassDetailView({
         </div>
       </div>
 
-      {/* 2. Menu Tab Bar - Hoàn toàn trong normal document flow (không sticky/fixed), khoảng cách 24px */}
-      <div className="mt-6">
+      {/* 2. Menu Tab Bar - Normal document flow (không sticky/fixed) */}
+      <div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <div className="overflow-x-auto no-scrollbar pb-1">
-            <TabsList className="inline-flex sm:grid sm:grid-cols-7 h-auto w-full min-w-max sm:min-w-0 p-1.5 bg-slate-100/90 rounded-xl border border-slate-200/80 gap-1.5 shadow-2xs">
+          <div className="w-full max-sm:overflow-x-auto max-sm:no-scrollbar max-sm:pb-1 sm:overflow-visible">
+            <TabsList className="flex sm:grid sm:grid-cols-7 h-auto w-full min-w-max sm:min-w-0 p-1.5 bg-slate-100/90 rounded-xl border border-slate-200/80 gap-1.5 shadow-2xs">
               <TabsTrigger
                 value="overview"
                 className="h-10 px-3 sm:px-2 text-xs sm:text-sm font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-xs text-slate-600 hover:text-slate-900 transition"
@@ -1893,6 +1893,7 @@ function TabStudents({
   // Import Form
   const [importText, setImportText] = useState('')
   const [importRows, setImportRows] = useState<Array<{ fullName: string; studentCode?: string; gender?: string; dob?: string; parentName?: string; parentPhone?: string; note?: string; error?: string }>>([])
+  const [importAnalyzing, setImportAnalyzing] = useState(false)
   const [submittingImport, setSubmittingImport] = useState(false)
 
   // Transfer Form
@@ -1951,6 +1952,35 @@ function TabStudents({
       toast.error(err?.message || 'Lỗi khi thêm học sinh')
     } finally {
       setSubmittingAdd(false)
+    }
+  }
+
+  const handleAnalyzeClassFile = async (file: File) => {
+    if (!file) return
+    setImportAnalyzing(true)
+    try {
+      const res = await analyzeStudentImportFile(file, classItem.id)
+      const rawRows: any[] = res?.rows || (res as any)?.students || []
+      if (rawRows.length > 0) {
+        const parsed = rawRows.map((r) => ({
+          fullName: r.fullName || '',
+          studentCode: r.studentCode || undefined,
+          gender: r.gender || 'Nam',
+          dob: r.dob || undefined,
+          parentName: r.parentName || undefined,
+          parentPhone: r.parentPhone || undefined,
+          note: r.note || undefined,
+          error: !r.fullName?.trim() ? 'Thiếu họ và tên' : undefined,
+        }))
+        setImportRows(parsed)
+        toast.success(`Đã nhận diện ${parsed.length} học sinh từ tệp!`)
+      } else {
+        toast.info('Không tìm thấy danh sách học sinh trong tệp')
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Không thể phân tích tệp import')
+    } finally {
+      setImportAnalyzing(false)
     }
   }
 
@@ -2271,30 +2301,69 @@ function TabStudents({
         </DialogContent>
       </Dialog>
 
-      {/* IMPORT EXCEL / CSV MODAL */}
+      {/* IMPORT EXCEL / WORD / CSV MODAL */}
       <Dialog open={importModalOpen} onOpenChange={setImportModalOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Import danh sách học sinh từ Excel / Bảng dữ liệu</DialogTitle>
-            <DialogDescription>
-              Dán dữ liệu từ bảng tính (Excel/Google Sheets) theo định dạng: <br />
-              <code>Họ tên, Mã HS, Giới tính, Ngày sinh, Tên phụ huynh, Số điện thoại, Ghi chú</code>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="size-5 text-emerald-600" />
+              <FileText className="size-5 text-indigo-600" />
+              Import danh sách học sinh vào lớp {classItem.name}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Tải lên tệp Word (.docx), Excel (.xlsx, .csv) hoặc dán trực tiếp danh sách bảng.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 py-2 text-xs">
-            <Textarea
-              placeholder="Nguyễn Văn An	HS001	Nam	12/04/2016	Nguyễn Thị Hoa	0901234567	Chủ động phát biểu
+            {/* File Upload Button */}
+            <div className="flex items-center justify-between p-3 border rounded-xl bg-slate-50">
+              <div>
+                <p className="font-bold text-slate-800">Tải lên tệp Word / Excel</p>
+                <p className="text-[11px] text-slate-500">Hỗ trợ .docx, .doc, .xlsx, .xls, .csv</p>
+              </div>
+              <input
+                type="file"
+                accept=".docx,.doc,.xlsx,.xls,.csv"
+                id={`import-file-class-${classItem.id}`}
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) handleAnalyzeClassFile(f)
+                }}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => document.getElementById(`import-file-class-${classItem.id}`)?.click()}
+                disabled={importAnalyzing}
+                className="text-xs gap-1.5 font-semibold text-teal-700 border-teal-300 hover:bg-teal-50"
+              >
+                {importAnalyzing ? <Loader2 className="size-3.5 animate-spin" /> : <UploadCloud className="size-3.5" />}
+                {importAnalyzing ? 'Đang đọc tệp...' : 'Chọn tệp'}
+              </Button>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-slate-700">Hoặc dán văn bản:</Label>
+              <Textarea
+                placeholder="Nguyễn Văn An	HS001	Nam	12/04/2016	Nguyễn Thị Hoa	0901234567	Chủ động phát biểu
 Trần Thị Bình	HS002	Nữ	25/08/2016	Trần Văn Cường	0912345678	Tiếp thu nhanh"
-              value={importText}
-              onChange={(e) => handleParseImport(e.target.value)}
-              rows={5}
-              className="text-xs font-mono"
-            />
+                value={importText}
+                onChange={(e) => handleParseImport(e.target.value)}
+                rows={4}
+                className="text-xs font-mono"
+              />
+            </div>
 
             {importRows.length > 0 && (
               <div className="border rounded-xl p-3 bg-slate-50 max-h-48 overflow-y-auto space-y-1.5">
-                <p className="font-bold text-slate-700">Xem trước ({importRows.length} dòng):</p>
+                <div className="flex items-center justify-between font-bold text-slate-700">
+                  <span>Xem trước ({importRows.length} dòng):</span>
+                  <button onClick={() => setImportRows([])} className="text-rose-600 hover:underline text-[11px] font-normal">
+                    Xóa danh sách
+                  </button>
+                </div>
                 {importRows.map((r, i) => (
                   <div key={i} className="flex items-center justify-between text-[11px] bg-white p-2 rounded border">
                     <span className="font-semibold text-slate-800">
@@ -2313,7 +2382,7 @@ Trần Thị Bình	HS002	Nữ	25/08/2016	Trần Văn Cường	0912345678	Tiếp 
               size="sm"
               onClick={handleExecuteImport}
               disabled={submittingImport || importRows.length === 0}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs cursor-pointer"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs cursor-pointer gap-1.5"
             >
               {submittingImport ? <Loader2 className="size-3.5 animate-spin" /> : <UploadCloud className="size-3.5" />} Xác nhận Import ({importRows.length})
             </Button>

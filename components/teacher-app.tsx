@@ -1519,8 +1519,11 @@ function GenericView({
 }
 
 type AIMessage = {
+  id?: string;
   from: 'ai' | 'user';
   text: string;
+  isError?: boolean;
+  retry?: () => void;
   payload?: {
     type: 'lesson-plan' | 'activity' | 'worksheet' | 'questions' | 'student-comment';
     data: any;
@@ -1713,11 +1716,19 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
         file: fileToSend || undefined,
       })
 
+      const replyContent =
+        response.content ||
+        response.reply ||
+        response.text ||
+        response.response ||
+        ''
+
       setMessages((m) => [
         ...m,
         {
+          id: response.messageId || `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           from: 'ai',
-          text: response.reply,
+          text: replyContent,
         },
       ])
     } catch (err: any) {
@@ -1726,6 +1737,7 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
       setMessages((m) => [
         ...m,
         {
+          id: `err-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           from: 'ai',
           text: errMsg,
           isError: true,
@@ -1855,7 +1867,7 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
           <div className="flex-1 overflow-y-auto p-5 sm:p-8">
             <div className="mx-auto flex max-w-3xl flex-col gap-5">
               {messages.map((m, i) => (
-                <div key={i} className={`flex gap-3 ${m.from === 'user' ? 'justify-end' : ''}`}>
+                <div key={m.id || i} className={`flex gap-3 ${m.from === 'user' ? 'justify-end' : ''}`}>
                   <span className={`grid size-8 shrink-0 place-items-center rounded-lg ${m.from === 'ai' ? 'bg-teal-100 text-teal-700' : 'bg-slate-200 text-slate-600'}`}>
                     {m.from === 'ai' ? <Sparkles className="size-4" /> : <UserRound className="size-4" />}
                   </span>

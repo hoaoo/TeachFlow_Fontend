@@ -229,27 +229,71 @@ export async function analyzeImportFile(formData: FormData): Promise<{
 
 export async function generateHomeroomSummary(payload: { classroomId: string; period: 'WEEK' | 'MONTH'; weekNumber?: number }) { return api.post<any>('/ai/homeroom-summary', payload); }
 
+export interface AiChatResponse {
+  messageId: string;
+  content: string;
+  reply: string;
+  text?: string;
+  response?: string;
+  provider?: string;
+  modelUsed?: string;
+  fallbackUsed?: boolean;
+  generatedAt?: string;
+  fileName?: string;
+}
+
 export async function sendAiChat(payload: {
   message: string;
   history?: string;
   context?: string;
   file?: File;
-}): Promise<{ reply: string; data?: any }> {
+}): Promise<AiChatResponse> {
+  const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   try {
+    let rawResponse: any;
     if (payload.file) {
       const formData = new FormData();
       formData.append('message', payload.message);
       formData.append('file', payload.file);
       if (payload.history) formData.append('history', payload.history);
       if (payload.context) formData.append('context', payload.context);
-      return await api.postForm<{ reply: string; data?: any }>('/ai/chat', formData);
+      rawResponse = await api.postForm<any>('/ai/chat', formData);
+    } else {
+      rawResponse = await api.post<any>('/ai/chat', {
+        message: payload.message,
+        history: payload.history,
+        context: payload.context,
+      });
     }
-    return await api.post<{ reply: string; data?: any }>('/ai/chat', {
-      message: payload.message,
-      history: payload.history,
-      context: payload.context,
-    });
+
+    const content =
+      rawResponse?.content ??
+      rawResponse?.reply ??
+      rawResponse?.text ??
+      rawResponse?.response ??
+      '';
+    const messageId = rawResponse?.messageId || `msg-${Date.now()}`;
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(
+        `[AI Chat] requestId=${requestId} HTTP=200 messageId=${messageId} contentLength=${content.length}`,
+      );
+    }
+
+    return {
+      messageId,
+      content,
+      reply: content,
+      text: content,
+      response: content,
+      provider: rawResponse?.provider || 'google',
+      modelUsed: rawResponse?.modelUsed,
+      fallbackUsed: rawResponse?.fallbackUsed,
+      generatedAt: rawResponse?.generatedAt,
+      fileName: rawResponse?.fileName,
+    };
   } catch (error: any) {
     throw new Error(error?.message || 'Không thể kết nối đến Trợ lý AI. Vui lòng thử lại.');
   }
 }
+

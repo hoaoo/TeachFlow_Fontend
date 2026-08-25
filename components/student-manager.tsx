@@ -154,6 +154,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
   const [importText, setImportText] = useState('')
   const [importRows, setImportRows] = useState<
     Array<{
+      id: string
       fullName: string
       studentCode?: string
       gender?: string
@@ -161,7 +162,11 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
       parentName?: string
       parentPhone?: string
       note?: string
-      error?: string
+      valid: boolean
+      errors: string[]
+      warnings?: string[]
+      unmappedColumns?: Record<string, string>
+      selected: boolean
     }>
   >([])
   const [importAnalyzing, setImportAnalyzing] = useState(false)
@@ -539,17 +544,72 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
     }
   }
 
+  // Validation helper on client
+  const validateRowClient = (row: {
+    fullName?: string
+    studentCode?: string
+    gender?: string
+    dob?: string
+    parentName?: string
+    parentPhone?: string
+    note?: string
+  }): { valid: boolean; errors: string[] } => {
+    const errors: string[] = []
+    const fullName = (row.fullName || '').trim()
+    if (!fullName) errors.push('Thiếu họ và tên')
+
+    if (row.dob && row.dob.trim()) {
+      const raw = row.dob.trim()
+      const dmy = raw.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/)
+      const ymd = raw.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/)
+      if (!dmy && !ymd && isNaN(Date.parse(raw))) {
+        errors.push('Ngày sinh không hợp lệ')
+      }
+    }
+
+    if (row.gender && row.gender.trim()) {
+      const g = row.gender.trim().toLowerCase()
+      if (!['nam', 'nữ', 'nu', 'male', 'female', 'm', 'f'].includes(g)) {
+        errors.push('Giới tính không hợp lệ')
+      }
+    }
+
+    return { valid: errors.length === 0, errors }
+  }
+
   // Analyze Import File
   const handleAnalyzeFile = async (file: File) => {
     if (!file) return
     setImportAnalyzing(true)
     try {
       const res = await analyzeStudentImportFile(file, importTargetClassId)
-      if (res?.students && Array.isArray(res.students)) {
-        setImportRows(res.students)
-        toast.success(`AI đã nhận diện ${res.students.length} học sinh từ file!`)
+      const rawRows: any[] = res?.rows || (res as any)?.students || []
+      if (rawRows.length > 0) {
+        const rowsWithState = rawRows.map((r, index) => {
+          const clientVal = validateRowClient(r)
+          const isValid = r.valid !== undefined ? r.valid : clientVal.valid
+          const errors = r.errors && r.errors.length > 0 ? r.errors : clientVal.errors
+          return {
+            id: `row-${Date.now()}-${index}`,
+            fullName: r.fullName || '',
+            studentCode: r.studentCode || undefined,
+            gender: r.gender || 'Nam',
+            dob: r.dob || undefined,
+            parentName: r.parentName || undefined,
+            parentPhone: r.parentPhone || undefined,
+            note: r.note || undefined,
+            valid: isValid,
+            errors,
+            warnings: r.warnings,
+            unmappedColumns: r.unmappedColumns,
+            selected: isValid,
+          }
+        })
+        setImportRows(rowsWithState)
+        const validCount = rowsWithState.filter((r) => r.valid).length
+        toast.success(`Đã nhận diện ${rowsWithState.length} học sinh (${validCount} hợp lệ) từ tệp!`)
       } else {
-        toast.info('Vui lòng dán danh sách theo định dạng bảng')
+        toast.info('Không tìm thấy dữ liệu học sinh trong tệp')
       }
     } catch (err: any) {
       toast.error(err?.message || 'Không thể phân tích file import')
@@ -561,20 +621,65 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
   const handleParseImportText = () => {
     if (!importText.trim()) return
     const lines = importText.trim().split('\n')
-    const rows = lines.map((line) => {
-      const parts = line.split(/[\t,;|]/).map((p) => p.trim())
-      return {
-        fullName: parts[0] || '',
-        studentCode: parts[1] || undefined,
-        gender: parts[2] || 'Nam',
-        dob: parts[3] || undefined,
-        parentName: parts[4] || undefined,
-        parentPhone: parts[5] || undefined,
-        note: parts[6] || undefined,
-      }
-    })
+    const rows = lines
+      .map((line, index) => {
+        const parts = line.split(/[\t,;|]/).map((p) => p.trim())
+        if (parts.length === 0 || !parts.some((p) => p.length > 0)) return null
+        const rowData = {
+          fullName: parts[0] || '',
+          studentCode: parts[1] || undefined,
+          gender: parts[2] || 'Nam',
+          dob: parts[3] || undefined,
+          parentName: parts[4] || undefined,
+          parentPhone: parts[5] || undefined,
+          note: parts[6] || undefined,
+        }
+        const val = validateRowClient(rowData)
+        return {
+          id: `row-text-${Date.now()}-${index}`,
+          ...rowData,
+          valid: val.valid,
+          errors: val.errors,
+          selected: val.valid,
+        }
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+
     setImportRows(rows)
     toast.success(`Đã phân tích ${rows.length} dòng dữ liệu`)
+  }
+
+  const handleUpdateImportCell = (rowId: string, field: string, value: string) => {
+    setImportRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== rowId) return r
+        const updated = { ...r, [field]: value }
+        const val = validateRowClient(updated)
+        return {
+          ...updated,
+          valid: val.valid,
+          errors: val.errors,
+        }
+      })
+    )
+  }
+
+  const handleToggleSelectRow = (rowId: string) => {
+    setImportRows((prev) =>
+      prev.map((r) => (r.id === rowId ? { ...r, selected: !r.selected } : r))
+    )
+  }
+
+  const handleToggleSelectAll = (select: boolean) => {
+    setImportRows((prev) => prev.map((r) => ({ ...r, selected: select })))
+  }
+
+  const handleSelectOnlyValid = () => {
+    setImportRows((prev) => prev.map((r) => ({ ...r, selected: r.valid })))
+  }
+
+  const handleDeleteImportRow = (rowId: string) => {
+    setImportRows((prev) => prev.filter((r) => r.id !== rowId))
   }
 
   const handleConfirmImport = async () => {
@@ -582,14 +687,25 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
       toast.error('Vui lòng chọn lớp học tiếp nhận')
       return
     }
-    if (importRows.length === 0) {
-      toast.error('Chưa có dữ liệu học sinh để import')
+    const selectedRows = importRows.filter((r) => r.selected)
+    if (selectedRows.length === 0) {
+      toast.error('Chưa chọn học sinh nào để import. Vui lòng chọn ít nhất một dòng.')
       return
     }
 
     setImporting(true)
     try {
-      const res = await importStudents(importTargetClassId, importRows)
+      const payload = selectedRows.map((r) => ({
+        fullName: r.fullName,
+        studentCode: r.studentCode || undefined,
+        gender: r.gender || 'Nam',
+        dob: r.dob || undefined,
+        parentName: r.parentName || undefined,
+        parentPhone: r.parentPhone || undefined,
+        note: r.note || undefined,
+      }))
+
+      const res = await importStudents(importTargetClassId, payload)
       if (res.success) {
         toast.success(res.message || `Đã import thành công ${res.importedCount} học sinh!`)
         setImportDialogOpen(false)
@@ -1540,27 +1656,35 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
         </DialogContent>
       </Dialog>
 
-      {/* IMPORT EXCEL DIALOG */}
+      {/* IMPORT EXCEL & WORD DIALOG */}
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="sm:max-w-[650px] max-h-[85vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-5xl max-h-[90vh] flex flex-col p-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
               <FileSpreadsheet className="size-5 text-emerald-600" />
-              Import danh sách học sinh từ Excel
+              <FileText className="size-5 text-indigo-600" />
+              Import danh sách học sinh từ file Word / Excel
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Hỗ trợ tải lên file Excel hoặc dán trực tiếp danh sách học sinh vào lớp học.
+              Hỗ trợ tệp Microsoft Word (.docx, .doc), Excel (.xlsx, .xls, .csv) hoặc dán trực tiếp danh sách học sinh.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2 text-xs">
-            <div>
-              <Label className="text-xs font-semibold">Chọn lớp học tiếp nhận *</Label>
+          <div className="flex-1 overflow-y-auto space-y-4 py-2 text-xs">
+            {/* Target Classroom Selection */}
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <Label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <GraduationCap className="size-4 text-teal-600" /> Chọn lớp học tiếp nhận *
+                </Label>
+                <p className="text-[11px] text-slate-500">Học sinh sẽ được ghi danh vào lớp và năm học tương ứng</p>
+              </div>
               <select
                 value={importTargetClassId}
                 onChange={(e) => setImportTargetClassId(e.target.value)}
-                className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs focus:outline-teal-500"
+                className="h-9 min-w-[220px] rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 focus:outline-teal-500"
               >
+                <option value="">-- Chọn lớp học --</option>
                 {classes.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name} ({c.grade})
@@ -1569,98 +1693,261 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
               </select>
             </div>
 
-            {/* File Upload Zone */}
-            <div className="border-2 border-dashed border-slate-200 hover:border-teal-400 rounded-xl p-5 text-center bg-slate-50/50 transition">
-              <UploadCloud className="size-8 mx-auto text-slate-400 mb-2" />
-              <p className="text-xs font-semibold text-slate-700">Tải lên tệp Excel (.xlsx, .xls, .csv)</p>
-              <p className="text-[11px] text-slate-400 mt-0.5">AI sẽ tự động nhận diện các cột dữ liệu họ tên, ngày sinh, phụ huynh</p>
-              <input
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                id="import-file"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0]
-                  if (f) handleAnalyzeFile(f)
-                }}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => document.getElementById('import-file')?.click()}
-                disabled={importAnalyzing}
-                className="mt-3 text-xs gap-1.5 font-semibold text-teal-700 border-teal-200"
-              >
-                {importAnalyzing ? <Loader2 className="size-3.5 animate-spin" /> : <UploadCloud className="size-3.5" />} Chọn tệp từ máy tính
-              </Button>
-            </div>
-
-            {/* Or Paste Table */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-slate-700">Hoặc dán văn bản phân tách bằng tab/dấu phẩy:</Label>
-              <Textarea
-                placeholder="Nguyễn Văn An, HS001, Nam, 12/04/2016, Nguyễn Thị Hoa, 0901234567&#10;Trần Thị Bình, HS002, Nữ, 15/06/2016, Trần Văn Cường, 0902345678"
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-                rows={3}
-                className="text-xs font-mono"
-              />
-              <div className="flex justify-end">
-                <Button size="sm" variant="outline" onClick={handleParseImportText} className="text-xs h-7">
-                  Phân tích văn bản
-                </Button>
-              </div>
-            </div>
-
-            {/* Preview Table */}
-            {importRows.length > 0 && (
-              <div className="space-y-2 border border-slate-200 rounded-lg p-3 bg-white">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                  <span>Xem trước danh sách ({importRows.length} học sinh)</span>
-                  <button onClick={() => setImportRows([])} className="text-rose-600 hover:underline text-[11px]">
-                    Xóa danh sách
-                  </button>
+            {importRows.length === 0 ? (
+              /* UPLOAD / PASTE SECTION */
+              <div className="space-y-4">
+                {/* File Upload Zone */}
+                <div className="border-2 border-dashed border-slate-300 hover:border-teal-500 rounded-xl p-6 text-center bg-slate-50/60 hover:bg-teal-50/20 transition">
+                  <div className="flex justify-center items-center gap-2 mb-2 text-slate-400">
+                    <FileText className="size-8 text-indigo-500" />
+                    <FileSpreadsheet className="size-8 text-emerald-500" />
+                    <UploadCloud className="size-8 text-teal-500" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-800">Tải lên tệp Word (.docx) hoặc Excel (.xlsx, .xls, .csv)</p>
+                  <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                    Hệ thống tự động đọc bảng trong Word/Excel hoặc trích xuất AI có cấu trúc các trường họ tên, ngày sinh, giới tính, phụ huynh.
+                  </p>
+                  <input
+                    type="file"
+                    accept=".docx,.doc,.xlsx,.xls,.csv"
+                    id="import-file-main"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (f) handleAnalyzeFile(f)
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => document.getElementById('import-file-main')?.click()}
+                    disabled={importAnalyzing}
+                    className="mt-4 text-xs gap-1.5 font-bold text-teal-700 border-teal-300 hover:bg-teal-50 cursor-pointer h-9 px-4 shadow-2xs"
+                  >
+                    {importAnalyzing ? <Loader2 className="size-4 animate-spin text-teal-600" /> : <UploadCloud className="size-4" />}
+                    {importAnalyzing ? 'Đang phân tích tệp...' : 'Chọn tệp từ máy tính'}
+                  </Button>
                 </div>
-                <div className="max-h-48 overflow-y-auto">
-                  <table className="w-full text-left text-[11px]">
-                    <thead className="bg-slate-50 text-slate-500 font-semibold border-b">
-                      <tr>
-                        <th className="p-1.5">Họ và tên</th>
-                        <th className="p-1.5">Mã HS</th>
-                        <th className="p-1.5">Giới tính</th>
-                        <th className="p-1.5">Ngày sinh</th>
-                        <th className="p-1.5">Phụ huynh</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {importRows.map((r, i) => (
-                        <tr key={i}>
-                          <td className="p-1.5 font-bold">{r.fullName}</td>
-                          <td className="p-1.5 font-mono">{r.studentCode || 'Tự sinh'}</td>
-                          <td className="p-1.5">{r.gender || 'Nam'}</td>
-                          <td className="p-1.5">{r.dob || '—'}</td>
-                          <td className="p-1.5">{r.parentName || '—'}</td>
+
+                {/* Or Paste Table */}
+                <div className="space-y-2 border border-slate-200 rounded-xl p-3.5 bg-white">
+                  <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                    <span>Hoặc dán văn bản danh sách:</span>
+                    <span className="text-[11px] font-normal text-slate-400">Phân tách bằng Tab hoặc Dấu phẩy</span>
+                  </Label>
+                  <Textarea
+                    placeholder="Nguyễn Văn An	HS001	Nam	12/05/2018	Nguyễn Văn Ba	0901234567	Ghi chú&#10;Trần Thị Bình	HS002	Nữ	20/08/2018	Trần Văn Cường	0987654321	"
+                    value={importText}
+                    onChange={(e) => setImportText(e.target.value)}
+                    rows={4}
+                    className="text-xs font-mono"
+                  />
+                  <div className="flex justify-end">
+                    <Button size="sm" variant="outline" onClick={handleParseImportText} className="text-xs h-7 gap-1 font-semibold">
+                      <Sparkles className="size-3 text-teal-600" /> Phân tích văn bản
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* PREVIEW & EDIT SECTION */
+              <div className="space-y-3">
+                {/* Stats & Quick Actions Toolbar */}
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                    <span className="font-bold text-slate-800">
+                      Tổng: <span className="text-teal-700">{importRows.length}</span> học sinh
+                    </span>
+                    <span className="text-slate-300">|</span>
+                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] font-semibold">
+                      ✓ {importRows.filter((r) => r.valid).length} hợp lệ
+                    </Badge>
+                    {importRows.filter((r) => !r.valid).length > 0 && (
+                      <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200 text-[11px] font-semibold">
+                        ⚠ {importRows.filter((r) => !r.valid).length} cần sửa
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className="bg-teal-50 text-teal-800 border-teal-200 text-[11px] font-semibold">
+                      Đã chọn: {importRows.filter((r) => r.selected).length}/{importRows.length}
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleSelectOnlyValid()}
+                      className="text-[11px] h-7 px-2 font-medium text-emerald-700 border-emerald-200 hover:bg-emerald-50 cursor-pointer"
+                    >
+                      Chỉ chọn dòng hợp lệ
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleToggleSelectAll(!importRows.every((r) => r.selected))}
+                      className="text-[11px] h-7 px-2 font-medium text-slate-700 cursor-pointer"
+                    >
+                      {importRows.every((r) => r.selected) ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setImportRows([])}
+                      className="text-[11px] h-7 px-2 font-medium text-rose-600 border-rose-200 hover:bg-rose-50 cursor-pointer gap-1"
+                    >
+                      <RefreshCw className="size-3" /> Tải file khác
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Editable Preview Table */}
+                <div className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-2xs">
+                  <div className="max-h-[50vh] overflow-auto">
+                    <table className="w-full text-left text-xs border-collapse min-w-[760px]">
+                      <thead className="bg-slate-100/80 sticky top-0 z-10 text-[11px] font-bold text-slate-700 border-b border-slate-200">
+                        <tr>
+                          <th className="p-2 w-8 text-center">
+                            <input
+                              type="checkbox"
+                              checked={importRows.length > 0 && importRows.every((r) => r.selected)}
+                              onChange={(e) => handleToggleSelectAll(e.target.checked)}
+                              className="rounded accent-teal-600 size-3.5"
+                            />
+                          </th>
+                          <th className="p-2 w-10 text-center text-slate-400">STT</th>
+                          <th className="p-2 min-w-[150px]">Họ và tên *</th>
+                          <th className="p-2 w-28">Mã học sinh</th>
+                          <th className="p-2 w-24">Giới tính</th>
+                          <th className="p-2 w-28">Ngày sinh</th>
+                          <th className="p-2 min-w-[130px]">Phụ huynh</th>
+                          <th className="p-2 w-28">Số điện thoại</th>
+                          <th className="p-2 min-w-[110px]">Trạng thái</th>
+                          <th className="p-2 w-10 text-center"></th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {importRows.map((r, i) => (
+                          <tr
+                            key={r.id}
+                            className={`transition hover:bg-slate-50/80 ${
+                              !r.valid ? 'bg-rose-50/40' : r.selected ? 'bg-teal-50/20' : ''
+                            }`}
+                          >
+                            <td className="p-2 text-center">
+                              <input
+                                type="checkbox"
+                                checked={r.selected}
+                                onChange={() => handleToggleSelectRow(r.id)}
+                                className="rounded accent-teal-600 size-3.5"
+                              />
+                            </td>
+                            <td className="p-2 text-center font-mono text-[11px] text-slate-400">{i + 1}</td>
+                            <td className="p-1.5">
+                              <Input
+                                value={r.fullName}
+                                onChange={(e) => handleUpdateImportCell(r.id, 'fullName', e.target.value)}
+                                placeholder="Họ và tên..."
+                                className={`h-7 text-xs font-semibold px-2 ${
+                                  !r.fullName.trim() ? 'border-rose-400 bg-rose-50' : 'bg-transparent'
+                                }`}
+                              />
+                            </td>
+                            <td className="p-1.5">
+                              <Input
+                                value={r.studentCode || ''}
+                                onChange={(e) => handleUpdateImportCell(r.id, 'studentCode', e.target.value)}
+                                placeholder="Tự sinh"
+                                className="h-7 text-xs font-mono px-2 bg-transparent"
+                              />
+                            </td>
+                            <td className="p-1.5">
+                              <select
+                                value={r.gender || 'Nam'}
+                                onChange={(e) => handleUpdateImportCell(r.id, 'gender', e.target.value)}
+                                className="h-7 w-full rounded-md border border-slate-200 bg-transparent px-1.5 text-xs"
+                              >
+                                <option value="Nam">Nam</option>
+                                <option value="Nữ">Nữ</option>
+                              </select>
+                            </td>
+                            <td className="p-1.5">
+                              <Input
+                                value={r.dob || ''}
+                                onChange={(e) => handleUpdateImportCell(r.id, 'dob', e.target.value)}
+                                placeholder="DD/MM/YYYY"
+                                className={`h-7 text-xs px-2 ${
+                                  r.errors.some((err) => err.includes('Ngày sinh')) ? 'border-rose-400 bg-rose-50' : 'bg-transparent'
+                                }`}
+                              />
+                            </td>
+                            <td className="p-1.5">
+                              <Input
+                                value={r.parentName || ''}
+                                onChange={(e) => handleUpdateImportCell(r.id, 'parentName', e.target.value)}
+                                placeholder="Tên phụ huynh"
+                                className="h-7 text-xs px-2 bg-transparent"
+                              />
+                            </td>
+                            <td className="p-1.5">
+                              <Input
+                                value={r.parentPhone || ''}
+                                onChange={(e) => handleUpdateImportCell(r.id, 'parentPhone', e.target.value)}
+                                placeholder="SĐT"
+                                className="h-7 text-xs px-2 bg-transparent font-mono"
+                              />
+                            </td>
+                            <td className="p-2">
+                              {r.valid ? (
+                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-semibold py-0.5">
+                                  ✓ Hợp lệ
+                                </Badge>
+                              ) : (
+                                <div className="space-y-0.5">
+                                  <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200 text-[10px] font-semibold py-0.5">
+                                    ⚠ Lỗi
+                                  </Badge>
+                                  <p className="text-[10px] text-rose-600 leading-tight">
+                                    {r.errors.join(', ')}
+                                  </p>
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-2 text-center">
+                              <button
+                                onClick={() => handleDeleteImportRow(r.id)}
+                                title="Xóa dòng này"
+                                className="text-slate-400 hover:text-rose-600 transition p-1"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
           </div>
 
-          <DialogFooter className="gap-2">
+          <DialogFooter className="gap-2 pt-3 border-t border-slate-200">
             <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(false)} disabled={importing}>
-              Hủy
+              Đóng
             </Button>
-            <Button
-              size="sm"
-              onClick={handleConfirmImport}
-              disabled={importing || importRows.length === 0 || !importTargetClassId}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs gap-1.5"
-            >
-              {importing ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} Xác nhận import {importRows.length} HS
-            </Button>
+            {importRows.length > 0 && (
+              <Button
+                size="sm"
+                onClick={handleConfirmImport}
+                disabled={importing || importRows.filter((r) => r.selected).length === 0 || !importTargetClassId}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs gap-1.5 cursor-pointer"
+              >
+                {importing ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                {importing
+                  ? 'Đang import vào hệ thống...'
+                  : `Xác nhận Import (${importRows.filter((r) => r.selected).length} học sinh)`}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

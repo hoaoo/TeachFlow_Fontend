@@ -167,6 +167,18 @@ export async function analyzeStudentImportFile(file: File, classroomId?: string)
   return analyzeImportFile(formData);
 }
 
+export interface StudentImportResult {
+  success: boolean;
+  total?: number;
+  imported?: number;
+  skipped?: number;
+  failed?: number;
+  importedCount: number;
+  errorCount: number;
+  errors: Array<{ row: number; fullName?: string; message: string }>;
+  message?: string;
+}
+
 export async function importStudents(
   classroomId: string,
   students: Array<{
@@ -178,13 +190,7 @@ export async function importStudents(
     parentPhone?: string;
     note?: string;
   }>,
-): Promise<{
-  success: boolean;
-  importedCount: number;
-  errorCount: number;
-  errors: Array<{ row: number; fullName?: string; message: string }>;
-  message?: string;
-}> {
+): Promise<StudentImportResult> {
   return api.post('/students/import', { classroomId, students });
 }
 

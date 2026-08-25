@@ -551,7 +551,7 @@ export function SeatingPlanView() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 py-6">
+    <div className="w-full space-y-5">
       {/* 1. Header Màn hình */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
         <div>
@@ -685,67 +685,71 @@ export function SeatingPlanView() {
       </Card>
 
       {/* 3. Main Workspace: Sidebar Học sinh (trái) + Sơ đồ các Tổ (phải) */}
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] xl:grid-cols-[230px_1fr] gap-4 sm:gap-5 items-start">
         {/* SIDEBAR TRÁI: DANH SÁCH HỌC SINH CHƯA XẾP */}
-        <Card className="border border-slate-200/80 shadow-2xs rounded-xl sticky top-4">
-          <CardHeader className="p-4 pb-3 border-b border-slate-100">
+        <Card className="border border-slate-200/80 shadow-2xs rounded-xl lg:sticky lg:top-4">
+          <CardHeader className="p-3.5 pb-2.5 border-b border-slate-100">
             <div className="flex items-center justify-between">
               <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                <Users className="size-4 text-teal-600" />
-                Học sinh chưa xếp ({unassignedStudents.length})
+                <Users className="size-3.5 text-teal-600 shrink-0" />
+                <span className="truncate">Chưa xếp ({unassignedStudents.length})</span>
               </CardTitle>
               {selectedStudentId && (
                 <button
                   onClick={() => setSelectedStudentId(null)}
-                  className="text-[11px] font-semibold text-rose-600 hover:underline cursor-pointer"
+                  className="text-[11px] font-semibold text-rose-600 hover:underline cursor-pointer shrink-0"
                 >
                   Hủy chọn
                 </button>
               )}
             </div>
-            <CardDescription className="text-[11px] text-slate-500 mt-1">
+            <CardDescription className="text-[11px] text-slate-500 mt-1 line-clamp-2">
               {selectedStudentId
-                ? 'Đã chọn học sinh · Nhấp vào ghế trống bên phải để xếp chỗ'
-                : 'Bấm chọn học sinh rồi bấm vào ghế trong tổ'}
+                ? 'Đã chọn HS · Nhấp ghế trống để xếp'
+                : 'Bấm chọn HS rồi bấm vào ghế'}
             </CardDescription>
 
             {/* Student Search */}
-            <div className="relative mt-2.5">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-slate-400" />
+            <div className="relative mt-2">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3 text-slate-400" />
               <Input
                 value={studentSearch}
                 onChange={(e) => setStudentSearch(e.target.value)}
                 placeholder="Tìm học sinh..."
-                className="pl-8 h-8 text-xs bg-slate-50 border-slate-200"
+                className="pl-7.5 h-7.5 text-xs bg-slate-50 border-slate-200"
               />
             </div>
           </CardHeader>
 
-          <CardContent className="p-3 max-h-[560px] overflow-y-auto space-y-1.5">
+          <CardContent className="p-2.5 max-h-[520px] overflow-y-auto space-y-1">
             {filteredUnassignedStudents.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400">
+              <div className="py-6 text-center text-xs text-slate-400">
                 {currentStudents.length === 0 ? (
                   <>
-                    <User className="size-6 mx-auto text-slate-300 mb-1" />
+                    <User className="size-5 mx-auto text-slate-300 mb-1" />
                     Lớp chưa có học sinh nào.
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="size-6 mx-auto text-emerald-500 mb-1" />
-                    Tất cả học sinh đã được xếp chỗ!
+                    <CheckCircle2 className="size-5 mx-auto text-emerald-500 mb-1" />
+                    Tất cả học sinh đã có chỗ!
                   </>
                 )}
               </div>
             ) : (
               filteredUnassignedStudents.map((s: any) => {
                 const isSelected = selectedStudentId === s.id
-                const initials = s.initials || s.fullName?.slice(0, 2)?.toUpperCase() || s.name?.slice(0, 2)?.toUpperCase() || 'HS'
+                const initials =
+                  s.initials ||
+                  s.fullName?.slice(0, 2)?.toUpperCase() ||
+                  s.name?.slice(0, 2)?.toUpperCase() ||
+                  'HS'
                 return (
                   <button
                     key={s.id}
                     type="button"
                     onClick={() => setSelectedStudentId(isSelected ? null : s.id)}
-                    className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left text-xs transition cursor-pointer ${
+                    className={`w-full flex items-center justify-between p-2 rounded-lg border text-left text-xs transition cursor-pointer ${
                       isSelected
                         ? 'border-teal-500 bg-teal-50 text-teal-900 font-bold shadow-2xs ring-1 ring-teal-400'
                         : 'border-slate-150 bg-white hover:border-teal-300 hover:bg-slate-50/80 text-slate-800'
@@ -753,17 +757,17 @@ export function SeatingPlanView() {
                   >
                     <div className="flex items-center gap-2 min-w-0 pr-1">
                       <span
-                        className={`size-6.5 rounded-full grid place-items-center text-[10px] font-extrabold shrink-0 ${
+                        className={`size-6 rounded-full grid place-items-center text-[10px] font-extrabold shrink-0 ${
                           isSelected ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-700'
                         }`}
                       >
                         {initials}
                       </span>
-                      <span className="truncate">{s.fullName || s.name}</span>
+                      <span className="truncate text-xs font-medium">{s.fullName || s.name}</span>
                     </div>
                     {isSelected && (
-                      <span className="shrink-0 size-4 rounded-full bg-teal-600 text-white grid place-items-center">
-                        <Check className="size-2.5" />
+                      <span className="shrink-0 size-3.5 rounded-full bg-teal-600 text-white grid place-items-center">
+                        <Check className="size-2" />
                       </span>
                     )}
                   </button>
@@ -773,7 +777,7 @@ export function SeatingPlanView() {
           </CardContent>
         </Card>
 
-        {/* VÙNG SƠ ĐỒ CHÍNH (CỘT TỔ NẰM NGANG, SCROLL RIÊNG) */}
+        {/* VÙNG SƠ ĐỒ CHÍNH (CÁC TỔ HIỂN THỊ ĐỦ 4 CỘT TRÊN DESKTOP) */}
         <div className="space-y-4 min-w-0">
           {/* BẢNG LỚP HỌC */}
           <div className="rounded-xl bg-slate-900 py-2.5 px-4 text-center text-xs font-bold tracking-widest text-slate-100 shadow-sm flex items-center justify-center gap-2">
@@ -781,9 +785,21 @@ export function SeatingPlanView() {
             BẢNG LỚP HỌC (HƯỚNG NHÌN)
           </div>
 
-          {/* CÁC TỔ NẰM NGANG CẠNH NHAU (SCROLL NGANG TÁCH BIỆT) */}
-          <div className="overflow-x-auto pb-4 pt-1">
-            <div className="flex items-start gap-4.5 min-w-max pb-2">
+          {/* CÁC TỔ NẰM NGANG CẠNH NHAU */}
+          <div className="w-full overflow-x-auto pb-4 pt-1">
+            <div
+              className={`grid gap-3.5 ${
+                groups.length === 1
+                  ? 'grid-cols-1 max-w-sm mx-auto'
+                  : groups.length === 2
+                  ? 'grid-cols-1 sm:grid-cols-2'
+                  : groups.length === 3
+                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+                  : groups.length === 4
+                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
+                  : 'grid-flow-col auto-cols-[minmax(210px,1fr)] min-w-max'
+              }`}
+            >
               {groups.map((group, groupIdx) => {
                 const totalGroupSeats = group.desks.reduce((acc, d) => acc + d.seatCapacity, 0)
                 const seatedInGroup = group.desks.reduce(
@@ -794,26 +810,26 @@ export function SeatingPlanView() {
                 return (
                   <div
                     key={group.id}
-                    className="w-72 shrink-0 rounded-2xl border border-slate-200/90 bg-slate-50/70 p-3.5 shadow-2xs flex flex-col justify-between"
+                    className="w-full min-w-0 rounded-2xl border border-slate-200/90 bg-slate-50/70 p-3 shadow-2xs flex flex-col justify-between"
                   >
                     {/* Header Cột Tổ */}
-                    <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5 mb-3 bg-white px-3 py-2 rounded-xl shadow-2xs">
-                      <div>
-                        <h3 className="font-extrabold text-sm text-slate-900 tracking-tight">
+                    <div className="flex items-center justify-between border-b border-slate-200/80 pb-2 mb-2.5 bg-white px-2.5 py-1.5 rounded-xl shadow-2xs">
+                      <div className="min-w-0 pr-1">
+                        <h3 className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-tight truncate">
                           {group.name}
                         </h3>
-                        <p className="text-[11px] text-slate-500 font-medium">
+                        <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium">
                           {group.desks.length} bàn · {seatedInGroup}/{totalGroupSeats} chỗ
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-0.5 shrink-0">
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => handleAddDeskToGroup(group.id)}
                           disabled={group.desks.length >= MAX_DESKS_PER_GROUP}
-                          className="h-7 px-2 text-xs font-semibold text-teal-700 hover:bg-teal-50"
+                          className="h-6.5 px-1.5 text-[11px] font-semibold text-teal-700 hover:bg-teal-50"
                           title="Thêm bàn vào tổ"
                         >
                           <Plus className="size-3 mr-0.5" /> Bàn
@@ -821,8 +837,8 @@ export function SeatingPlanView() {
 
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 hover:text-slate-900">
-                              <MoreVertical className="size-3.5" />
+                            <Button variant="ghost" size="icon" className="h-6.5 w-6.5 text-slate-500 hover:text-slate-900">
+                              <MoreVertical className="size-3" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-44 text-xs font-medium">
@@ -857,30 +873,30 @@ export function SeatingPlanView() {
                     </div>
 
                     {/* Danh sách Bàn trong Tổ (Xếp dọc từ trên xuống) */}
-                    <div className="space-y-3">
+                    <div className="space-y-2.5">
                       {group.desks.map((desk, deskIdx) => {
                         const isFourSeats = desk.seatCapacity === 4
 
                         return (
                           <div
                             key={desk.id}
-                            className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs hover:border-slate-300 transition"
+                            className="rounded-xl border border-slate-200 bg-white p-2.5 shadow-2xs hover:border-slate-300 transition"
                           >
                             {/* Tiêu đề bàn + đổi số ghế */}
-                            <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-100">
-                              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                                <Armchair className="size-3.5 text-teal-600" />
-                                {desk.name || `Bàn ${deskIdx + 1}`}
+                            <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-slate-100">
+                              <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                                <Armchair className="size-3 text-teal-600 shrink-0" />
+                                <span className="truncate">{desk.name || `Bàn ${deskIdx + 1}`}</span>
                               </span>
 
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1 shrink-0">
                                 <button
                                   type="button"
                                   onClick={() => handleToggleDeskCapacity(group.id, desk.id, isFourSeats ? 2 : 4)}
-                                  className="text-[10px] font-semibold text-slate-500 hover:text-teal-700 px-1.5 py-0.5 rounded bg-slate-50 hover:bg-teal-50 transition cursor-pointer"
+                                  className="text-[9px] font-semibold text-slate-500 hover:text-teal-700 px-1 py-0.5 rounded bg-slate-50 hover:bg-teal-50 transition cursor-pointer"
                                   title="Chuyển đổi giữa 2 ghế và 4 ghế"
                                 >
-                                  {isFourSeats ? 'Bàn 4 ghế' : 'Bàn 2 ghế'}
+                                  {isFourSeats ? '4 ghế' : '2 ghế'}
                                 </button>
                               </div>
                             </div>
@@ -895,13 +911,17 @@ export function SeatingPlanView() {
                                 const isTargetHighlighted = Boolean(selectedStudentId && !seat?.studentId)
                                 const isCurrentSelected = Boolean(selectedStudentId && seat?.studentId === selectedStudentId)
 
-                                const initials = student?.initials || student?.fullName?.slice(0, 2)?.toUpperCase() || student?.name?.slice(0, 2)?.toUpperCase() || 'HS'
+                                const initials =
+                                  student?.initials ||
+                                  student?.fullName?.slice(0, 2)?.toUpperCase() ||
+                                  student?.name?.slice(0, 2)?.toUpperCase() ||
+                                  'HS'
 
                                 return (
                                   <div
                                     key={pos}
                                     onClick={() => handleSeatClick(group.id, desk.id, pos)}
-                                    className={`relative min-h-[58px] p-2 rounded-lg border text-left transition cursor-pointer flex flex-col justify-between ${
+                                    className={`relative min-h-[50px] p-1.5 rounded-lg border text-left transition cursor-pointer flex flex-col justify-between ${
                                       student
                                         ? isCurrentSelected
                                           ? 'border-teal-500 bg-teal-50/90 text-teal-900 font-bold ring-1 ring-teal-400'
@@ -911,32 +931,35 @@ export function SeatingPlanView() {
                                         : 'border-dashed border-slate-250 bg-white hover:border-teal-300 hover:bg-slate-50/60'
                                     }`}
                                   >
-                                    <div className="flex items-center justify-between text-[10px] font-semibold text-slate-400">
+                                    <div className="flex items-center justify-between text-[9px] font-semibold text-slate-400">
                                       <span>G{pos + 1}</span>
                                       {student && (
                                         <button
                                           type="button"
                                           onClick={(e) => handleClearSeat(e, group.id, desk.id, pos)}
-                                          className="size-4 rounded-full text-slate-400 hover:text-rose-600 hover:bg-rose-50 grid place-items-center transition"
+                                          className="size-3.5 rounded-full text-slate-400 hover:text-rose-600 hover:bg-rose-50 grid place-items-center transition"
                                           title="Bỏ xếp học sinh này"
                                         >
-                                          <X className="size-2.5" />
+                                          <X className="size-2" />
                                         </button>
                                       )}
                                     </div>
 
                                     {student ? (
-                                      <div className="flex items-center gap-1.5 min-w-0 mt-1">
-                                        <span className="size-5 rounded-full bg-teal-100 text-teal-800 text-[9px] font-bold grid place-items-center shrink-0">
+                                      <div className="flex items-center gap-1 min-w-0 mt-0.5">
+                                        <span className="size-4.5 rounded-full bg-teal-100 text-teal-800 text-[8px] font-bold grid place-items-center shrink-0">
                                           {initials}
                                         </span>
-                                        <span className="text-xs font-semibold text-slate-900 truncate" title={student.fullName || student.name}>
+                                        <span
+                                          className="text-[11px] font-semibold text-slate-900 truncate"
+                                          title={student.fullName || student.name}
+                                        >
                                           {student.fullName || student.name}
                                         </span>
                                       </div>
                                     ) : (
-                                      <span className="text-[11px] font-medium text-slate-400 italic">
-                                        {isTargetHighlighted ? 'Chọn ghế này' : 'Trống'}
+                                      <span className="text-[10px] font-medium text-slate-400 italic">
+                                        {isTargetHighlighted ? 'Chọn ghế' : 'Trống'}
                                       </span>
                                     )}
                                   </div>
