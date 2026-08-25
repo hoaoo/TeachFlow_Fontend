@@ -417,6 +417,9 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
     setImportRows(parsed)
   }
 
+  const updateImportRow = (index: number, field: 'fullName' | 'studentCode' | 'dob' | 'gender' | 'parentName' | 'parentPhone' | 'note', value: string) => {
+    setImportRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value, error: field === 'fullName' && !value.trim() ? 'Thiếu họ và tên' : undefined } : row))
+  }
   const handleExecuteImport = async () => {
     if (importRows.length === 0 || !importTargetClassId) {
       toast.error('Vui lòng chọn lớp và nhập dữ liệu import')
@@ -1071,7 +1074,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
           <DialogHeader>
             <DialogTitle>Import danh sách học sinh</DialogTitle>
             <DialogDescription>
-              Tải file .xlsx/.xls/.docx/.pdf/.jpg hoặc dán bảng. Hệ thống chỉ đề xuất dữ liệu; bạn xem trước rồi mới xác nhận lưu.
+              Tải file .xlsx/.xls/.csv/.docx/.pdf/.jpg hoặc dán bảng. Hệ thống chỉ đề xuất dữ liệu; bạn xem trước rồi mới xác nhận lưu.
             </DialogDescription>
           </DialogHeader>
 
@@ -1080,7 +1083,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
               <Label className="text-xs font-semibold">Tải tệp (xlsx, xls, docx, pdf, ảnh)</Label>
               <input
                 type="file"
-                accept=".xlsx,.xls,.docx,.pdf,.png,.jpg,.jpeg"
+                accept=".xlsx,.xls,.csv,.docx,.pdf,.png,.jpg,.jpeg"
                 className="mt-1 block w-full text-xs"
                 onChange={async (e) => {
                   const file = e.target.files?.[0]
@@ -1139,25 +1142,18 @@ Trần Thị Bình	HS002	Nữ	25/08/2016	Trần Văn Cường	0912345678	Tiếp 
                 <p className="font-bold text-slate-700">
                   Xem trước: {importRows.length} dòng phát hiện · {importRows.filter((r) => !r.error).length} hợp lệ · {importRows.filter((r) => r.error).length} lỗi
                 </p>
-                {importRows.map((r, i) => (
-                  <div
-                    key={i}
-                    className={`flex items-center justify-between gap-2 text-[11px] p-2 rounded border ${
-                      r.error ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-white border-slate-200'
-                    }`}
-                  >
-                    <input
-                      className="flex-1 min-w-0 rounded border px-2 py-1"
-                      value={r.fullName}
-                      onChange={(e) => {
-                        const next = [...importRows]
-                        next[i] = { ...r, fullName: e.target.value, error: e.target.value.trim() ? undefined : 'Thiếu họ và tên' }
-                        setImportRows(next)
-                      }}
-                    />
-                    <span className="text-slate-500 shrink-0">
-                      {r.error ? <strong className="text-rose-600">⚠ {r.error}</strong> : `✓ ${r.dob || 'Chưa NS'} · ${r.gender || 'Nam'}`}
-                    </span>
+                                {importRows.map((r, i) => (
+                  <div key={i} className={`grid gap-2 rounded-lg border p-2 text-[11px] ${r.error ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-white'}`}>
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      <input aria-label={`Họ và tên dòng ${i + 1}`} className="rounded border px-2 py-1" placeholder="Họ và tên *" value={r.fullName || ''} onChange={(e) => updateImportRow(i, 'fullName', e.target.value)} />
+                      <input aria-label={`Mã học sinh dòng ${i + 1}`} className="rounded border px-2 py-1" placeholder="Mã học sinh" value={r.studentCode || ''} onChange={(e) => updateImportRow(i, 'studentCode', e.target.value)} />
+                      <input aria-label={`Ngày sinh dòng ${i + 1}`} className="rounded border px-2 py-1" placeholder="Ngày sinh" value={r.dob || ''} onChange={(e) => updateImportRow(i, 'dob', e.target.value)} />
+                      <input aria-label={`Giới tính dòng ${i + 1}`} className="rounded border px-2 py-1" placeholder="Giới tính" value={r.gender || ''} onChange={(e) => updateImportRow(i, 'gender', e.target.value)} />
+                      <input aria-label={`Tên phụ huynh dòng ${i + 1}`} className="rounded border px-2 py-1" placeholder="Tên phụ huynh" value={r.parentName || ''} onChange={(e) => updateImportRow(i, 'parentName', e.target.value)} />
+                      <input aria-label={`Số điện thoại dòng ${i + 1}`} className="rounded border px-2 py-1" placeholder="Số điện thoại" value={r.parentPhone || ''} onChange={(e) => updateImportRow(i, 'parentPhone', e.target.value)} />
+                      <input aria-label={`Ghi chú dòng ${i + 1}`} className="rounded border px-2 py-1 sm:col-span-2" placeholder="Ghi chú" value={r.note || ''} onChange={(e) => updateImportRow(i, 'note', e.target.value)} />
+                    </div>
+                    <div className="flex items-center justify-between gap-2">{r.error ? <strong className="text-rose-600">Lỗi: {r.error}</strong> : <span className="text-emerald-700">Hợp lệ</span>}<span className="text-slate-400">Dòng {i + 1}</span></div>
                   </div>
                 ))}
               </div>

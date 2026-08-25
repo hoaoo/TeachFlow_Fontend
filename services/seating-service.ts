@@ -1,6 +1,6 @@
 import { api } from './api-client';
-export type SeatingPosition = { studentId: string; row: number; column: number; student?: any; stale?: boolean };
-export type SeatingPlan = { id: string; classroomId: string; name: string; rows: number; columns: number; layout: SeatingPosition[]; students: any[]; updatedAt?: string };
+export type SeatingPosition = { studentId: string; row: number; column: number; seatIndex?: number; student?: any; stale?: boolean };
+export type SeatingPlan = { id: string; classroomId: string; name: string; rows: number; columns: number; seatsPerDesk?: number; layout: SeatingPosition[]; students: any[]; updatedAt?: string };
 export async function getSeatingPlans(classroomId: string) { return api.get<SeatingPlan[]>('/seating-plans?classroomId=' + encodeURIComponent(classroomId)); }
 export async function createSeatingPlan(data: any) { return api.post<SeatingPlan>('/seating-plans', data); }
 export async function updateSeatingPlan(id: string, data: any) { return api.patch<SeatingPlan>('/seating-plans/' + id, data); }

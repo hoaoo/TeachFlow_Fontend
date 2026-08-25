@@ -174,6 +174,17 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
     }
   }
 
+  const handleOpenPreview = async (id: string) => {
+    try {
+      const fullPlan = await getLessonPlanById(id)
+      setLesson(fullPlan)
+      if (fullPlan.activities?.length) setSelectedActivityId(fullPlan.activities[0].id)
+      setViewMode('editor')
+      setEditorSubTab('preview')
+    } catch (err: any) {
+      toast.error(err?.message || 'Không thể tải giáo án để xem')
+    }
+  }
   // Autosave mechanism (only for NATIVE lesson plans)
   const triggerAutosave = useCallback((updatedLesson: LessonPlan) => {
     if (!updatedLesson.id || updatedLesson.sourceType === 'UPLOADED') return
@@ -623,6 +634,9 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
                       </>
                     ) : (
                       <>
+                        <Button size="sm" variant="outline" onClick={() => handleOpenPreview(p.id!)} className="text-xs h-8 gap-1 hover:text-teal-700 font-semibold">
+                          <Eye className="size-3.5" /> Xem
+                        </Button>
                         <Button
                           size="sm"
                           variant="outline"

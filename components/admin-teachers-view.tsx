@@ -521,7 +521,7 @@ export function AdminTeachersView() {
 
                         <button
                           onClick={() => openResetDialog(teacher)}
-                          title="Reset mật khẩu"
+                          title="Đặt lại mật khẩu"
                           className="grid size-8 place-items-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
                         >
                           <KeyRound className="size-3.5" />

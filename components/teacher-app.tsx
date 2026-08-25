@@ -7,7 +7,7 @@ import {
   Plus, Search, Settings, Sparkles, Users, X, ArrowUpRight, CircleHelp, School, Send,
   SlidersHorizontal, Flame, UserRound, ChevronRight, ChevronLeft, Calendar, BookMarked, LogIn, LogOut, KeyRound,
   Loader2, Copy, Bookmark, BookmarkPlus, HelpCircle, Gamepad2, FileQuestion, MessageSquarePlus, Shield,
-  Edit2, Trash2
+  Edit2, Trash2, Paperclip
 } from 'lucide-react'
 import { navItems } from '@/lib/mock-data'
 import { LessonView } from '@/components/lesson-editor'
@@ -57,6 +57,7 @@ import {
   generateWorksheet,
   generateQuestions,
   generateStudentComment,
+  analyzeImportFile,
   type GeneratedActivity,
   type GeneratedLessonPlan,
   type GeneratedWorksheet,
@@ -165,7 +166,7 @@ function Sidebar({
   return (
     <>
       {open && <button aria-label="Đóng menu" className="fixed inset-0 z-30 bg-slate-950/20 lg:hidden" onClick={onClose} />}
-      <aside className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-slate-200 bg-white transition-transform lg:static lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-40 flex h-[100dvh] max-h-[100dvh] shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white transition-transform lg:static lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex h-20 items-center gap-3 border-b border-slate-100 px-6">
           <div className="grid size-10 place-items-center rounded-xl bg-teal-600 text-white shadow-sm">
             {isAdmin ? <Shield className="size-5" /> : <School />}
@@ -1538,6 +1539,9 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [attachmentTarget, setAttachmentTarget] = useState<'students' | 'lesson-plan' | 'worksheet'>('lesson-plan');
+  const [analyzingAttachment, setAnalyzingAttachment] = useState(false);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -1673,6 +1677,26 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
     }
   };
 
+  const handleAttachmentAnalyze = async (file: File) => {
+    setAttachmentFile(file)
+    setAnalyzingAttachment(true)
+    setMessages((m) => [...m, { from: 'user', text: `Đã đính kèm ${file.name} để phân tích (${attachmentTarget}).` }])
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('target', attachmentTarget)
+      const result = await analyzeImportFile(formData)
+      const summary = result.target === 'students'
+        ? `Đã đọc ${result.totalRows || 0} dòng danh sách học sinh: ${result.validCount || 0} dòng hợp lệ, ${result.errorCount || 0} dòng cần kiểm tra. Đây chỉ là bản xem trước; chưa ghi vào cơ sở dữ liệu.`
+        : `Đã phân tích tài liệu và tạo bản nháp ${result.target === 'lesson-plan' ? 'giáo án' : 'phiếu học tập'}. Thầy/cô hãy kiểm tra rồi mới lưu.`
+      setMessages((m) => [...m, { from: 'ai', text: summary }])
+    } catch (err: any) {
+      toast.error(err?.message || 'Không thể phân tích tệp đính kèm')
+      setMessages((m) => [...m, { from: 'ai', text: 'Không thể phân tích tệp. Vui lòng kiểm tra định dạng, dung lượng và thử lại.' }])
+    } finally {
+      setAnalyzingAttachment(false)
+    }
+  }
   const handleCustomSend = async (text = input) => {
     if (!text.trim() || loading) return;
     const query = text.trim();
@@ -1976,7 +2000,12 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
 
           <div className="border-t border-slate-100 p-4 sm:p-5">
             <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 focus-within:border-teal-400">
-              <textarea
+                          <div className="mx-auto mb-2 flex max-w-3xl items-center gap-2">
+              <input id="ai-attachment" type="file" className="hidden" accept=".pdf,.docx,.xlsx,.xls,.csv,.png,.jpg,.jpeg" disabled={loading || analyzingAttachment} onChange={(e) => { const file = e.target.files?.[0]; if (file) void handleAttachmentAnalyze(file); e.target.value = '' }} />
+              <label htmlFor="ai-attachment" className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:border-teal-300 hover:text-teal-700"><Paperclip className="size-3.5" /> Đính kèm file</label>
+              <select value={attachmentTarget} onChange={(e) => setAttachmentTarget(e.target.value as typeof attachmentTarget)} className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs" disabled={loading || analyzingAttachment}><option value="lesson-plan">Phân tích thành giáo án</option><option value="worksheet">Phân tích thành phiếu</option><option value="students">Tạo bảng import học sinh</option></select>
+              {attachmentFile && <span className="truncate text-[11px] text-slate-500">{analyzingAttachment ? 'Đang phân tích…' : attachmentFile.name}</span>}
+            </div><textarea
                 value={input}
                 disabled={loading}
                 onChange={(e) => setInput(e.target.value)}
@@ -2093,7 +2122,7 @@ export function TeacherApp() {
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-900">
+    <div className="flex min-h-[100dvh] bg-slate-50 text-slate-900">
       <Sidebar active={active} onSelect={handleNavigate} open={menuOpen} onClose={() => setMenuOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header onMenu={() => setMenuOpen(true)} onOpenLogin={() => setAuthModalOpen(true)} onNavigate={handleNavigate} />
