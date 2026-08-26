@@ -2119,7 +2119,7 @@ function TabStudents({
           <div className="py-16 text-center text-slate-400">
             <Users className="size-8 mx-auto text-slate-300 mb-2" />
             <p className="text-sm font-semibold text-slate-700">Chưa có học sinh nào trong lớp</p>
-            <p className="text-xs text-slate-400 mt-0.5">Nhấn "Thêm học sinh" hoặc "Import Excel" để bắt đầu.</p>
+            <p className="text-xs text-slate-400 mt-0.5">Nhấn "Thêm học sinh" hoặc "Tải lên file" để bắt đầu.</p>
           </div>
         ) : (
           <table className="w-full text-xs text-left min-w-[760px]">
@@ -3255,7 +3255,7 @@ function TabAssessments({ classItem }: { classItem: ClassRecord }) {
             }}
             className="border-slate-200 text-slate-700 hover:bg-slate-50 font-medium"
           >
-            <UploadCloud className="size-3.5 mr-1 text-blue-600" /> Import Excel
+            <UploadCloud className="size-3.5 mr-1 text-blue-600" /> Tải lên file
           </Button>
 
           <Button

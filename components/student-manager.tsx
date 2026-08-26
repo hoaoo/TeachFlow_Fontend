@@ -1019,7 +1019,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                   </p>
                   <div className="flex items-center justify-center gap-2 pt-2">
                     <Button onClick={() => setImportDialogOpen(true)} variant="outline" size="sm" className="text-xs gap-1.5 font-semibold">
-                      <FileSpreadsheet className="size-3.5 text-emerald-600" /> Import Excel
+                      <FileSpreadsheet className="size-3.5 text-emerald-600" />  Tải lên file
                     </Button>
                     <Button onClick={() => setCreateDialogOpen(true)} size="sm" className="bg-teal-600 text-white text-xs font-semibold gap-1.5">
                       <Plus className="size-3.5" /> Thêm học sinh
