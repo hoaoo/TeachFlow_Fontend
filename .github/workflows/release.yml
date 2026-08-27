@@ -42,29 +42,23 @@ jobs:
       - name: Check version synchronization
         run: npm run release:check
 
-      - name: Prepare Tauri signing credentials
+      - name: Validate updater signing credentials
+        shell: bash
         env:
-          SECRET_TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          SECRET_TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-          SECRET_TAURI_KEY: ${{ secrets.TAURI_KEY }}
-          SECRET_SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-          SECRET_UPDATER_KEY: ${{ secrets.UPDATER_KEY }}
-          SECRET_TAURI_UPDATER_KEY: ${{ secrets.TAURI_UPDATER_KEY }}
-          SECRET_TAURI_UPDATER_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
-          SECRET_PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
-          SECRET_TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          SECRET_TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-          SECRET_SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-          SECRET_UPDATER_KEY_PASSWORD: ${{ secrets.UPDATER_KEY_PASSWORD }}
-          SECRET_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          SECRET_PASSWORD: ${{ secrets.PASSWORD }}
-        run: node scripts/prepare-signing-key.mjs
+          KEY_EXISTS: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: |
+          if [ "$KEY_EXISTS" != "true" ]; then
+            echo "::error::Secret TAURI_SIGNING_PRIVATE_KEY is missing or empty in GitHub Repository Secrets!"
+            echo "::error::Release build cannot sign updater artifacts without this secret."
+            exit 1
+          fi
+          echo "Updater signing private key is present."
 
       - name: Build Tauri Desktop (Signed)
         env:
           NEXT_PUBLIC_API_URL: https://hoan-dev081202.onrender.com
-          TAURI_SIGNING_PRIVATE_KEY_PATH: src-tauri/tauri.key
-          TAURI_PRIVATE_KEY_PATH: src-tauri/tauri.key
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npx tauri build
 
       - name: Extract version from tag
