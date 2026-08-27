@@ -42,6 +42,7 @@ jobs:
       - name: Check version synchronization
         run: npm run release:check
 
+      # Fail fast trước khi mất thời gian compile Rust nếu thiếu signing key.
       - name: Validate updater signing credentials
         shell: bash
         env:
@@ -52,6 +53,7 @@ jobs:
             echo "::error::Release build cannot sign updater artifacts without this secret."
             exit 1
           fi
+
           echo "Updater signing private key is present."
 
       - name: Build Tauri Desktop (Signed)
@@ -64,25 +66,38 @@ jobs:
       - name: Extract version from tag
         id: version
         shell: bash
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+        run: |
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Generate latest.json updater manifest
         shell: pwsh
         run: |
           $version = "${{ steps.version.outputs.VERSION }}"
-          $pubdate = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss.000Z")
+          $pubdate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+
           $nsisPath = "src-tauri/target/release/bundle/nsis/TeachFlow_${version}_x64-setup.exe"
           $nsisSigPath = "${nsisPath}.sig"
-          
-          if (-not (Test-Path $nsisSigPath)) {
-            Write-Error "Signature file $nsisSigPath not found!"
+
+          if (-not (Test-Path $nsisPath)) {
+            Write-Error "NSIS installer not found: $nsisPath"
             exit 1
           }
-          
+
+          if (-not (Test-Path $nsisSigPath)) {
+            Write-Error "Signature file not found: $nsisSigPath"
+            exit 1
+          }
+
           $nsisSig = (Get-Content $nsisSigPath -Raw).Trim()
+
+          if ([string]::IsNullOrWhiteSpace($nsisSig)) {
+            Write-Error "Updater signature is empty."
+            exit 1
+          }
+
           $json = @{
             version = $version
-            notes = "TeachFlow Desktop $version: Bo sung hien thi version runtime, nang cap Resource & File Viewer V2, HTTP Range Streaming, va mo ung dung mac dinh tren Windows."
+            notes = "TeachFlow Desktop ${version}: Bo sung hien thi version runtime, nang cap Resource & File Viewer V2, HTTP Range Streaming, va mo ung dung mac dinh tren Windows."
             pub_date = $pubdate
             platforms = @{
               "windows-x86_64" = @{
@@ -91,7 +106,12 @@ jobs:
               }
             }
           } | ConvertTo-Json -Depth 5
-          Set-Content -Path "latest.json" -Value $json -Encoding UTF8
+
+          Set-Content `
+            -Path "latest.json" `
+            -Value $json `
+            -Encoding UTF8
+
           Write-Host "Generated latest.json:"
           Get-Content "latest.json"
 
@@ -105,11 +125,13 @@ jobs:
             ### Cài đặt
             - Tải installer: `TeachFlow_${{ steps.version.outputs.VERSION }}_x64-setup.exe`
 
-            ### Cập nhật tự động (In-App Auto Updater)
-            Ứng dụng TeachFlow đã cài đặt sẽ tự động nhận diện và cập nhật lên phiên bản này qua Tauri Updater.
+            ### Cập nhật tự động
+            Ứng dụng TeachFlow đã cài đặt sẽ tự động nhận diện và cập nhật lên phiên bản này thông qua Tauri Updater.
+
           files: |
             src-tauri/target/release/bundle/nsis/TeachFlow_${{ steps.version.outputs.VERSION }}_x64-setup.exe
             src-tauri/target/release/bundle/nsis/TeachFlow_${{ steps.version.outputs.VERSION }}_x64-setup.exe.sig
             latest.json
+
           draft: false
           prerelease: false
