@@ -44,13 +44,17 @@ jobs:
 
       - name: Prepare Tauri signing credentials
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || secrets.TAURI_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || secrets.TAURI_KEY_PASSWORD || '' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || secrets.TAURI_PRIVATE_KEY || secrets.TAURI_KEY || secrets.SIGNING_KEY || secrets.UPDATER_KEY || secrets.TAURI_UPDATER_KEY || secrets.TAURI_UPDATER_PRIVATE_KEY || secrets.PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || secrets.TAURI_KEY_PASSWORD || secrets.SIGNING_KEY_PASSWORD || secrets.UPDATER_KEY_PASSWORD || secrets.KEY_PASSWORD || secrets.PASSWORD || '' }}
         run: node scripts/prepare-signing-key.mjs
 
       - name: Build Tauri Desktop (Signed)
         env:
           NEXT_PUBLIC_API_URL: https://hoan-dev081202.onrender.com
+          TAURI_SIGNING_PRIVATE_KEY: src-tauri/tauri.key
+          TAURI_PRIVATE_KEY: src-tauri/tauri.key
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || secrets.TAURI_KEY_PASSWORD || secrets.SIGNING_KEY_PASSWORD || secrets.UPDATER_KEY_PASSWORD || secrets.KEY_PASSWORD || secrets.PASSWORD || '' }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || secrets.TAURI_KEY_PASSWORD || secrets.SIGNING_KEY_PASSWORD || secrets.UPDATER_KEY_PASSWORD || secrets.KEY_PASSWORD || secrets.PASSWORD || '' }}
         run: npx tauri build
 
       - name: Extract version from tag
