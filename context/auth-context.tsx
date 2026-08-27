@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { api, setAccessToken, getAccessToken, clearAuth, notifyAuthStateChanged } from '@/services/api-client';
+import { api, setAccessToken, getAccessToken, clearAuth, notifyAuthStateChanged, API_BASE_URL } from '@/services/api-client';
 
 export type UserProfile = {
   id: string;
@@ -42,8 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!token) {
       // If no access token in memory/localStorage, attempt silent refresh using HttpOnly cookie
       try {
-        const refreshBase = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api').replace(/\/+$/, '');
-        const refreshRes = await fetch(`${refreshBase}/auth/refresh`, {
+        const refreshRes = await fetch(`${API_BASE_URL}/auth/refresh`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',

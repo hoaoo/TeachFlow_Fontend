@@ -1,4 +1,4 @@
-import { api } from './api-client';
+import { api, API_BASE_URL } from './api-client';
 
 export type Activity = {
   id: string;
@@ -187,8 +187,7 @@ export async function uploadLessonPlanFile(formData: FormData): Promise<LessonPl
 }
 
 export function getLessonPlanFileUrl(id: string): string {
-  const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api').replace(/\/+$/, '');
-  return `${baseUrl}/lesson-plans/${id}/file`;
+  return `${API_BASE_URL}/lesson-plans/${id}/file`;
 }
 
 export async function downloadLessonPlanFile(id: string, filename?: string): Promise<void> {

@@ -1,6 +1,4 @@
-import { api, apiClient, getAccessToken } from './api-client';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+import { api, apiClient, getAccessToken, API_BASE_URL } from './api-client';
 
 export interface TeachingResource {
   id: string;

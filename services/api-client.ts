@@ -3,7 +3,7 @@
  * Handles token attachment, refresh token flow, error parsing and standardized requests.
  */
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api').replace(/\/+$/, '');
+export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'https://hoan-dev081202.onrender.com/api').replace(/\/+$/, '');
 
 let accessToken: string | null = null;
 let isRefreshing = false;

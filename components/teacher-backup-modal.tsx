@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { API_BASE_URL, getAccessToken } from '@/services/api-client';
 import {
   Download,
   FileArchive,
@@ -51,10 +52,8 @@ export function TeacherBackupModal({
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
-
-      const response = await fetch(`${apiBase}/export/backup`, {
+      const token = getAccessToken();
+      const response = await fetch(`${API_BASE_URL}/export/backup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
