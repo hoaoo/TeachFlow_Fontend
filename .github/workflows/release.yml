@@ -3,14 +3,14 @@ name: Release TeachFlow Desktop
 on:
   push:
     tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v*"
 
 permissions:
   contents: write
 
 jobs:
   build-windows:
-    name: Build Windows Installer
+    name: Build Windows Release
     runs-on: windows-latest
 
     steps:
@@ -20,7 +20,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Setup Rust stable MSVC
@@ -33,35 +33,46 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Install Node dependencies
+      - name: Install dependencies
         run: npm ci
 
-      - name: Build Tauri app (production)
+      - name: Run test suite
+        run: npm test
+
+      - name: Check version synchronization
+        run: npm run release:check
+
+      - name: Build Tauri Desktop (Signed)
+        shell: pwsh
         env:
           NEXT_PUBLIC_API_URL: https://hoan-dev081202.onrender.com
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npx tauri build
+          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || secrets.TAURI_PRIVATE_KEY }}
+          SIGNING_PWD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || secrets.TAURI_KEY_PASSWORD || '' }}
+        run: |
+          npx cross-env TAURI_SIGNING_PRIVATE_KEY="$env:SIGNING_KEY" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$env:SIGNING_PWD" NEXT_PUBLIC_API_URL="$env:NEXT_PUBLIC_API_URL" npx tauri build
 
       - name: Extract version from tag
         id: version
         shell: bash
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
-      - name: Generate latest.json
+      - name: Generate latest.json updater manifest
         shell: pwsh
         run: |
           $version = "${{ steps.version.outputs.VERSION }}"
           $pubdate = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss.000Z")
-          $msiPath = "src-tauri/target/release/bundle/msi/TeachFlow_${version}_x64_en-US.msi"
           $nsisPath = "src-tauri/target/release/bundle/nsis/TeachFlow_${version}_x64-setup.exe"
-          $msiSig = Get-Content "${msiPath}.sig" -Raw
-          $nsisSig = Get-Content "${nsisPath}.sig" -Raw
-          $msiSig = $msiSig.Trim()
-          $nsisSig = $nsisSig.Trim()
+          $nsisSigPath = "${nsisPath}.sig"
+          
+          if (-not (Test-Path $nsisSigPath)) {
+            Write-Error "Signature file $nsisSigPath not found!"
+            exit 1
+          }
+          
+          $nsisSig = (Get-Content $nsisSigPath -Raw).Trim()
           $json = @{
             version = $version
-            notes = "TeachFlow $version"
+            notes = "TeachFlow Desktop $version: Nang cap Resource & File Viewer V2, HTTP Range Streaming, upload tien do thoi gian thuc va mo ung dung mac dinh."
             pub_date = $pubdate
             platforms = @{
               "windows-x86_64" = @{
@@ -74,7 +85,7 @@ jobs:
           Write-Host "Generated latest.json:"
           Get-Content "latest.json"
 
-      - name: Create GitHub Release
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: "TeachFlow v${{ steps.version.outputs.VERSION }}"
@@ -82,14 +93,11 @@ jobs:
             ## TeachFlow Desktop v${{ steps.version.outputs.VERSION }}
 
             ### Cài đặt
-            - **Windows (NSIS)**: Tải `TeachFlow_${{ steps.version.outputs.VERSION }}_x64-setup.exe`
-            - **Windows (MSI)**: Tải `TeachFlow_${{ steps.version.outputs.VERSION }}_x64_en-US.msi`
+            - Tải installer: `TeachFlow_${{ steps.version.outputs.VERSION }}_x64-setup.exe`
 
-            ### Cập nhật tự động
-            Nếu bạn đã cài TeachFlow, ứng dụng sẽ tự động phát hiện và đề nghị cập nhật.
+            ### Cập nhật tự động (In-App Auto Updater)
+            Ứng dụng TeachFlow đã cài đặt sẽ tự động nhận diện và cập nhật lên phiên bản này qua Tauri Updater.
           files: |
-            src-tauri/target/release/bundle/msi/TeachFlow_${{ steps.version.outputs.VERSION }}_x64_en-US.msi
-            src-tauri/target/release/bundle/msi/TeachFlow_${{ steps.version.outputs.VERSION }}_x64_en-US.msi.sig
             src-tauri/target/release/bundle/nsis/TeachFlow_${{ steps.version.outputs.VERSION }}_x64-setup.exe
             src-tauri/target/release/bundle/nsis/TeachFlow_${{ steps.version.outputs.VERSION }}_x64-setup.exe.sig
             latest.json
