@@ -34,7 +34,7 @@
     "endpoints": [
       "https://github.com/hoaoo/TeachFlow_Fontend/releases/latest/download/latest.json"
     ],
-    "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5MnlPazd5ZUNnVlJCTW9DQm5oMGVETytRVFFBUFZBenc1L2wwUlZROWJmRUFBQkFBQUFBQUFBQUFBQUlBQUFBQVVJTXJxbUc2eTN3OUZxRDFmekNJaFdJNmhIQzlQOFNEN2tQTUU3NUY4dGYvZTcyVGsxLzl5cTNuM1JJNjQ3d2Z2SFlOMEhrMkxEVk1lRys2MDhKM0NYTFMxLzA0WDhwZXRMSHVPV2tNa29FVkpZKzRSS3djY0VxbkM3TDJWd0ErMWZlOU5xK3JSSHM9Cg==",
+    "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZFODBCRDQ1MUZCREY1NEQKUldSTjliMGZSYjJBL21VaDhMeXZKRHBObHRFWktmaVRiU3FDVDZKMmJhY3J1NGl0Y3V2ZmlPem4K",
     "windows": {
       "installMode": "passive"
     }
