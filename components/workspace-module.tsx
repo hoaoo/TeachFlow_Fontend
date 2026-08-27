@@ -47,30 +47,20 @@ import {
   saveWorkspaceRecord,
   type WorkspaceRecord,
 } from '@/services/teachflow-service'
+import { getPlatform } from '@/platform'
 import {
   getResources,
-  uploadResourceFile,
+  uploadResourceFileWithProgress,
   deleteResource as apiDeleteResource,
   downloadResourceFile,
   attachResourceToLessonPlan,
   getResourceFileBlob,
   getResourceFileArrayBuffer,
   getResourceInlineUrl,
+  openResourceInDefaultApp,
+  updateResource as apiUpdateResource,
   type TeachingResource,
 } from '@/services/resource-service'
-import { getLessonPlans, type LessonPlan } from '@/services/lesson-service'
-import { exportService } from '@/services/export-service'
-import { generateImage } from '@/services/ai-service'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { toast } from 'sonner'
 
 type View =
   | 'Chủ nhiệm'
@@ -88,18 +78,20 @@ const iconFor = (view: View) =>
 
 const descriptions: Record<View, string> = {
   'Chủ nhiệm': 'Quản lý công việc chủ nhiệm, trao đổi phụ huynh và kế hoạch lớp.',
-  'Tài nguyên': 'Lưu trữ, tải lên và quản lý kho học liệu số dùng cho các tiết dạy.',
+  'Tài nguyên': 'Lưu trữ, tải lên và quản lý kho học liệu số (tài liệu, hình ảnh, audio, video) dùng cho các tiết dạy.',
   'Cài đặt': 'Cá nhân hóa workspace, thông báo và thông tin giáo viên.',
   'Phiếu học tập': 'Quản lý phiếu bài tập, câu hỏi và tài liệu học tập.',
 }
 
 function getResourceIcon(type: string, ext?: string) {
-  if (type === 'VIDEO' || ext === 'MP4') return <Film className="size-5 text-purple-600" />
-  if (type === 'IMAGE' || ['PNG', 'JPG', 'JPEG', 'WEBP'].includes(ext || ''))
+  const e = (ext || '').toUpperCase()
+  if (type === 'VIDEO' || ['MP4', 'WEBM', 'MOV'].includes(e)) return <Film className="size-5 text-purple-600" />
+  if (type === 'AUDIO' || ['MP3', 'WAV', 'M4A', 'AAC', 'OGG'].includes(e)) return <Music className="size-5 text-amber-600" />
+  if (type === 'IMAGE' || ['PNG', 'JPG', 'JPEG', 'WEBP', 'GIF'].includes(e))
     return <ImageIcon className="size-5 text-emerald-600" />
-  if (type === 'PRESENTATION' || ['PPT', 'PPTX'].includes(ext || ''))
+  if (type === 'PRESENTATION' || ['PPT', 'PPTX'].includes(e))
     return <Presentation className="size-5 text-orange-600" />
-  if (type === 'SPREADSHEET' || ['XLS', 'XLSX'].includes(ext || ''))
+  if (type === 'SPREADSHEET' || ['XLS', 'XLSX', 'CSV'].includes(e))
     return <TableIcon className="size-5 text-green-600" />
   return <FileText className="size-5 text-blue-600" />
 }
@@ -110,26 +102,31 @@ function ResourcePreviewModal({
   onDownload,
   onAttach,
   onDelete,
+  onOpenDefault,
 }: {
   resource: TeachingResource
   onClose: () => void
   onDownload: () => void
   onAttach: () => void
   onDelete: () => void
+  onOpenDefault?: () => void
 }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [docxHtml, setDocxHtml] = useState<string | null>(null)
+  const [txtContent, setTxtContent] = useState<string | null>(null)
   const [xlsxSheets, setXlsxSheets] = useState<Array<{ name: string; rows: any[][] }>>([])
   const [activeSheetIdx, setActiveSheetIdx] = useState(0)
   const [zoom, setZoom] = useState(100)
+  const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
   const ext = (resource.extension || resource.originalFileName?.split('.').pop() || '').toUpperCase()
   const isImage = resource.resourceType === 'IMAGE' || ['PNG', 'JPG', 'JPEG', 'WEBP', 'GIF'].includes(ext)
   const isVideo = resource.resourceType === 'VIDEO' || ['MP4', 'WEBM', 'MOV'].includes(ext)
-  const isAudio = ['MP3', 'WAV', 'M4A', 'OGG'].includes(ext)
+  const isAudio = resource.resourceType === 'AUDIO' || ['MP3', 'WAV', 'M4A', 'AAC', 'OGG'].includes(ext)
   const isPdf = ext === 'PDF'
+  const isTxt = ext === 'TXT'
   const isDocx = ['DOCX', 'DOC'].includes(ext)
   const isXlsx = ['XLSX', 'XLS', 'CSV'].includes(ext)
   const isPptx = resource.resourceType === 'PRESENTATION' || ['PPTX', 'PPT'].includes(ext)
@@ -140,6 +137,7 @@ function ResourcePreviewModal({
     setError(null)
     setBlobUrl(null)
     setDocxHtml(null)
+    setTxtContent(null)
     setXlsxSheets([])
 
     async function loadPreview() {
@@ -149,6 +147,11 @@ function ResourcePreviewModal({
           if (!alive) return
           const url = URL.createObjectURL(blob)
           setBlobUrl(url)
+        } else if (isTxt) {
+          const { blob } = await getResourceFileBlob(resource.id)
+          if (!alive) return
+          const text = await blob.text()
+          setTxtContent(text)
         } else if (isDocx) {
           const { buffer } = await getResourceFileArrayBuffer(resource.id)
           if (!alive) return
@@ -248,6 +251,7 @@ function ResourcePreviewModal({
                 </button>
               </div>
             )}
+
             <button
               onClick={onClose}
               className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg transition cursor-pointer"
@@ -268,12 +272,19 @@ function ResourcePreviewModal({
             <div className="flex flex-col items-center justify-center gap-3 py-12 text-center max-w-md bg-white p-6 rounded-2xl border border-rose-100 shadow-2xs">
               <AlertCircle className="size-9 text-rose-500" />
               <div>
-                <p className="text-sm font-bold text-slate-800">Không thể hiển thị xem trước</p>
+                <p className="text-sm font-bold text-slate-800">Không thể phát tệp này</p>
                 <p className="text-xs text-slate-500 mt-1">{error}</p>
               </div>
-              <Button size="sm" onClick={onDownload} className="bg-teal-600 hover:bg-teal-700 text-xs font-semibold gap-1.5">
-                <Download className="size-3.5" /> Tải xuống file gốc
-              </Button>
+              <div className="flex items-center gap-2 mt-2">
+                <Button size="sm" onClick={onDownload} className="bg-teal-600 hover:bg-teal-700 text-xs font-semibold gap-1.5">
+                  <Download className="size-3.5" /> Tải xuống tệp gốc
+                </Button>
+                {isDesktop && onOpenDefault && (
+                  <Button size="sm" variant="outline" onClick={onOpenDefault} className="text-xs font-semibold gap-1.5">
+                    <ExternalLink className="size-3.5" /> Mở bằng ứng dụng
+                  </Button>
+                )}
+              </div>
             </div>
           ) : isImage && blobUrl ? (
             <div className="w-full h-full flex items-center justify-center overflow-auto p-2">
@@ -297,23 +308,32 @@ function ResourcePreviewModal({
               </video>
             </div>
           ) : isAudio && blobUrl ? (
-            <div className="w-full max-w-md bg-white p-6 rounded-2xl border border-slate-200 shadow-md space-y-4 text-center">
-              <div className="size-16 mx-auto rounded-full bg-teal-50 text-teal-600 flex items-center justify-center shadow-inner">
-                <Volume2 className="size-8" />
+            <div className="w-full max-w-lg bg-white p-8 rounded-2xl border border-slate-200 shadow-md space-y-5 text-center">
+              <div className="size-20 mx-auto rounded-full bg-linear-to-tr from-amber-500 to-orange-400 text-white flex items-center justify-center shadow-lg shadow-amber-500/20">
+                <Music className="size-10" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-900 text-sm">{resource.name}</h3>
-                <p className="text-xs text-slate-400 mt-0.5">{resource.formattedSize} • {ext}</p>
+                <h3 className="font-bold text-slate-900 text-base">{resource.name}</h3>
+                <p className="text-xs text-slate-500 mt-1">{resource.formattedSize} • Âm thanh ({ext})</p>
+                {resource.description && (
+                  <p className="text-xs text-slate-600 mt-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    {resource.description}
+                  </p>
+                )}
               </div>
-              <audio src={blobUrl} controls className="w-full" />
+              <audio src={blobUrl} controls className="w-full" preload="metadata" />
             </div>
           ) : isPdf && blobUrl ? (
             <div className="w-full h-full flex flex-col">
               <iframe
                 src={blobUrl}
                 title={resource.name}
-                className="w-full h-[65vh] rounded-xl border border-slate-200 bg-white shadow-sm"
+                className="w-full h-[68vh] rounded-xl border border-slate-200 bg-white shadow-sm"
               />
+            </div>
+          ) : isTxt && txtContent !== null ? (
+            <div className="w-full h-full overflow-y-auto max-w-3xl bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-slate-800 text-xs font-mono whitespace-pre-wrap leading-relaxed">
+              {txtContent}
             </div>
           ) : isDocx && docxHtml ? (
             <div className="w-full h-full overflow-y-auto max-w-3xl bg-white p-6 sm:p-10 rounded-xl border border-slate-200 shadow-sm text-slate-800 text-sm leading-relaxed space-y-3 prose prose-slate max-w-none">
@@ -383,13 +403,18 @@ function ResourcePreviewModal({
                   Bài trình chiếu PowerPoint ({ext}) • {resource.formattedSize}
                 </p>
                 <p className="text-xs text-slate-400 mt-2">
-                  Tập tin PowerPoint cần được tải về để trình chiếu trực tiếp trên máy tính.
+                  Tập tin PowerPoint cần được tải về hoặc mở bằng ứng dụng mặc định để trình chiếu trực tiếp.
                 </p>
               </div>
               <div className="flex justify-center gap-2 pt-2">
                 <Button onClick={onDownload} className="bg-teal-600 hover:bg-teal-700 text-xs font-semibold gap-1.5 cursor-pointer">
-                  <Download className="size-3.5" /> Tải về trình chiếu
+                  <Download className="size-3.5" /> Tải về máy
                 </Button>
+                {isDesktop && onOpenDefault && (
+                  <Button variant="outline" onClick={onOpenDefault} className="text-xs font-semibold gap-1.5 cursor-pointer">
+                    <ExternalLink className="size-3.5" /> Mở bằng PowerPoint
+                  </Button>
+                )}
               </div>
             </div>
           ) : (
@@ -397,9 +422,16 @@ function ResourcePreviewModal({
               <File className="size-12 mx-auto text-slate-400" />
               <h3 className="font-bold text-slate-900 text-sm">{resource.name}</h3>
               <p className="text-xs text-slate-500">{resource.formattedSize} • {ext || resource.resourceType}</p>
-              <Button onClick={onDownload} className="bg-teal-600 text-xs font-semibold gap-1.5 mt-2 cursor-pointer">
-                <Download className="size-3.5" /> Tải xuống tệp tin
-              </Button>
+              <div className="flex justify-center gap-2 pt-2">
+                <Button onClick={onDownload} className="bg-teal-600 text-xs font-semibold gap-1.5 cursor-pointer">
+                  <Download className="size-3.5" /> Tải xuống tệp tin
+                </Button>
+                {isDesktop && onOpenDefault && (
+                  <Button variant="outline" onClick={onOpenDefault} className="text-xs font-semibold gap-1.5 cursor-pointer">
+                    <ExternalLink className="size-3.5" /> Mở bằng ứng dụng
+                  </Button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -416,6 +448,16 @@ function ResourcePreviewModal({
           </Button>
 
           <div className="flex items-center gap-2">
+            {isDesktop && onOpenDefault && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onOpenDefault}
+                className="text-xs font-semibold text-slate-700 border-slate-300 hover:bg-slate-50 gap-1.5 cursor-pointer"
+              >
+                <ExternalLink className="size-3.5" /> Mở bằng ứng dụng
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -429,7 +471,7 @@ function ResourcePreviewModal({
               onClick={onDownload}
               className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold gap-1.5 shadow-2xs cursor-pointer"
             >
-              <Download className="size-3.5" /> Tải về máy
+              <Download className="size-3.5" /> Lưu thành...
             </Button>
             <Button
               variant="outline"
@@ -452,14 +494,19 @@ function ResourceCard({
   onDownload,
   onAttach,
   onDelete,
+  onRename,
+  onOpenDefault,
 }: {
   resource: TeachingResource
   onPreview: (res: TeachingResource) => void
   onDownload: (res: TeachingResource) => void
   onAttach: (res: TeachingResource) => void
   onDelete: (res: TeachingResource) => void
+  onRename: (res: TeachingResource) => void
+  onOpenDefault?: (res: TeachingResource) => void
 }) {
   const ext = (resource.extension || resource.originalFileName?.split('.').pop() || '').toUpperCase()
+  const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
   return (
     <article className="group flex flex-col rounded-2xl border border-slate-200/90 bg-white shadow-2xs hover:shadow-md hover:border-teal-300 transition-all duration-150 overflow-hidden">
@@ -468,7 +515,7 @@ function ResourceCard({
         onClick={() => onPreview(resource)}
         className="relative aspect-16/9 w-full bg-slate-100 overflow-hidden flex items-center justify-center cursor-pointer group-hover:opacity-95 transition select-none"
       >
-        {resource.resourceType === 'IMAGE' || ['PNG', 'JPG', 'JPEG', 'WEBP'].includes(ext) ? (
+        {resource.resourceType === 'IMAGE' || ['PNG', 'JPG', 'JPEG', 'WEBP', 'GIF'].includes(ext) ? (
           <div className="w-full h-full bg-slate-100 flex items-center justify-center relative">
             <img
               src={getResourceInlineUrl(resource.id)}
@@ -484,13 +531,22 @@ function ResourceCard({
               </span>
             </div>
           </div>
-        ) : resource.resourceType === 'VIDEO' || ['MP4', 'WEBM'].includes(ext) ? (
+        ) : resource.resourceType === 'VIDEO' || ['MP4', 'WEBM', 'MOV'].includes(ext) ? (
           <div className="w-full h-full bg-linear-to-br from-purple-900 via-indigo-900 to-slate-900 flex flex-col items-center justify-center text-white relative">
             <div className="size-11 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center group-hover:scale-110 transition shadow-lg">
               <Play className="size-5 fill-white text-white translate-x-0.5" />
             </div>
             <span className="absolute bottom-2 left-2 text-[10px] font-semibold bg-black/60 backdrop-blur-xs px-2 py-0.5 rounded text-white">
-              Video
+              🎬 Video
+            </span>
+          </div>
+        ) : resource.resourceType === 'AUDIO' || ['MP3', 'WAV', 'M4A', 'AAC'].includes(ext) ? (
+          <div className="w-full h-full bg-linear-to-br from-amber-600 via-orange-600 to-slate-800 flex flex-col items-center justify-center text-white relative">
+            <div className="size-11 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center group-hover:scale-110 transition shadow-lg">
+              <Music className="size-5 text-white" />
+            </div>
+            <span className="absolute bottom-2 left-2 text-[10px] font-semibold bg-black/60 backdrop-blur-xs px-2 py-0.5 rounded text-white">
+              🎵 Audio
             </span>
           </div>
         ) : resource.resourceType === 'PRESENTATION' || ['PPTX', 'PPT'].includes(ext) ? (
@@ -511,7 +567,7 @@ function ResourceCard({
         ) : (
           <div className="w-full h-full bg-linear-to-br from-blue-600 to-indigo-700 flex flex-col items-center justify-center text-white p-4">
             <FileText className="size-10 text-white/90 group-hover:scale-110 transition drop-shadow" />
-            <span className="text-[11px] font-bold text-white/90 mt-1">Văn bản Word</span>
+            <span className="text-[11px] font-bold text-white/90 mt-1">{ext === 'TXT' ? 'Văn bản Text' : 'Văn bản Word'}</span>
           </div>
         )}
 
@@ -532,6 +588,8 @@ function ResourceCard({
             {resource.name}
           </h2>
           <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+            <span>{resource.resourceType === 'VIDEO' ? '🎬 Video' : resource.resourceType === 'AUDIO' ? '🎵 Audio' : resource.resourceType === 'IMAGE' ? '🖼️ Ảnh' : '📄 Tài liệu'}</span>
+            <span>•</span>
             <span>{resource.formattedSize || '0 KB'}</span>
             <span>•</span>
             <span>{new Date(resource.createdAt).toLocaleDateString('vi-VN')}</span>
@@ -561,7 +619,7 @@ function ResourceCard({
               title="Tải xuống tệp tin"
               className="h-7 px-2 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 gap-1 cursor-pointer"
             >
-              <Download className="size-3" /> Tải về
+              <Download className="size-3" /> Lưu...
             </Button>
           </div>
 
@@ -571,12 +629,20 @@ function ResourceCard({
                 <MoreVertical className="size-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44 text-xs">
+            <DropdownMenuContent align="end" className="w-48 text-xs">
               <DropdownMenuItem onClick={() => onPreview(resource)}>
                 <Eye className="size-3.5 mr-2 text-teal-600" /> Xem trực tiếp
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onDownload(resource)}>
-                <Download className="size-3.5 mr-2 text-slate-600" /> Tải về máy
+                <Download className="size-3.5 mr-2 text-slate-600" /> Lưu thành...
+              </DropdownMenuItem>
+              {isDesktop && onOpenDefault && (
+                <DropdownMenuItem onClick={() => onOpenDefault(resource)}>
+                  <ExternalLink className="size-3.5 mr-2 text-indigo-600" /> Mở bằng ứng dụng
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={() => onRename(resource)}>
+                <FileType className="size-3.5 mr-2 text-amber-600" /> Đổi tên
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onAttach(resource)}>
                 <Link2 className="size-3.5 mr-2 text-blue-600" /> Gắn vào giáo án
@@ -611,8 +677,16 @@ export function WorkspaceModule({ view }: { view: View }) {
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploadName, setUploadName] = useState('')
   const [uploadDesc, setUploadDesc] = useState('')
-  const [uploadSubject, setUploadSubject] = useState('Tiếng Việt')
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const uploadAbortRef = useRef<AbortController | null>(null)
+
+  // Rename modal state
+  const [renameModalOpen, setRenameModalOpen] = useState(false)
+  const [renameTargetResource, setRenameTargetResource] = useState<TeachingResource | null>(null)
+  const [renameName, setRenameName] = useState('')
+  const [renaming, setRenaming] = useState(false)
+
   const [aiImageOpen, setAiImageOpen] = useState(false)
   const [aiImagePrompt, setAiImagePrompt] = useState('')
   const [aiImageStyle, setAiImageStyle] = useState('minh họa sách giáo khoa')
@@ -740,7 +814,7 @@ export function WorkspaceModule({ view }: { view: View }) {
     }
   }
 
-  // Upload handler
+  // Upload handler with progress
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!uploadFile) {
@@ -748,26 +822,62 @@ export function WorkspaceModule({ view }: { view: View }) {
       return
     }
 
+    const ext = '.' + (uploadFile.name.split('.').pop() || '').toLowerCase()
+    const allowed = [
+      '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt',
+      '.png', '.jpg', '.jpeg', '.webp', '.gif',
+      '.mp3', '.wav', '.m4a', '.aac',
+      '.mp4', '.webm', '.mov',
+    ]
+
+    if (!allowed.includes(ext)) {
+      toast.error(`File không được hỗ trợ (${ext}). Hệ thống chỉ hỗ trợ Tài liệu, Hình ảnh, Audio và Video.`)
+      return
+    }
+
+    const isVideo = ['.mp4', '.webm', '.mov'].includes(ext)
+    const isImage = ['.png', '.jpg', '.jpeg', '.webp', '.gif'].includes(ext)
+    const isAudio = ['.mp3', '.wav', '.m4a', '.aac'].includes(ext)
+    const maxSizeMb = isVideo ? 500 : isAudio ? 50 : isImage ? 20 : 100
+
+    if (uploadFile.size > maxSizeMb * 1024 * 1024) {
+      toast.error(`File vượt quá dung lượng cho phép (${maxSizeMb}MB). Dung lượng file: ${(uploadFile.size / (1024 * 1024)).toFixed(1)}MB`)
+      return
+    }
+
     try {
       setUploading(true)
+      setUploadProgress(0)
+      const controller = new AbortController()
+      uploadAbortRef.current = controller
+
       const formData = new FormData()
       formData.append('file', uploadFile)
       if (uploadName.trim()) formData.append('name', uploadName.trim())
       if (uploadDesc.trim()) formData.append('description', uploadDesc.trim())
 
-      toast.info('Đang tải lên tập tin và phân tích học liệu...')
-      const newRes = await uploadResourceFile(formData)
-      toast.success(`Đã tải lên thành công: ${newRes.name}`)
+      const newRes = await uploadResourceFileWithProgress(
+        formData,
+        (pct) => setUploadProgress(pct),
+        controller.signal,
+      )
 
+      toast.success(`Đã tải lên thành công: ${newRes.name}`)
       setUploadModalOpen(false)
       setUploadFile(null)
       setUploadName('')
       setUploadDesc('')
+      setUploadProgress(0)
       setResources((prev) => [newRes, ...prev])
     } catch (err: any) {
-      toast.error(`Lỗi tải lên: ${err.message || 'Vui lòng thử lại'}`)
+      if (err.name === 'AbortError' || err.message === 'Tải lên đã bị hủy') {
+        toast.info('Đã hủy tải lên tập tin')
+      } else {
+        toast.error(`Lỗi tải lên: ${err.message || 'Vui lòng kiểm tra kết nối mạng và thử lại'}`)
+      }
     } finally {
       setUploading(false)
+      uploadAbortRef.current = null
     }
   }
 
@@ -789,6 +899,43 @@ export function WorkspaceModule({ view }: { view: View }) {
       toast.success('Tải xuống hoàn tất!')
     } catch (err: any) {
       toast.error(`Lỗi tải xuống: ${err.message || 'Vui lòng thử lại'}`)
+    }
+  }
+
+  const handleOpenDefaultApp = async (resource: TeachingResource) => {
+    try {
+      toast.info(`Đang mở tệp: ${resource.name}...`)
+      await openResourceInDefaultApp(resource.id, resource.originalFileName || resource.name)
+    } catch (err: any) {
+      toast.error(`Lỗi khi mở tệp: ${err.message || 'Vui lòng thử lại'}`)
+    }
+  }
+
+  const handleStartRename = (resource: TeachingResource) => {
+    setRenameTargetResource(resource)
+    setRenameName(resource.name || resource.title || '')
+    setRenameModalOpen(true)
+  }
+
+  const handleRenameSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!renameTargetResource || !renameName.trim()) return
+    try {
+      setRenaming(true)
+      const updated = await apiUpdateResource(renameTargetResource.id, {
+        name: renameName.trim(),
+        title: renameName.trim(),
+      })
+      setResources((prev) =>
+        prev.map((r) => (r.id === updated.id ? { ...r, name: updated.name, title: updated.title } : r)),
+      )
+      toast.success('Đã đổi tên tài nguyên thành công')
+      setRenameModalOpen(false)
+      setRenameTargetResource(null)
+    } catch (err: any) {
+      toast.error(`Lỗi đổi tên: ${err.message || 'Vui lòng thử lại'}`)
+    } finally {
+      setRenaming(false)
     }
   }
 
@@ -862,7 +1009,7 @@ export function WorkspaceModule({ view }: { view: View }) {
           >
             {view === 'Tài nguyên' ? (
               <>
-                <UploadCloud className="size-4" /> Tải lên tài nguyên
+                <UploadCloud className="size-4" /> + Tải tài nguyên lên
               </>
             ) : (
               <>
@@ -875,29 +1022,29 @@ export function WorkspaceModule({ view }: { view: View }) {
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat
-          label="Tổng số"
+          label="Tổng số tài nguyên"
           value={String(view === 'Tài nguyên' ? resources.length : items.length)}
-          helper="Trong kho dữ liệu"
+          helper="Trong kho dữ liệu cá nhân"
           icon={<Icon />}
         />
         <Stat
           label="Tài liệu & Bài giảng"
           value={String(
             view === 'Tài nguyên'
-              ? resources.filter((r) => ['DOCUMENT', 'PRESENTATION'].includes(r.resourceType)).length
+              ? resources.filter((r) => ['DOCUMENT', 'PRESENTATION', 'SPREADSHEET'].includes(r.resourceType)).length
               : items.filter((item) => item.status !== 'Bản nháp').length,
           )}
-          helper="Sẵn sàng giảng dạy"
+          helper="PDF, Word, PPTX, Excel"
           icon={<CheckCircle2 />}
         />
         <Stat
           label="Đa phương tiện"
           value={String(
             view === 'Tài nguyên'
-              ? resources.filter((r) => ['IMAGE', 'VIDEO'].includes(r.resourceType)).length
+              ? resources.filter((r) => ['IMAGE', 'VIDEO', 'AUDIO'].includes(r.resourceType)).length
               : items.filter((item) => item.status === 'Bản nháp').length,
           )}
-          helper="Hình ảnh & Video"
+          helper="Hình ảnh, Audio & Video"
           icon={<Sparkles />}
         />
       </div>
@@ -917,22 +1064,23 @@ export function WorkspaceModule({ view }: { view: View }) {
         </div>
 
         {view === 'Tài nguyên' ? (
-          <div className="flex gap-2 overflow-x-auto">
+          <div className="flex gap-2 overflow-x-auto pb-1">
             <Filter className="my-3 size-4 text-muted-foreground" />
             {[
               { label: 'Tất cả', value: 'ALL' },
-              { label: 'Văn bản (PDF/Word)', value: 'DOCUMENT' },
+              { label: 'Tài liệu (PDF/Word)', value: 'DOCUMENT' },
+              { label: 'Hình ảnh', value: 'IMAGE' },
+              { label: 'Audio / Âm thanh', value: 'AUDIO' },
+              { label: 'Video / Clip', value: 'VIDEO' },
               { label: 'Bài giảng PPT', value: 'PRESENTATION' },
               { label: 'Bảng tính Excel', value: 'SPREADSHEET' },
-              { label: 'Hình ảnh', value: 'IMAGE' },
-              { label: 'Video', value: 'VIDEO' },
             ].map((option) => (
               <button
                 key={option.value}
                 onClick={() => setResourceTypeFilter(option.value)}
-                className={`whitespace-nowrap rounded-xl border px-3 py-2 text-xs font-medium ${
+                className={`whitespace-nowrap rounded-xl border px-3 py-2 text-xs font-medium transition ${
                   resourceTypeFilter === option.value
-                    ? 'border-primary bg-primary/10 text-primary'
+                    ? 'border-primary bg-primary/10 text-primary font-bold'
                     : 'border-border bg-background text-muted-foreground hover:bg-muted'
                 }`}
               >
@@ -979,6 +1127,8 @@ export function WorkspaceModule({ view }: { view: View }) {
                 setAttachModalOpen(true)
               }}
               onDelete={(target) => handleDeleteResource(target)}
+              onRename={(target) => handleStartRename(target)}
+              onOpenDefault={(target) => handleOpenDefaultApp(target)}
             />
           ))}
         </div>
@@ -1096,7 +1246,7 @@ export function WorkspaceModule({ view }: { view: View }) {
             <h2 className="mt-3 font-semibold">Chưa có tài nguyên phù hợp</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {view === 'Tài nguyên'
-                ? 'Nhấn nút "Tải lên tài nguyên" để thêm giáo án, bài giảng hoặc học liệu số.'
+                ? 'Nhấn nút "+ Tải tài nguyên lên" để thêm giáo án, bài giảng, hình ảnh, audio hoặc video học liệu.'
                 : 'Thử thay đổi từ khóa hoặc bộ lọc.'}
             </p>
           </div>
@@ -1118,8 +1268,13 @@ export function WorkspaceModule({ view }: { view: View }) {
                 <h2 className="mt-1 text-lg font-semibold">Tải lên tài nguyên dạy học</h2>
               </div>
               <button
-                onClick={() => setUploadModalOpen(false)}
-                className="text-muted-foreground hover:text-foreground text-lg"
+                onClick={() => {
+                  if (uploading && uploadAbortRef.current) {
+                    uploadAbortRef.current.abort()
+                  }
+                  setUploadModalOpen(false)
+                }}
+                className="text-muted-foreground hover:text-foreground text-lg cursor-pointer"
               >
                 <X className="size-5" />
               </button>
@@ -1132,13 +1287,15 @@ export function WorkspaceModule({ view }: { view: View }) {
                 onDragLeave={handleDrag}
                 onDragOver={handleDrag}
                 onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 text-center cursor-pointer transition ${
-                  dragActive
-                    ? 'border-primary bg-primary/5'
+                onClick={() => !uploading && fileInputRef.current?.click()}
+                className={`relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 text-center transition ${
+                  uploading
+                    ? 'border-teal-400 bg-teal-50/20 pointer-events-none'
+                    : dragActive
+                    ? 'border-primary bg-primary/5 cursor-pointer'
                     : uploadFile
-                    ? 'border-teal-400 bg-teal-50/40'
-                    : 'border-border hover:border-primary/50'
+                    ? 'border-teal-400 bg-teal-50/40 cursor-pointer'
+                    : 'border-border hover:border-primary/50 cursor-pointer'
                 }`}
               >
                 <input
@@ -1151,19 +1308,32 @@ export function WorkspaceModule({ view }: { view: View }) {
                       if (!uploadName) setUploadName(file.name.replace(/\.[^.]+$/, ''))
                     }
                   }}
-                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.mp4"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.m4a,.aac,.mp4,.webm,.mov"
                   className="hidden"
                 />
 
                 {uploadFile ? (
-                  <div className="flex flex-col items-center gap-1">
+                  <div className="flex flex-col items-center gap-1.5">
                     <span className="grid size-12 place-items-center rounded-xl bg-teal-100 text-teal-700">
-                      <File className="size-6" />
+                      {uploadFile.type.startsWith('video/') ? (
+                        <Film className="size-6" />
+                      ) : uploadFile.type.startsWith('audio/') ? (
+                        <Music className="size-6" />
+                      ) : uploadFile.type.startsWith('image/') ? (
+                        <ImageIcon className="size-6" />
+                      ) : (
+                        <FileText className="size-6" />
+                      )}
                     </span>
                     <p className="font-semibold text-sm text-foreground">{uploadFile.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {(uploadFile.size / (1024 * 1024)).toFixed(2)} MB · Nhấn để đổi tệp khác
+                      {(uploadFile.size / (1024 * 1024)).toFixed(2)} MB · {uploadFile.type || 'Tập tin'}
                     </p>
+                    {!uploading && (
+                      <span className="text-[11px] text-teal-700 font-semibold underline mt-1">
+                        Nhấn để chọn tệp khác
+                      </span>
+                    )}
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-2">
@@ -1173,12 +1343,30 @@ export function WorkspaceModule({ view }: { view: View }) {
                     <p className="text-sm font-semibold text-foreground">
                       Kéo thả tập tin vào đây hoặc <span className="text-primary underline">duyệt tệp</span>
                     </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      Hỗ trợ PDF, Word, PPTX, Excel, PNG, JPG, MP4 (Tài liệu: 50MB, Trình chiếu: 100MB, Video: 500MB, Ảnh: 20MB)
+                    <p className="text-[11px] text-muted-foreground max-w-md">
+                      Hỗ trợ: 📄 Tài liệu (PDF, Word, Excel, PPTX, TXT), 🖼️ Ảnh (JPG, PNG, WEBP, GIF), 🎵 Audio (MP3, WAV, M4A, AAC), 🎬 Video (MP4, WEBM, MOV)
                     </p>
                   </div>
                 )}
               </div>
+
+              {/* Upload Progress Bar */}
+              {uploading && (
+                <div className="space-y-1.5 rounded-xl bg-slate-50 p-3.5 border border-teal-100">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                    <span className="flex items-center gap-1.5 text-teal-700">
+                      <Loader2 className="size-3.5 animate-spin" /> Đang tải lên và xử lý...
+                    </span>
+                    <span className="font-mono text-teal-800">{uploadProgress}%</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                    <div
+                      className="h-full bg-linear-to-r from-teal-500 to-emerald-500 transition-all duration-150"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted-foreground">
@@ -1187,8 +1375,9 @@ export function WorkspaceModule({ view }: { view: View }) {
                 <input
                   value={uploadName}
                   onChange={(e) => setUploadName(e.target.value)}
-                  placeholder="Ví dụ: Phiếu bài tập Toán tuần 3, Bài giảng Powerpoint..."
+                  placeholder="Ví dụ: Phiếu bài tập Toán tuần 3, Bài hát khởi động, Video thí nghiệm..."
                   className="h-10 w-full rounded-xl border border-border px-3 text-sm outline-none focus:border-primary"
+                  disabled={uploading}
                 />
               </div>
 
@@ -1202,31 +1391,91 @@ export function WorkspaceModule({ view }: { view: View }) {
                   rows={2}
                   placeholder="Ghi chú cách sử dụng tài nguyên trong tiết học..."
                   className="w-full rounded-xl border border-border p-3 text-xs outline-none focus:border-primary"
+                  disabled={uploading}
                 />
               </div>
 
               <div className="mt-2 flex justify-end gap-2 border-t pt-3">
                 <button
                   type="button"
-                  onClick={() => setUploadModalOpen(false)}
-                  className="rounded-xl border px-4 py-2 text-sm"
+                  onClick={() => {
+                    if (uploading && uploadAbortRef.current) {
+                      uploadAbortRef.current.abort()
+                    }
+                    setUploadModalOpen(false)
+                  }}
+                  className="rounded-xl border px-4 py-2 text-sm cursor-pointer"
                 >
-                  Hủy
+                  {uploading ? 'Hủy tải lên' : 'Hủy'}
                 </button>
                 <button
                   type="submit"
                   disabled={uploading || !uploadFile}
-                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50 cursor-pointer"
                 >
                   {uploading ? (
                     <>
-                      <Loader2 className="size-4 animate-spin" /> Đang tải lên...
+                      <Loader2 className="size-4 animate-spin" /> {uploadProgress}%
                     </>
                   ) : (
                     <>
                       <UploadCloud className="size-4" /> Tải lên ngay
                     </>
                   )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Rename Resource Modal */}
+      {renameModalOpen && renameTargetResource && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
+        >
+          <div className="w-full max-w-md rounded-2xl border bg-background p-6 shadow-xl">
+            <div className="flex items-start justify-between border-b pb-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+                  Cập nhật tài nguyên
+                </p>
+                <h2 className="mt-1 text-base font-semibold">Đổi tên học liệu</h2>
+              </div>
+              <button onClick={() => setRenameModalOpen(false)} className="text-muted-foreground">
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRenameSubmit} className="mt-4 flex flex-col gap-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Tên hiển thị mới
+                </label>
+                <input
+                  value={renameName}
+                  onChange={(e) => setRenameName(e.target.value)}
+                  required
+                  className="h-10 w-full rounded-xl border border-border px-3 text-sm outline-none focus:border-primary"
+                />
+              </div>
+
+              <div className="mt-2 flex justify-end gap-2 border-t pt-3">
+                <button
+                  type="button"
+                  onClick={() => setRenameModalOpen(false)}
+                  className="rounded-xl border px-4 py-2 text-sm"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={renaming || !renameName.trim()}
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                >
+                  {renaming ? <Loader2 className="size-4 animate-spin" /> : null} Lưu thay đổi
                 </button>
               </div>
             </form>
@@ -1319,6 +1568,7 @@ export function WorkspaceModule({ view }: { view: View }) {
           resource={selectedResource}
           onClose={() => setSelectedResource(null)}
           onDownload={() => handleDownloadResource(selectedResource)}
+          onOpenDefault={() => handleOpenDefaultApp(selectedResource)}
           onAttach={() => {
             setAttachTargetResource(selectedResource)
             setSelectedResource(null)

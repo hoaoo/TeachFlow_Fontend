@@ -6,7 +6,8 @@ export interface TeachingResource {
   name: string;
   title: string;
   originalFileName?: string;
-  resourceType: 'DOCUMENT' | 'PRESENTATION' | 'SPREADSHEET' | 'IMAGE' | 'VIDEO' | 'OTHER' | string;
+  storedFileName?: string;
+  resourceType: 'DOCUMENT' | 'IMAGE' | 'AUDIO' | 'VIDEO' | 'PRESENTATION' | 'SPREADSHEET' | 'OTHER' | string;
   mimeType?: string;
   size?: number;
   formattedSize?: string;
@@ -26,31 +27,80 @@ export interface TeachingResource {
   updatedAt?: string;
 }
 
+export function uploadResourceFileWithProgress(
+  formData: FormData,
+  onProgress?: (percent: number) => void,
+  signal?: AbortSignal,
+): Promise<TeachingResource> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const token = getAccessToken();
+
+    xhr.open('POST', `${API_BASE_URL}/resources/upload`, true);
+    xhr.withCredentials = true;
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          onProgress(percent);
+        }
+      };
+    }
+
+    if (signal) {
+      signal.addEventListener('abort', () => {
+        xhr.abort();
+        reject(new Error('Tải lên đã bị hủy'));
+      });
+    }
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          resolve(data);
+        } catch {
+          reject(new Error('Phản hồi từ máy chủ không hợp lệ'));
+        }
+      } else {
+        let errorMsg = 'Không thể tải lên tập tin';
+        try {
+          const errorJson = JSON.parse(xhr.responseText);
+          errorMsg = Array.isArray(errorJson.message)
+            ? errorJson.message.join(', ')
+            : errorJson.message || errorMsg;
+        } catch {}
+        reject(new Error(errorMsg));
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Mất kết nối với máy chủ khi tải lên'));
+    };
+
+    xhr.ontimeout = () => {
+      reject(new Error('Hết thời gian chờ tải lên tệp tin'));
+    };
+
+    xhr.send(formData);
+  });
+}
+
 export async function uploadResourceFile(
   formData: FormData,
 ): Promise<TeachingResource> {
-  const token = getAccessToken();
-  const response = await fetch(`${API_BASE_URL}/resources/upload`, {
-    method: 'POST',
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: formData,
-    credentials: 'include',
-  });
+  return uploadResourceFileWithProgress(formData);
+}
 
-  if (!response.ok) {
-    let errorMsg = 'Không thể tải lên tập tin';
-    try {
-      const errorJson = await response.json();
-      errorMsg = Array.isArray(errorJson.message)
-        ? errorJson.message.join(', ')
-        : errorJson.message || errorMsg;
-    } catch {}
-    throw new Error(errorMsg);
-  }
-
-  return await response.json();
+export async function updateResource(
+  id: string,
+  data: { name?: string; title?: string; description?: string; subtitle?: string; tone?: string },
+): Promise<TeachingResource> {
+  return api.patch(`/resources/${id}`, data);
 }
 
 export async function getResources(params?: {
@@ -183,3 +233,10 @@ export async function detachResourceFromLessonPlan(
 export async function getLessonPlanResources(lessonPlanId: string): Promise<any[]> {
   return api.get(`/lesson-plans/${lessonPlanId}/resources`);
 }
+
+export async function openResourceInDefaultApp(id: string, fallbackName?: string): Promise<void> {
+  const { blob, filename } = await getResourceFileBlob(id);
+  const targetName = fallbackName || filename || 'tai_nguyen';
+  await saveBlob(blob, targetName);
+}
+
