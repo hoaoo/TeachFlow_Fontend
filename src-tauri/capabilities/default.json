@@ -6,6 +6,12 @@
     "main"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    "updater:default",
+    "updater:allow-check",
+    "updater:allow-download",
+    "updater:allow-download-and-install",
+    "updater:allow-install",
+    "process:allow-restart"
   ]
 }

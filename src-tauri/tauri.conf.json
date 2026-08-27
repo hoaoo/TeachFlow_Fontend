@@ -24,15 +24,28 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data: https:; connect-src 'self' ipc: http://ipc.localhost http://localhost:3000 http://localhost:3001 ws://localhost:3000 ws://localhost:3001 https://hoan-dev081202.onrender.com https://teachflow-fontend.onrender.com;"
+      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data: https:; connect-src 'self' ipc: http://ipc.localhost https://hoan-dev081202.onrender.com;",
+      "devCsp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data: https:; connect-src 'self' ipc: http://ipc.localhost http://localhost:3000 http://localhost:3001 ws://localhost:3000 ws://localhost:3001 https://hoan-dev081202.onrender.com;"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/hoaoo/TeachFlow_Fontend/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNGODVEMTNDRUM4QjY1QzAKUldUQVpZdnNQTkdGUDg2YlFFTy9oRWRWMXUzZ3NUK2U2VTBvbklYR0lZZnVvdEtvTzRBNzdFTmwK",
+      "windows": {
+        "installMode": "passive"
+      }
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "publisher": "TeachFlow",
-    "shortDescription": "Trợ lý số dành cho giáo viên",
-    "longDescription": "Không gian làm việc thông minh dành cho giáo viên tiểu học.",
+    "shortDescription": "Tro ly so danh cho giao vien",
+    "longDescription": "Khong gian lam viec thong minh danh cho giao vien tieu hoc.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

@@ -2,6 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { AuthProvider } from '@/context/auth-context'
 import { Toaster } from '@/components/ui/sonner'
+import { AutoUpdater } from '@/components/updater/auto-updater'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -35,6 +36,7 @@ export default function RootLayout({
         <AuthProvider>
           {children}
           <Toaster />
+          <AutoUpdater />
         </AuthProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

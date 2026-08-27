@@ -13,6 +13,7 @@ import {
   Download,
   School,
   ArrowRight,
+  RefreshCw,
 } from 'lucide-react'
 import { useAuth } from '@/context/auth-context'
 import { api } from '@/services/api-client'
@@ -23,6 +24,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { TeacherBackupModal } from '@/components/teacher-backup-modal'
 import { SchoolYearRolloverModal } from '@/components/school-year-rollover-modal'
+import { CheckUpdateButton } from '@/components/updater/check-update-button'
 import { toast } from 'sonner'
 
 export function TeacherSettingsView() {
@@ -267,6 +269,24 @@ export function TeacherSettingsView() {
           </Button>
         </div>
       </form>
+
+      {/* Update Card — only visible in Tauri/Windows desktop context */}
+      {typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <RefreshCw className="size-4 text-teal-600" />
+              Phiên bản &amp; Cập nhật
+            </CardTitle>
+            <CardDescription>
+              Kiểm tra và cài đặt phiên bản mới nhất của TeachFlow Desktop.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CheckUpdateButton />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Backup Modal */}
       <TeacherBackupModal

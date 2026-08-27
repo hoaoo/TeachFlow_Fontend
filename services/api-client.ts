@@ -3,7 +3,37 @@
  * Handles token attachment, refresh token flow, error parsing and standardized requests.
  */
 
-export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'https://hoan-dev081202.onrender.com/api').replace(/\/+$/, '');
+const configuredApiBaseUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+
+if (!configuredApiBaseUrl) {
+  throw new Error('NEXT_PUBLIC_API_URL is required at build time');
+}
+
+export const API_BASE_URL = configuredApiBaseUrl.replace(/\/+$/, '');
+
+const parsedApiBaseUrl = new URL(API_BASE_URL);
+if (!['http:', 'https:'].includes(parsedApiBaseUrl.protocol)) {
+  throw new Error('NEXT_PUBLIC_API_URL must be an absolute HTTP(S) URL');
+}
+if (
+  process.env.NODE_ENV === 'production' &&
+  (parsedApiBaseUrl.protocol !== 'https:' || ['localhost', '127.0.0.1'].includes(parsedApiBaseUrl.hostname))
+) {
+  throw new Error('NEXT_PUBLIC_API_URL must use a non-local HTTPS origin in production');
+}
+
+type ApiErrorCategory = 'http' | 'policy_or_network' | 'abort' | 'unknown';
+
+function logApiFailure(input: {
+  url: string;
+  status: number | null;
+  category: ApiErrorCategory;
+  requestId: string | null;
+}): void {
+  if (process.env.NODE_ENV !== 'production') {
+    console.error('[TeachFlow API]', input);
+  }
+}
 
 let accessToken: string | null = null;
 let isRefreshing = false;
@@ -209,6 +239,13 @@ export async function apiClient<T = any>(
         rawMessage = 'Hệ thống đang bận. Vui lòng thử lại sau.';
       }
 
+      logApiFailure({
+        url,
+        status: response.status,
+        category: 'http',
+        requestId: response.headers.get('x-request-id') || errorData.requestId || null,
+      });
+
       throw new ApiError(rawMessage, response.status, errorData.error, errorData);
     }
 
@@ -222,6 +259,13 @@ export async function apiClient<T = any>(
     if (error instanceof ApiError) {
       throw error;
     }
+    const category: ApiErrorCategory =
+      error instanceof DOMException && error.name === 'AbortError'
+        ? 'abort'
+        : error instanceof TypeError
+          ? 'policy_or_network'
+          : 'unknown';
+    logApiFailure({ url, status: null, category, requestId: null });
     let msg = (error as Error).message || 'Không thể kết nối đến máy chủ';
     if (msg.toLowerCase().includes('no translation found') || msg.toLowerCase().includes('oops')) {
       msg = 'Không tìm thấy dữ liệu yêu cầu.';
