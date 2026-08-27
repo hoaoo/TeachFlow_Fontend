@@ -1,0 +1,11 @@
+{
+  "version": "2.1.1",
+  "notes": "TeachFlow 2.1.1: Nang cap Resource & File Viewer V2 (ho tro da phuong tien audio/video/anh/tai lieu/Office, HTTP Range Streaming, upload tien do thoi gian thuc va mo ung dung mac dinh tren Windows).",
+  "pub_date": "2026-08-27T09:37:33.000Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUQVpZdnNQTkdGUDgwVlJiQ0N6V2w0MEplV1pOVkJMVnVCZVZoMXZ3emhyMVhJVjNQNmJRMm1YaXljUFpQNFd4Q2FtSmwxWG11bmVjOTArLys0eStHcW9wUVhCUmhwZkF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3ODIzNDM0CWZpbGU6VGVhY2hGbG93XzIuMS4xX3g2NC1zZXR1cC5leGUKdUl3ZUZEZGFuZXBBRlBzUlpkNnlncGpJSnZ6emhrTm9uQ0JCTyt2R1gxR0tTWnpDTm5POFljN1ZRaFFiRVhza29GNzcxTzNtUEJobFByZ01IVHE5QVE9PQo=",
+      "url": "https://github.com/hoaoo/TeachFlow_Fontend/releases/download/v2.1.1/TeachFlow_2.1.1_x64-setup.exe"
+    }
+  }
+}
