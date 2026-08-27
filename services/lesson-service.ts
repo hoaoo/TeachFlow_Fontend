@@ -1,4 +1,5 @@
 import { api, API_BASE_URL } from './api-client';
+import { saveBlob } from './file-save-service';
 
 export type Activity = {
   id: string;
@@ -192,14 +193,7 @@ export function getLessonPlanFileUrl(id: string): string {
 
 export async function downloadLessonPlanFile(id: string, filename?: string): Promise<void> {
   const blob = await api.getBlob(`/lesson-plans/${id}/file`);
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename || 'lesson-plan-file';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  window.URL.revokeObjectURL(url);
+  await saveBlob(blob, filename || 'lesson-plan-file');
 }
 
 export async function saveLessonPlan(plan: LessonPlan): Promise<LessonPlan> {

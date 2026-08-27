@@ -1,7 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { api, setAccessToken, getAccessToken, clearAuth, notifyAuthStateChanged, API_BASE_URL } from '@/services/api-client';
+import { api, setAuthTokens, getAccessToken, clearAuthTokens, notifyAuthStateChanged, API_BASE_URL, fetchWithResilience } from '@/services/api-client';
+import { getStoredRefreshToken, initializeTokenStorage } from '@/services/token-storage';
 
 export type UserProfile = {
   id: string;
@@ -40,18 +41,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchProfile = useCallback(async (): Promise<UserProfile | null> => {
     const token = getAccessToken();
     if (!token) {
-      // If no access token in memory/localStorage, attempt silent refresh using HttpOnly cookie
+      // Web uses its HttpOnly cookie; Desktop reads its refresh token from Windows secure storage.
       try {
-        const refreshRes = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        const refreshToken = await getStoredRefreshToken();
+        const refreshRes = await fetchWithResilience(`${API_BASE_URL}/auth/refresh`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          body: refreshToken ? JSON.stringify({ refreshToken }) : undefined,
           credentials: 'include',
-        });
+        }, true);
         if (refreshRes.ok) {
           const refreshData = await refreshRes.json();
           const newToken = refreshData.accessToken || refreshData.tokens?.accessToken;
           if (newToken) {
-            setAccessToken(newToken);
+            await setAuthTokens(newToken, refreshData.refreshToken || refreshData.tokens?.refreshToken);
             const userProfile = await api.get<UserProfile>('/auth/me');
             setUser(userProfile);
             setIsLoading(false);
@@ -71,9 +74,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = await api.get<UserProfile>('/auth/me');
       setUser(data);
       return data;
-    } catch {
-      setUser(null);
-      clearAuth();
+    } catch (error: any) {
+      if (error?.statusCode === 401 || error?.code === 'UNAUTHORIZED') {
+        setUser(null);
+        await clearAuthTokens();
+      }
       return null;
     } finally {
       setIsLoading(false);
@@ -81,7 +86,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    fetchProfile();
+    initializeTokenStorage().then(fetchProfile).catch(() => {
+      setUser(null);
+      setIsLoading(false);
+    });
 
     // Listen for successful login/auth-state-changed (re-fetch profile)
     const handleAuthChange = () => {
@@ -96,22 +104,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     window.addEventListener('teachflow:auth-state-changed', handleAuthChange);
     window.addEventListener('teachflow:auth-cleared', handleAuthCleared);
+    window.addEventListener('online', handleAuthChange);
     return () => {
       window.removeEventListener('teachflow:auth-state-changed', handleAuthChange);
       window.removeEventListener('teachflow:auth-cleared', handleAuthCleared);
+      window.removeEventListener('online', handleAuthChange);
     };
   }, [fetchProfile]);
 
   const login = async (email: string, password: string): Promise<UserProfile> => {
     const data = await api.post<{
         user: any;
-        tokens?: { accessToken: string };
+        tokens?: { accessToken: string; refreshToken?: string };
         accessToken?: string;
+        refreshToken?: string;
       }>('/auth/login', { email: email.trim().toLowerCase(), password });
 
       const token = data.accessToken || data.tokens?.accessToken;
       if (token) {
-        setAccessToken(token);
+        await setAuthTokens(token, data.refreshToken || data.tokens?.refreshToken);
       }
       const profile = await fetchProfile();
       if (!profile) throw new Error('Không thể tải thông tin tài khoản sau đăng nhập.');
@@ -130,11 +141,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      await api.post('/auth/logout');
+      const refreshToken = await getStoredRefreshToken();
+      await api.post('/auth/logout', refreshToken ? { refreshToken } : undefined);
     } catch {
       // Ignore network errors during logout
     } finally {
-      clearAuth();
+      await clearAuthTokens();
       setUser(null);
     }
   };

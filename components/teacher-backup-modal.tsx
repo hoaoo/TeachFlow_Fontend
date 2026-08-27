@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { API_BASE_URL, getAccessToken } from '@/services/api-client';
+import { saveBlob } from '@/services/file-save-service';
 import {
   Download,
   FileArchive,
@@ -75,16 +76,8 @@ export function TeacherBackupModal({
         throw new Error(`Xuất dữ liệu thất bại (${response.status})`);
       }
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
       const dateStr = new Date().toISOString().split('T')[0];
-      a.download = `teachflow-backup-${dateStr}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      await saveBlob(await response.blob(), `teachflow-backup-${dateStr}.zip`);
 
       toast.success('Đã tải xuống gói sao lưu dữ liệu (.ZIP) thành công!');
       onOpenChange(false);

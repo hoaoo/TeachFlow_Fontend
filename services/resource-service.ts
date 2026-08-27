@@ -1,4 +1,5 @@
 import { api, apiClient, getAccessToken, API_BASE_URL } from './api-client';
+import { saveBlob } from './file-save-service';
 
 export interface TeachingResource {
   id: string;
@@ -112,15 +113,7 @@ export async function downloadResourceFile(id: string, fallbackName?: string): P
     }
   }
 
-  const blob = await response.blob();
-  const blobUrl = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = blobUrl;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  window.URL.revokeObjectURL(blobUrl);
+  await saveBlob(await response.blob(), filename);
 }
 
 export async function getResourceFileBlob(id: string): Promise<{ blob: Blob; mimeType: string; filename: string }> {
@@ -190,4 +183,3 @@ export async function detachResourceFromLessonPlan(
 export async function getLessonPlanResources(lessonPlanId: string): Promise<any[]> {
   return api.get(`/lesson-plans/${lessonPlanId}/resources`);
 }
-

@@ -1,3 +1,10 @@
+import {
+  clearStoredTokens,
+  getStoredAccessToken,
+  getStoredRefreshToken,
+  storeAuthTokens,
+} from './token-storage';
+
 /**
  * TeachFlow API Client
  * Handles token attachment, refresh token flow, error parsing and standardized requests.
@@ -23,6 +30,48 @@ if (
 }
 
 type ApiErrorCategory = 'http' | 'policy_or_network' | 'abort' | 'unknown';
+export type ApiErrorCode =
+  | 'NETWORK_TIMEOUT'
+  | 'NETWORK_ERROR'
+  | 'SERVER_STARTING'
+  | 'UNAUTHORIZED'
+  | 'SERVER_ERROR';
+
+function emitConnectionEvent(name: 'teachflow:server-starting' | 'teachflow:connection-restored') {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(name));
+}
+
+const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+export async function fetchWithResilience(
+  url: string,
+  options: RequestInit,
+  retryTransient = false,
+): Promise<Response> {
+  const delays = retryTransient ? [0, 1500, 3500] : [0];
+  let lastError: unknown;
+  for (let attempt = 0; attempt < delays.length; attempt += 1) {
+    if (delays[attempt]) await wait(delays[attempt]);
+    const controller = options.signal ? null : new AbortController();
+    const timeout = controller ? setTimeout(() => controller.abort(), 40_000) : null;
+    try {
+      const response = await fetch(url, { ...options, signal: options.signal || controller?.signal });
+      if ([502, 503, 504].includes(response.status) && attempt < delays.length - 1) {
+        emitConnectionEvent('teachflow:server-starting');
+        continue;
+      }
+      if (attempt > 0) emitConnectionEvent('teachflow:connection-restored');
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= delays.length - 1) throw error;
+      emitConnectionEvent('teachflow:server-starting');
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }
+  throw lastError;
+}
 
 function logApiFailure(input: {
   url: string;
@@ -35,7 +84,6 @@ function logApiFailure(input: {
   }
 }
 
-let accessToken: string | null = null;
 let isRefreshing = false;
 let refreshSubscribers: Array<{
   resolve: (token: string) => void;
@@ -43,32 +91,24 @@ let refreshSubscribers: Array<{
 }> = [];
 
 export function getAccessToken(): string | null {
-  if (accessToken) return accessToken;
-  if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem('teachflow_access_token');
-    if (stored) {
-      accessToken = stored;
-      return stored;
-    }
-  }
-  return null;
+  return getStoredAccessToken();
 }
 
-export function setAccessToken(token: string | null): void {
-  accessToken = token;
-  if (typeof window !== 'undefined') {
-    if (token) {
-      localStorage.setItem('teachflow_access_token', token);
-    } else {
-      localStorage.removeItem('teachflow_access_token');
-    }
-  }
+export async function setAuthTokens(accessToken: string | null, refreshToken?: string | null): Promise<void> {
+  await storeAuthTokens({ accessToken, refreshToken });
 }
 
 export function clearAuth(): void {
-  setAccessToken(null);
+  void clearStoredTokens();
   if (typeof window !== 'undefined') {
     // Dispatch 'teachflow:auth-cleared' for logout/session-expiry — data loaders must NOT reload on this
+    window.dispatchEvent(new CustomEvent('teachflow:auth-cleared', { detail: null }));
+  }
+}
+
+export async function clearAuthTokens(): Promise<void> {
+  await clearStoredTokens();
+  if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('teachflow:auth-cleared', { detail: null }));
   }
 }
@@ -101,13 +141,15 @@ export class ApiError extends Error {
   statusCode: number;
   error?: string;
   details?: any;
+  code: ApiErrorCode;
 
-  constructor(message: string, statusCode: number, error?: string, details?: any) {
+  constructor(message: string, statusCode: number, error?: string, details?: any, code?: ApiErrorCode) {
     super(message);
     this.name = 'ApiError';
     this.statusCode = statusCode;
     this.error = error;
     this.details = details;
+    this.code = code || (statusCode === 401 ? 'UNAUTHORIZED' : statusCode >= 500 ? 'SERVER_ERROR' : 'SERVER_ERROR');
   }
 }
 
@@ -149,7 +191,7 @@ export async function apiClient<T = any>(
   };
 
   try {
-    const response = await fetch(url, config);
+    const response = await fetchWithResilience(url, config, (config.method || 'GET').toUpperCase() === 'GET');
 
     // Handle 401 Unauthorized -> Refresh Token Flow
     if (
@@ -163,11 +205,13 @@ export async function apiClient<T = any>(
       if (!isRefreshing) {
         isRefreshing = true;
         try {
-          const refreshRes = await fetch(`${API_BASE_URL}/auth/refresh`, {
+          const refreshToken = await getStoredRefreshToken();
+          const refreshRes = await fetchWithResilience(`${API_BASE_URL}/auth/refresh`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            body: refreshToken ? JSON.stringify({ refreshToken }) : undefined,
             credentials: 'include',
-          });
+          }, true);
 
           if (refreshRes.ok) {
             const data = await refreshRes.json();
@@ -175,22 +219,27 @@ export async function apiClient<T = any>(
             if (!newToken) {
               throw new Error('Refresh response missing accessToken');
             }
-            setAccessToken(newToken);
+            await setAuthTokens(newToken, data.refreshToken || data.tokens?.refreshToken);
             isRefreshing = false;
             onRefreshed(newToken);
             return apiClient<T>(endpoint, options, true);
           } else {
             isRefreshing = false;
-            clearAuth();
-            const err = new ApiError('Phiên đăng nhập đã hết hạn', 401);
+            const unauthorized = refreshRes.status === 401 || refreshRes.status === 403;
+            if (unauthorized) clearAuth();
+            const err = unauthorized
+              ? new ApiError('Phiên đăng nhập đã hết hạn', 401, undefined, undefined, 'UNAUTHORIZED')
+              : new ApiError('Máy chủ đang khởi động, vui lòng chờ...', refreshRes.status, undefined, undefined, 'SERVER_STARTING');
             onRefreshFailed(err);
             throw err;
           }
         } catch (err) {
           isRefreshing = false;
-          clearAuth();
+          if (err instanceof ApiError && err.code === 'UNAUTHORIZED') clearAuth();
           onRefreshFailed(err);
-          throw err instanceof ApiError ? err : new ApiError((err as Error).message || 'Lỗi làm mới token', 401);
+          throw err instanceof ApiError
+            ? err
+            : new ApiError((err as Error).message || 'Không thể kết nối máy chủ', 0, undefined, undefined, 'NETWORK_ERROR');
         }
       } else {
         // Wait for active refreshing to complete
@@ -246,7 +295,18 @@ export async function apiClient<T = any>(
         requestId: response.headers.get('x-request-id') || errorData.requestId || null,
       });
 
-      throw new ApiError(rawMessage, response.status, errorData.error, errorData);
+      const code: ApiErrorCode = response.status === 401
+        ? 'UNAUTHORIZED'
+        : [502, 503, 504].includes(response.status)
+          ? 'SERVER_STARTING'
+          : 'SERVER_ERROR';
+      throw new ApiError(
+        code === 'SERVER_STARTING' ? 'Máy chủ đang khởi động, vui lòng chờ...' : rawMessage,
+        response.status,
+        errorData.error,
+        errorData,
+        code,
+      );
     }
 
     // Handle 204 No Content
@@ -270,7 +330,14 @@ export async function apiClient<T = any>(
     if (msg.toLowerCase().includes('no translation found') || msg.toLowerCase().includes('oops')) {
       msg = 'Không tìm thấy dữ liệu yêu cầu.';
     }
-    throw new ApiError(msg, 500);
+    const code: ApiErrorCode = category === 'abort' ? 'NETWORK_TIMEOUT' : 'NETWORK_ERROR';
+    throw new ApiError(
+      code === 'NETWORK_TIMEOUT' ? 'Kết nối quá thời gian chờ. Vui lòng thử lại.' : msg,
+      0,
+      undefined,
+      undefined,
+      code,
+    );
   }
 }
 

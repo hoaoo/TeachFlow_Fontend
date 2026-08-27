@@ -74,6 +74,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
+import { getPlatform } from '@/platform'
 
 const iconMap = { LayoutDashboard, CalendarDays, BookOpen, Library, Users, GraduationCap, Files, ClipboardCheck, School, CheckCircle2, Settings, Sparkles, FileText, Bookmark, MessageSquarePlus, Grid2X2 }
 
@@ -468,7 +469,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   const [tasksList, setTasksList] = useState<DashboardTask[]>([])
   const [loading, setLoading] = useState(true)
   const [dashboardError, setDashboardError] = useState<{
-    type: 'UNAUTHENTICATED' | 'FORBIDDEN' | 'SERVER_ERROR' | 'NETWORK_ERROR'
+    type: 'UNAUTHENTICATED' | 'FORBIDDEN' | 'SERVER_ERROR' | 'NETWORK_ERROR' | 'NETWORK_TIMEOUT' | 'SERVER_STARTING'
     message: string
   } | null>(null)
 
@@ -504,6 +505,9 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   const [savingStatus, setSavingStatus] = useState(false)
   const [attendanceScheduleId, setAttendanceScheduleId] = useState<string | null>(null)
   const [attendanceModalOpen, setAttendanceModalOpen] = useState(false)
+  const [desktop, setDesktop] = useState(false)
+
+  useEffect(() => setDesktop(getPlatform().isDesktop()), [])
 
   // Clock tick every second
   useEffect(() => {
@@ -539,6 +543,16 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
         setDashboardError({
           type: 'FORBIDDEN',
           message: 'Bạn không có quyền truy cập trang tổng quan này.',
+        })
+      } else if (err?.code === 'SERVER_STARTING') {
+        setDashboardError({
+          type: 'SERVER_STARTING',
+          message: 'Máy chủ đang khởi động, vui lòng chờ...',
+        })
+      } else if (err?.code === 'NETWORK_TIMEOUT' || err?.code === 'NETWORK_ERROR') {
+        setDashboardError({
+          type: err.code,
+          message: err?.message || 'Mất kết nối Internet. TeachFlow sẽ thử kết nối lại.',
         })
       } else {
         setDashboardError({
@@ -916,6 +930,28 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
           </button>
         }
       />
+
+      {desktop && (
+        <section aria-label="Thao tác nhanh" className="rounded-2xl border border-slate-200 bg-white p-3 shadow-xs">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => onNavigate('Điểm danh')}>
+              <Users className="size-4" /> Điểm danh
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => onNavigate('Giáo án')}>
+              <BookOpen className="size-4" /> Tạo kế hoạch bài dạy
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => onNavigate('Phiếu học tập')}>
+              <FileQuestion className="size-4" /> Tạo phiếu bài tập
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setTaskModalOpen(true)}>
+              <Plus className="size-4" /> Thêm việc
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => onNavigate('Trợ lý AI')}>
+              <Sparkles className="size-4 text-orange-500" /> Hỏi TeachFlow AI
+            </Button>
+          </div>
+        </section>
+      )}
 
       {/* Unauthenticated Alert Card */}
       {dashboardError?.type === 'UNAUTHENTICATED' && (
@@ -1801,6 +1837,7 @@ function AIView({ onNavigate }: { onNavigate?: (view: View) => void }) {
         title={`Trợ lý AI của ${teacherName}`}
         description="Trợ lý sư phạm thông minh hỗ trợ soạn bài, phân tích tài liệu (PDF, Word, Excel, Ảnh), tạo trò chơi và đánh giá học sinh."
       />
+
       <div className="grid min-h-[580px] flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-100 lg:grid-cols-[260px_1fr]">
         <div className="hidden border-r border-slate-100 bg-slate-50/70 p-4 lg:block">
           <button
@@ -2202,6 +2239,26 @@ export function TeacherApp() {
     window.addEventListener('teachflow:open-login', handleOpenLogin)
     return () => window.removeEventListener('teachflow:open-login', handleOpenLogin)
   }, [])
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || event.altKey || event.metaKey) return
+      const target = event.target as HTMLElement | null
+      const editing = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      if (event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        document.querySelector<HTMLInputElement>('[data-global-search-input]')?.focus()
+      } else if (event.key === ',') {
+        event.preventDefault()
+        handleNavigate('Cài đặt')
+      } else if (event.key.toLowerCase() === 'n' && !editing && !isAdmin) {
+        event.preventDefault()
+        handleNavigate(active === 'Phiếu học tập' ? 'Phiếu học tập' : 'Giáo án')
+      }
+    }
+    window.addEventListener('keydown', handleShortcut)
+    return () => window.removeEventListener('keydown', handleShortcut)
+  }, [active, isAdmin])
 
   if (isLoading) {
     return (

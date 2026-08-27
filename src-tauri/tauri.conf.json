@@ -1,13 +1,13 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "TeachFlow",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "identifier": "vn.teachflow.app",
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "beforeBuildCommand": "npm run build:tauri"
   },
   "app": {
     "windows": [
@@ -18,13 +18,14 @@
         "height": 800,
         "minWidth": 960,
         "minHeight": 600,
+        "visible": false,
         "center": true,
         "resizable": true,
         "fullscreen": false
       }
     ],
     "security": {
-      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data: https:; connect-src 'self' ipc: http://ipc.localhost https://hoan-dev081202.onrender.com;",
+      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' data: blob: https://hoan-dev081202.onrender.com; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://hoan-dev081202.onrender.com;",
       "devCsp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data: https:; connect-src 'self' ipc: http://ipc.localhost http://localhost:3000 http://localhost:3001 ws://localhost:3000 ws://localhost:3001 https://hoan-dev081202.onrender.com;"
     }
   },
@@ -41,7 +42,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
     "createUpdaterArtifacts": true,
     "publisher": "TeachFlow",
     "shortDescription": "Tro ly so danh cho giao vien",

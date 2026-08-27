@@ -43,15 +43,20 @@ test('auth UI includes routes, accessibility, loading lock and no demo credentia
 })
 
 test('auth bootstrap and refresh-cookie contract avoid protected render and refresh loops', async () => {
-  const [context, client, app] = await Promise.all([
+  const [context, client, tokenStorage, app] = await Promise.all([
     readFile(new URL('../context/auth-context.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../services/api-client.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../services/token-storage.ts', import.meta.url), 'utf8'),
     readFile(new URL('../components/teacher-app.tsx', import.meta.url), 'utf8'),
   ])
   assert.match(context, /credentials: 'include'/)
   assert.match(client, /!endpoint\.includes\('\/auth\/register'\)/)
-  assert.match(client, /localStorage\.setItem\('teachflow_access_token'/)
-  assert.doesNotMatch(client, /localStorage\.setItem\([^\n]*refresh/i)
+  assert.match(tokenStorage, /class LocalStorageTokenStorage/)
+  assert.match(tokenStorage, /class SecureTokenStorage/)
+  assert.match(tokenStorage, /localStorage\.setItem\(ACCESS_TOKEN_KEY/)
+  assert.doesNotMatch(tokenStorage, /localStorage\.setItem\(REFRESH_TOKEN_KEY/)
+  assert.match(tokenStorage, /platform\.secureSet\('refresh_token'/)
+  assert.doesNotMatch(client, /localStorage\./)
   assert.match(app, /if \(!isAuthenticated \|\| !user\)/)
   assert.match(app, /return <AuthScreen/)
 })

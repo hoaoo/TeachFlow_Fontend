@@ -20,3 +20,8 @@ out/
 .env
 .env.*
 !.env.example
+
+# Tauri updater signing secrets (public key stays in tauri.conf.json)
+src-tauri/*.key
+src-tauri/*.pem
+tauri-signing-private.key

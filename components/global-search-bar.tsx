@@ -15,6 +15,7 @@ import {
   Table as TableIcon,
   Film,
   Image as ImageIcon,
+  GraduationCap,
 } from 'lucide-react';
 import { searchGlobal, type GlobalSearchResult } from '@/services/search-service';
 
@@ -29,6 +30,26 @@ export function GlobalSearchBar({ onNavigate, onOpenStudentDetail }: GlobalSearc
   const [results, setResults] = useState<GlobalSearchResult | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleKeyboardNavigation = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const buttons = Array.from(containerRef.current?.querySelectorAll<HTMLButtonElement>('[data-search-result]') || []);
+    if (event.key === 'Escape') {
+      setIsOpen(false);
+      return;
+    }
+    if (!isOpen || buttons.length === 0) return;
+    const activeIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const next = event.key === 'ArrowDown'
+        ? (activeIndex + 1 + buttons.length) % buttons.length
+        : (activeIndex - 1 + buttons.length) % buttons.length;
+      buttons[next].focus();
+    } else if (event.key === 'Enter' && activeIndex < 0) {
+      event.preventDefault();
+      buttons[0].click();
+    }
+  };
 
   // Debounced search (300ms)
   useEffect(() => {
@@ -67,6 +88,7 @@ export function GlobalSearchBar({ onNavigate, onOpenStudentDetail }: GlobalSearc
   }, []);
 
   const totalResults =
+    (results?.classrooms?.length || 0) +
     (results?.students.length || 0) +
     (results?.lessonPlans.length || 0) +
     (results?.worksheets.length || 0) +
@@ -80,6 +102,12 @@ export function GlobalSearchBar({ onNavigate, onOpenStudentDetail }: GlobalSearc
     } else if (onNavigate) {
       onNavigate('Học sinh', studentId);
     }
+  };
+
+  const handleSelectClassroom = (classroomId: string) => {
+    setIsOpen(false);
+    setQuery('');
+    onNavigate?.('Lớp học', classroomId);
   };
 
   const handleSelectLessonPlan = (planId: string) => {
@@ -116,10 +144,11 @@ export function GlobalSearchBar({ onNavigate, onOpenStudentDetail }: GlobalSearc
   };
 
   return (
-    <div className="relative w-64 sm:w-80 md:w-96" ref={containerRef}>
+    <div className="relative w-64 sm:w-80 md:w-96" ref={containerRef} onKeyDown={handleKeyboardNavigation}>
       <div className="relative flex items-center">
         <Search className="absolute left-3 size-4 text-slate-400 pointer-events-none" />
         <input
+          data-global-search-input
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -171,7 +200,39 @@ export function GlobalSearchBar({ onNavigate, onOpenStudentDetail }: GlobalSearc
               </div>
             ) : null}
 
-            {/* 1. HỌC SINH */}
+            {/* LỚP HỌC */}
+            {results?.classrooms && results.classrooms.length > 0 && (
+              <div className="py-1.5 px-2">
+                <div className="px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-cyan-800">
+                  <span className="flex items-center gap-1.5"><GraduationCap className="size-3.5" /> Lớp học</span>
+                </div>
+                <div className="mt-0.5 space-y-0.5">
+                  {results.classrooms.map((classroom) => (
+                    <button
+                      data-search-result
+                      key={classroom.id}
+                      onClick={() => handleSelectClassroom(classroom.id)}
+                      className="group flex w-full items-center justify-between gap-2 rounded-xl p-2 text-left transition hover:bg-cyan-50/70"
+                    >
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-cyan-100 text-cyan-700">
+                          <GraduationCap className="size-3.5" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-semibold text-slate-800">{classroom.name}</p>
+                          <p className="truncate text-[11px] text-slate-400">
+                            {classroom.gradeName || 'Lớp học'}{classroom.isHomeroom ? ' · Chủ nhiệm' : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <ChevronRight className="size-3.5 shrink-0 text-slate-300 group-hover:text-cyan-600" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* HỌC SINH */}
             {results?.students && results.students.length > 0 && (
               <div className="py-1.5 px-2">
                 <div className="flex items-center justify-between px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-teal-800">
@@ -191,6 +252,7 @@ export function GlobalSearchBar({ onNavigate, onOpenStudentDetail }: GlobalSearc
                 <div className="space-y-0.5 mt-0.5">
                   {results.students.map((s) => (
                     <button
+                      data-search-result
                       key={s.id}
                       onClick={() => handleSelectStudent(s.id)}
                       className="flex w-full items-center justify-between gap-2 rounded-xl p-2 text-left hover:bg-teal-50/70 transition cursor-pointer group"
@@ -235,6 +297,7 @@ export function GlobalSearchBar({ onNavigate, onOpenStudentDetail }: GlobalSearc
                 <div className="space-y-0.5 mt-0.5">
                   {results.lessonPlans.map((lp) => (
                     <button
+                      data-search-result
                       key={lp.id}
                       onClick={() => handleSelectLessonPlan(lp.id)}
                       className="flex w-full items-center justify-between gap-2 rounded-xl p-2 text-left hover:bg-blue-50/70 transition cursor-pointer group"
@@ -279,6 +342,7 @@ export function GlobalSearchBar({ onNavigate, onOpenStudentDetail }: GlobalSearc
                 <div className="space-y-0.5 mt-0.5">
                   {results.worksheets.map((w) => (
                     <button
+                      data-search-result
                       key={w.id}
                       onClick={() => handleSelectWorksheet(w.id)}
                       className="flex w-full items-center justify-between gap-2 rounded-xl p-2 text-left hover:bg-emerald-50/70 transition cursor-pointer group"
@@ -323,6 +387,7 @@ export function GlobalSearchBar({ onNavigate, onOpenStudentDetail }: GlobalSearc
                 <div className="space-y-0.5 mt-0.5">
                   {results.resources.map((r) => (
                     <button
+                      data-search-result
                       key={r.id}
                       onClick={() => handleSelectResource(r.id)}
                       className="flex w-full items-center justify-between gap-2 rounded-xl p-2 text-left hover:bg-purple-50/70 transition cursor-pointer group"

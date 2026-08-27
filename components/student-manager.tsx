@@ -38,6 +38,7 @@ import {
 } from '@/services/classroom-service'
 import { getStudentAcademicProfile, type StudentAcademicProfile } from '@/services/assessment-service'
 import { generateStudentComment } from '@/services/ai-service'
+import { saveBlob } from '@/services/file-save-service'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -325,14 +326,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
         sort: selectedSort,
       })
 
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `Danh_sach_hoc_sinh_${new Date().toISOString().slice(0, 10)}.xlsx`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      await saveBlob(blob, `Danh_sach_hoc_sinh_${new Date().toISOString().slice(0, 10)}.xlsx`)
       toast.success('Đã xuất file Excel danh sách học sinh thành công!')
     } catch (err: any) {
       toast.error(err?.message || 'Có lỗi xảy ra khi xuất file Excel')

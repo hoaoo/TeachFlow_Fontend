@@ -1,7 +1,8 @@
 ﻿'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useUpdater } from '@/hooks/use-updater';
+import { getPlatform } from '@/platform';
 
 interface CheckUpdateButtonProps {
   isDirty?: boolean;
@@ -11,10 +12,11 @@ export function CheckUpdateButton({ isDirty }: CheckUpdateButtonProps) {
   const { status, updateInfo, downloadProgress, error, checkForUpdate, downloadAndInstall, dismiss } =
     useUpdater(isDirty);
 
-  const currentVersion =
-    typeof window !== 'undefined' && (window as { __TAURI_INTERNALS__?: { metadata?: { packages?: Array<{ version: string }> } } }).__TAURI_INTERNALS__?.metadata?.packages?.[0]?.version
-      ? (window as { __TAURI_INTERNALS__?: { metadata?: { packages?: Array<{ version: string }> } } }).__TAURI_INTERNALS__!.metadata!.packages![0].version
-      : '1.0.0';
+  const [currentVersion, setCurrentVersion] = useState('');
+
+  useEffect(() => {
+    getPlatform().getAppVersion().then(setCurrentVersion).catch(() => setCurrentVersion('—'));
+  }, []);
 
   const statusLabel: Record<string, string> = {
     idle: '',
@@ -39,7 +41,7 @@ export function CheckUpdateButton({ isDirty }: CheckUpdateButtonProps) {
 
         <button
           onClick={status === 'available' ? downloadAndInstall : checkForUpdate}
-          disabled={isProcessing || status === 'installing'}
+          disabled={isProcessing}
           className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600
             hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed
             text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-1.5"

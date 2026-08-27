@@ -1,5 +1,13 @@
 import { api } from './api-client';
 
+export interface SearchClassroomResult {
+  id: string;
+  name: string;
+  gradeName: string | null;
+  isHomeroom: boolean;
+  type: 'CLASSROOM';
+}
+
 export interface SearchStudentResult {
   id: string;
   fullName: string;
@@ -42,6 +50,7 @@ export interface SearchResourceResult {
 }
 
 export interface GlobalSearchResult {
+  classrooms: SearchClassroomResult[];
   students: SearchStudentResult[];
   lessonPlans: SearchLessonPlanResult[];
   worksheets: SearchWorksheetResult[];
@@ -51,7 +60,7 @@ export interface GlobalSearchResult {
 export async function searchGlobal(q: string, limit = 5): Promise<GlobalSearchResult> {
   const trimmed = q.trim();
   if (!trimmed || trimmed.length < 2) {
-    return { students: [], lessonPlans: [], worksheets: [], resources: [] };
+    return { classrooms: [], students: [], lessonPlans: [], worksheets: [], resources: [] };
   }
   return api.get<GlobalSearchResult>(`/search?q=${encodeURIComponent(trimmed)}&limit=${limit}`);
 }

@@ -1,4 +1,5 @@
 import { api, getAccessToken, API_BASE_URL as API_BASE } from '@/services/api-client';
+import { saveBlob } from '@/services/file-save-service';
 
 export interface HomeroomClassroom {
   id: string;
@@ -324,15 +325,7 @@ export async function exportWeeklyReviewFile(
   });
   if (!res.ok) throw new Error(`Không thể xuất file ${format.toUpperCase()}`);
 
-  const blob = await res.blob();
-  const downloadUrl = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = downloadUrl;
-  a.download = `Bao_cao_chu_nhiem_Tuan_${weekNumber}.${format}`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  window.URL.revokeObjectURL(downloadUrl);
+  await saveBlob(await res.blob(), `Bao_cao_chu_nhiem_Tuan_${weekNumber}.${format}`);
 }
 
 export async function exportMonthlySummaryFile(
@@ -354,13 +347,5 @@ export async function exportMonthlySummaryFile(
   });
   if (!res.ok) throw new Error(`Không thể xuất file ${format.toUpperCase()}`);
 
-  const blob = await res.blob();
-  const downloadUrl = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = downloadUrl;
-  a.download = `Bao_cao_chu_nhiem_Thang_${month}_${year}.${format}`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  window.URL.revokeObjectURL(downloadUrl);
+  await saveBlob(await res.blob(), `Bao_cao_chu_nhiem_Thang_${month}_${year}.${format}`);
 }

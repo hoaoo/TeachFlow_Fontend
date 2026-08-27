@@ -3,6 +3,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useUpdater } from '@/hooks/use-updater';
 import { UpdateDialog } from './update-dialog';
+import { getPlatform } from '@/platform';
 
 interface AutoUpdaterProps {
   /** If true (e.g. form is dirty), suppress automatic popup */
@@ -24,8 +25,7 @@ export function AutoUpdater({ isDirty }: AutoUpdaterProps) {
   // Check once 5s after mount — non-blocking
   useEffect(() => {
     // Only run in Tauri context (skip on web/SSR)
-    const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-    if (!isTauri) return;
+    if (!getPlatform().isDesktop()) return;
     if (hasCheckedRef.current) return;
     hasCheckedRef.current = true;
 
@@ -34,6 +34,15 @@ export function AutoUpdater({ isDirty }: AutoUpdaterProps) {
     }, 5000);
 
     return () => clearTimeout(timer);
+  }, [checkForUpdate]);
+
+  useEffect(() => {
+    if (!getPlatform().isDesktop()) return;
+    let cleanup = () => {};
+    getPlatform().onCheckForUpdateRequested(() => {
+      checkForUpdate().catch(() => {});
+    }).then((unlisten) => { cleanup = unlisten; }).catch(() => {});
+    return () => cleanup();
   }, [checkForUpdate]);
 
   const showDialog = status === 'available' || status === 'downloading' || status === 'installing' || status === 'error';

@@ -58,6 +58,7 @@ import {
   type StudentGradeRow,
 } from '@/services/assessment-service'
 import { notifyStudentDataChanged, analyzeStudentImportFile } from '@/services/student-service'
+import { saveBlob } from '@/services/file-save-service'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -3045,12 +3046,7 @@ function TabAssessments({ classItem }: { classItem: ClassRecord }) {
       })
 
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `So_Diem_${classItem.name}_HK${selectedSemester}.csv`
-      a.click()
-      URL.revokeObjectURL(url)
+      await saveBlob(blob, `So_Diem_${classItem.name}_HK${selectedSemester}.csv`)
       toast.success('Đã xuất file sổ điểm thành công!')
     } catch {
       toast.error('Không thể xuất file sổ điểm')

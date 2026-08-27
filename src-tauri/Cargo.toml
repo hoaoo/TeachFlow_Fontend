@@ -1,6 +1,6 @@
 [package]
 name = "teachflow"
-version = "1.0.0"
+version = "2.1.0"
 description = "TeachFlow - Tro ly so danh cho giao vien"
 authors = ["Nguyen Do Hoan"]
 license = ""
@@ -21,7 +21,17 @@ tauri-build = { version = "2.6.3", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.11.3", features = [] }
+tauri = { version = "2.11.3", features = ["tray-icon"] }
 tauri-plugin-log = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-window-state = "2"
+
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }

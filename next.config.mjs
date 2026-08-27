@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
+const isTauriBuild = process.env.TAURI_BUILD === 'true' || process.env.TAURI_ENV_PLATFORM !== undefined;
+
 const nextConfig = {
-  output: 'export',
+  output: isTauriBuild ? 'export' : 'standalone',
   typescript: {
     ignoreBuildErrors: true,
   },

@@ -1,4 +1,5 @@
 import { getAccessToken, API_BASE_URL } from './api-client';
+import { saveBlob } from './file-save-service';
 
 /**
  * Downloads a file from the backend with JWT authorization and handles Content-Disposition filename
@@ -44,15 +45,7 @@ export async function downloadExportFile(
     }
   }
 
-  const blob = await response.blob();
-  const blobUrl = window.URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = blobUrl;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  window.URL.revokeObjectURL(blobUrl);
+  await saveBlob(await response.blob(), filename);
 }
 
 export const exportService = {

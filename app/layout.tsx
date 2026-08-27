@@ -3,6 +3,8 @@ import type { Metadata, Viewport } from 'next'
 import { AuthProvider } from '@/context/auth-context'
 import { Toaster } from '@/components/ui/sonner'
 import { AutoUpdater } from '@/components/updater/auto-updater'
+import { DesktopRuntime } from '@/components/desktop/desktop-runtime'
+import { NetworkStatus } from '@/components/desktop/network-status'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -37,6 +39,8 @@ export default function RootLayout({
           {children}
           <Toaster />
           <AutoUpdater />
+          <DesktopRuntime />
+          <NetworkStatus />
         </AuthProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

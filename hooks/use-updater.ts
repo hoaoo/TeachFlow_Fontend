@@ -1,8 +1,7 @@
 ﻿'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { check } from '@tauri-apps/plugin-updater';
-import { relaunch } from '@tauri-apps/plugin-process';
+import { getPlatform, type UpdateSession } from '@/platform';
 
 export type UpdateInfo = {
   version: string;
@@ -35,7 +34,7 @@ export function useUpdater(isDirty?: boolean): UseUpdaterReturn {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const updateRef = useRef<Awaited<ReturnType<typeof check>> | null>(null);
+  const updateRef = useRef<UpdateSession | null>(null);
 
   const checkForUpdate = useCallback(async () => {
     if (isDirty) return;
@@ -47,7 +46,7 @@ export function useUpdater(isDirty?: boolean): UseUpdaterReturn {
     }, 30_000);
 
     try {
-      const update = await check();
+      const update = await getPlatform().checkForUpdate();
       clearTimeout(timeoutId);
       if (update) {
         updateRef.current = update;
@@ -78,24 +77,13 @@ export function useUpdater(isDirty?: boolean): UseUpdaterReturn {
     setDownloadProgress(0);
 
     try {
-      let downloaded = 0;
-      let total = 0;
-
-      await update.downloadAndInstall((event) => {
-        if (event.event === 'Started') {
-          total = event.data.contentLength ?? 0;
-        } else if (event.event === 'Progress') {
-          downloaded += event.data.chunkLength;
-          if (total > 0) {
-            setDownloadProgress(Math.round((downloaded / total) * 100));
-          }
-        } else if (event.event === 'Finished') {
-          setDownloadProgress(100);
-          setStatus('installing');
-        }
+      await update.downloadAndInstall((progress) => {
+        if (progress.percent > 0) setDownloadProgress(progress.percent);
+        if (progress.percent >= 100) setStatus('installing');
       });
 
-      await relaunch();
+      setStatus('installing');
+      await getPlatform().relaunch();
     } catch (err) {
       console.error('[Updater] Install failed:', err);
       setError(String(err));

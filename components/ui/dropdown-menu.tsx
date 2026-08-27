@@ -98,15 +98,18 @@ export function DropdownMenuItem({
   children,
   onClick,
   className,
+  disabled,
 }: {
   children: React.ReactNode
   onClick?: () => void
   className?: string
+  disabled?: boolean
 }) {
   const ctx = React.useContext(DropdownMenuContext)
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
+    if (disabled) return
     ctx?.setOpen(false)
     onClick?.()
   }
@@ -115,8 +118,9 @@ export function DropdownMenuItem({
     <button
       type="button"
       onClick={handleClick}
+      disabled={disabled}
       className={cn(
-        "flex w-full items-center rounded-lg px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer text-left",
+        "flex w-full items-center rounded-lg px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer text-left disabled:pointer-events-none disabled:opacity-50",
         className
       )}
     >
