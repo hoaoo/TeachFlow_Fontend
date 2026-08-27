@@ -25,3 +25,4 @@ out/
 src-tauri/*.key
 src-tauri/*.pem
 tauri-signing-private.key
+*.key
