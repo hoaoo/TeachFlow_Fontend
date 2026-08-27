@@ -32,22 +32,28 @@ import {
   Eye,
   ZoomIn,
   ZoomOut,
-  Maximize2,
   RotateCcw,
   Play,
   Music,
-  Volume2,
   FileSpreadsheet,
   AlertCircle,
   ExternalLink,
 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { toast } from 'sonner'
 import {
   deleteWorkspaceRecord,
   listWorkspaceRecords,
   saveWorkspaceRecord,
   type WorkspaceRecord,
 } from '@/services/teachflow-service'
-import { getPlatform } from '@/platform'
 import {
   getResources,
   uploadResourceFileWithProgress,
@@ -56,11 +62,17 @@ import {
   attachResourceToLessonPlan,
   getResourceFileBlob,
   getResourceFileArrayBuffer,
+  getResourcePreviewBlob,
   getResourceInlineUrl,
   openResourceInDefaultApp,
   updateResource as apiUpdateResource,
+  detectResourceType,
   type TeachingResource,
+  type CanonicalResourceType,
 } from '@/services/resource-service'
+import { getLessonPlans, type LessonPlan } from '@/services/lesson-service'
+import { generateImage } from '@/services/ai-service'
+import { exportService } from '@/services/export-service'
 
 type View =
   | 'Chủ nhiệm'
@@ -83,17 +95,25 @@ const descriptions: Record<View, string> = {
   'Phiếu học tập': 'Quản lý phiếu bài tập, câu hỏi và tài liệu học tập.',
 }
 
-function getResourceIcon(type: string, ext?: string) {
-  const e = (ext || '').toUpperCase()
-  if (type === 'VIDEO' || ['MP4', 'WEBM', 'MOV'].includes(e)) return <Film className="size-5 text-purple-600" />
-  if (type === 'AUDIO' || ['MP3', 'WAV', 'M4A', 'AAC', 'OGG'].includes(e)) return <Music className="size-5 text-amber-600" />
-  if (type === 'IMAGE' || ['PNG', 'JPG', 'JPEG', 'WEBP', 'GIF'].includes(e))
-    return <ImageIcon className="size-5 text-emerald-600" />
-  if (type === 'PRESENTATION' || ['PPT', 'PPTX'].includes(e))
-    return <Presentation className="size-5 text-orange-600" />
-  if (type === 'SPREADSHEET' || ['XLS', 'XLSX', 'CSV'].includes(e))
-    return <TableIcon className="size-5 text-green-600" />
+function getResourceIcon(detected: CanonicalResourceType) {
+  if (detected === 'VIDEO') return <Film className="size-5 text-purple-600" />
+  if (detected === 'AUDIO') return <Music className="size-5 text-amber-600" />
+  if (detected === 'IMAGE') return <ImageIcon className="size-5 text-emerald-600" />
+  if (detected === 'POWERPOINT') return <Presentation className="size-5 text-orange-600" />
+  if (detected === 'EXCEL') return <TableIcon className="size-5 text-green-600" />
+  if (detected === 'PDF') return <FileText className="size-5 text-rose-600" />
   return <FileText className="size-5 text-blue-600" />
+}
+
+function sanitizeDocxHtml(rawHtml: string): string {
+  if (!rawHtml) return ''
+  return rawHtml
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+    .replace(/on\w+="[^"]*"/gi, '')
+    .replace(/on\w+='[^']*'/gi, '')
+    .replace(/javascript:[^"']*/gi, '')
 }
 
 function ResourcePreviewModal({
@@ -121,15 +141,19 @@ function ResourcePreviewModal({
   const [zoom, setZoom] = useState(100)
   const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
-  const ext = (resource.extension || resource.originalFileName?.split('.').pop() || '').toUpperCase()
-  const isImage = resource.resourceType === 'IMAGE' || ['PNG', 'JPG', 'JPEG', 'WEBP', 'GIF'].includes(ext)
-  const isVideo = resource.resourceType === 'VIDEO' || ['MP4', 'WEBM', 'MOV'].includes(ext)
-  const isAudio = resource.resourceType === 'AUDIO' || ['MP3', 'WAV', 'M4A', 'AAC', 'OGG'].includes(ext)
-  const isPdf = ext === 'PDF'
-  const isTxt = ext === 'TXT'
-  const isDocx = ['DOCX', 'DOC'].includes(ext)
-  const isXlsx = ['XLSX', 'XLS', 'CSV'].includes(ext)
-  const isPptx = resource.resourceType === 'PRESENTATION' || ['PPTX', 'PPT'].includes(ext)
+  const detected = detectResourceType(resource)
+  const isImage = detected === 'IMAGE'
+  const isVideo = detected === 'VIDEO'
+  const isAudio = detected === 'AUDIO'
+  const isPdf = detected === 'PDF'
+  const isDocx = detected === 'WORD'
+  const isXlsx = detected === 'EXCEL'
+  const isTxt = detected === 'TEXT'
+  const isPptx = detected === 'POWERPOINT'
+  const name = resource.name || resource.title || 'Tài nguyên chưa đặt tên'
+  const ext = (resource.extension || (resource.originalFileName?.includes('.') ? resource.originalFileName.split('.').pop() : '') || detected).toUpperCase()
+  const formattedSize = resource.formattedSize || '0 KB'
+  const createdAtFormatted = resource.createdAt ? new Date(resource.createdAt).toLocaleDateString('vi-VN') : 'Mới cập nhật'
 
   useEffect(() => {
     let alive = true
@@ -142,30 +166,40 @@ function ResourcePreviewModal({
 
     async function loadPreview() {
       try {
-        if (isImage || isVideo || isAudio || isPdf) {
+        if (detected === 'IMAGE' || detected === 'VIDEO' || detected === 'AUDIO' || detected === 'PDF') {
           const { blob } = await getResourceFileBlob(resource.id)
           if (!alive) return
           const url = URL.createObjectURL(blob)
           setBlobUrl(url)
-        } else if (isTxt) {
+        } else if (detected === 'POWERPOINT') {
+          if (resource.previewStatus === 'READY') {
+            const { blob } = await getResourcePreviewBlob(resource.id)
+            if (!alive) return
+            const url = URL.createObjectURL(blob)
+            setBlobUrl(url)
+          } else {
+            // Presentation preview pending or fallback
+          }
+        } else if (detected === 'TEXT') {
           const { blob } = await getResourceFileBlob(resource.id)
           if (!alive) return
           const text = await blob.text()
           setTxtContent(text)
-        } else if (isDocx) {
+        } else if (detected === 'WORD') {
           const { buffer } = await getResourceFileArrayBuffer(resource.id)
           if (!alive) return
           const result = await mammoth.convertToHtml({ arrayBuffer: buffer })
-          setDocxHtml(result.value || '<p class="text-slate-400 italic">Tài liệu không có nội dung văn bản.</p>')
-        } else if (isXlsx) {
+          const cleanHtml = sanitizeDocxHtml(result.value || '')
+          setDocxHtml(cleanHtml || '<p class="text-slate-400 italic">Tài liệu không có nội dung văn bản.</p>')
+        } else if (detected === 'EXCEL') {
           const { buffer } = await getResourceFileArrayBuffer(resource.id)
           if (!alive) return
           const wb = XLSX.read(buffer, { type: 'array' })
-          const sheets = wb.SheetNames.map((name) => {
-            const ws = wb.Sheets[name]
+          const sheets = wb.SheetNames.map((sheetName) => {
+            const ws = wb.Sheets[sheetName]
             const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as any[][]
             return {
-              name,
+              name: sheetName,
               rows: rawRows.slice(0, 100),
             }
           })
@@ -190,7 +224,7 @@ function ResourcePreviewModal({
         URL.revokeObjectURL(blobUrl)
       }
     }
-  }, [resource.id])
+  }, [resource.id, detected, resource.previewStatus])
 
   return (
     <div
@@ -203,24 +237,24 @@ function ResourcePreviewModal({
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50/80">
           <div className="flex items-center gap-3 min-w-0 pr-4">
             <span className="grid size-9 place-items-center rounded-lg bg-white border border-slate-200 shrink-0 shadow-2xs">
-              {getResourceIcon(resource.resourceType, resource.extension)}
+              {getResourceIcon(detected)}
             </span>
             <div className="min-w-0">
               <h2 className="text-sm font-bold text-slate-900 truncate leading-tight">
-                {resource.name}
+                {name}
               </h2>
               <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
-                <span className="font-semibold uppercase text-teal-700">{ext || resource.resourceType}</span>
+                <span className="font-semibold uppercase text-teal-700">{ext}</span>
                 <span>•</span>
-                <span>{resource.formattedSize || '0 KB'}</span>
+                <span>{formattedSize}</span>
                 <span>•</span>
-                <span>{new Date(resource.createdAt).toLocaleDateString('vi-VN')}</span>
+                <span>{createdAtFormatted}</span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {isImage && (
+            {detected === 'IMAGE' && (
               <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs mr-2">
                 <button
                   type="button"
@@ -286,16 +320,16 @@ function ResourcePreviewModal({
                 )}
               </div>
             </div>
-          ) : isImage && blobUrl ? (
+          ) : detected === 'IMAGE' && blobUrl ? (
             <div className="w-full h-full flex items-center justify-center overflow-auto p-2">
               <img
                 src={blobUrl}
-                alt={resource.name}
+                alt={name}
                 style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'center center' }}
                 className="max-h-[65vh] max-w-full rounded-xl object-contain shadow-md transition-transform duration-100"
               />
             </div>
-          ) : isVideo && blobUrl ? (
+          ) : detected === 'VIDEO' && blobUrl ? (
             <div className="w-full flex items-center justify-center">
               <video
                 src={blobUrl}
@@ -307,14 +341,14 @@ function ResourcePreviewModal({
                 Trình duyệt của bạn không hỗ trợ phát video trực tiếp.
               </video>
             </div>
-          ) : isAudio && blobUrl ? (
+          ) : detected === 'AUDIO' && blobUrl ? (
             <div className="w-full max-w-lg bg-white p-8 rounded-2xl border border-slate-200 shadow-md space-y-5 text-center">
               <div className="size-20 mx-auto rounded-full bg-linear-to-tr from-amber-500 to-orange-400 text-white flex items-center justify-center shadow-lg shadow-amber-500/20">
                 <Music className="size-10" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-900 text-base">{resource.name}</h3>
-                <p className="text-xs text-slate-500 mt-1">{resource.formattedSize} • Âm thanh ({ext})</p>
+                <h3 className="font-bold text-slate-900 text-base">{name}</h3>
+                <p className="text-xs text-slate-500 mt-1">{formattedSize} • Âm thanh ({ext})</p>
                 {resource.description && (
                   <p className="text-xs text-slate-600 mt-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                     {resource.description}
@@ -323,26 +357,67 @@ function ResourcePreviewModal({
               </div>
               <audio src={blobUrl} controls className="w-full" preload="metadata" />
             </div>
-          ) : isPdf && blobUrl ? (
+          ) : detected === 'PDF' && blobUrl ? (
             <div className="w-full h-full flex flex-col">
               <iframe
                 src={blobUrl}
-                title={resource.name}
+                title={name}
                 className="w-full h-[68vh] rounded-xl border border-slate-200 bg-white shadow-sm"
               />
             </div>
-          ) : isTxt && txtContent !== null ? (
+          ) : detected === 'POWERPOINT' ? (
+            resource.previewStatus === 'READY' && blobUrl ? (
+              <div className="w-full h-full flex flex-col">
+                <iframe
+                  src={blobUrl}
+                  title={name}
+                  className="w-full h-[68vh] rounded-xl border border-slate-200 bg-white shadow-sm"
+                />
+              </div>
+            ) : resource.previewStatus === 'PENDING' ? (
+              <div className="flex flex-col items-center justify-center gap-3 py-16 text-center max-w-md bg-white p-6 rounded-2xl border border-orange-100 shadow-2xs">
+                <Loader2 className="size-8 animate-spin text-orange-500" />
+                <h3 className="font-bold text-slate-800 text-sm">Đang tạo bản xem trước trực tiếp...</h3>
+                <p className="text-xs text-slate-500">Hệ thống đang chuyển đổi slide PowerPoint sang tài liệu xem nhanh.</p>
+              </div>
+            ) : (
+              <div className="w-full max-w-lg bg-white p-8 rounded-2xl border border-slate-200 shadow-md text-center space-y-4">
+                <div className="size-16 mx-auto rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center">
+                  <Presentation className="size-8" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">{name}</h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Bài trình chiếu PowerPoint ({ext}) • {formattedSize}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-2">
+                    Mở bằng PowerPoint hoặc ứng dụng mặc định trên máy để trình chiếu đầy đủ hiệu ứng.
+                  </p>
+                </div>
+                <div className="flex justify-center gap-2 pt-2">
+                  <Button onClick={onDownload} className="bg-teal-600 hover:bg-teal-700 text-xs font-semibold gap-1.5 cursor-pointer">
+                    <Download className="size-3.5" /> Tải về máy
+                  </Button>
+                  {isDesktop && onOpenDefault && (
+                    <Button variant="outline" onClick={onOpenDefault} className="text-xs font-semibold gap-1.5 cursor-pointer">
+                      <ExternalLink className="size-3.5" /> Mở bằng PowerPoint
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )
+          ) : detected === 'TEXT' && txtContent !== null ? (
             <div className="w-full h-full overflow-y-auto max-w-3xl bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-slate-800 text-xs font-mono whitespace-pre-wrap leading-relaxed">
               {txtContent}
             </div>
-          ) : isDocx && docxHtml ? (
+          ) : detected === 'WORD' && docxHtml ? (
             <div className="w-full h-full overflow-y-auto max-w-3xl bg-white p-6 sm:p-10 rounded-xl border border-slate-200 shadow-sm text-slate-800 text-sm leading-relaxed space-y-3 prose prose-slate max-w-none">
               <div
                 dangerouslySetInnerHTML={{ __html: docxHtml }}
                 className="[&_table]:w-full [&_table]:border [&_table]:border-collapse [&_th]:border [&_th]:p-2 [&_th]:bg-slate-50 [&_td]:border [&_td]:p-2 [&_p]:mb-2.5 [&_h1]:text-xl [&_h1]:font-bold [&_h2]:text-lg [&_h2]:font-bold [&_h3]:text-base [&_h3]:font-semibold"
               />
             </div>
-          ) : isXlsx && xlsxSheets.length > 0 ? (
+          ) : detected === 'EXCEL' && xlsxSheets.length > 0 ? (
             <div className="w-full h-full flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
               {/* Sheet tabs */}
               {xlsxSheets.length > 1 && (
@@ -392,36 +467,11 @@ function ResourcePreviewModal({
                 <span>Hiển thị tối đa 100 dòng đầu</span>
               </div>
             </div>
-          ) : isPptx ? (
-            <div className="w-full max-w-lg bg-white p-8 rounded-2xl border border-slate-200 shadow-md text-center space-y-4">
-              <div className="size-16 mx-auto rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center">
-                <Presentation className="size-8" />
-              </div>
-              <div>
-                <h3 className="font-bold text-slate-900 text-base">{resource.name}</h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  Bài trình chiếu PowerPoint ({ext}) • {resource.formattedSize}
-                </p>
-                <p className="text-xs text-slate-400 mt-2">
-                  Tập tin PowerPoint cần được tải về hoặc mở bằng ứng dụng mặc định để trình chiếu trực tiếp.
-                </p>
-              </div>
-              <div className="flex justify-center gap-2 pt-2">
-                <Button onClick={onDownload} className="bg-teal-600 hover:bg-teal-700 text-xs font-semibold gap-1.5 cursor-pointer">
-                  <Download className="size-3.5" /> Tải về máy
-                </Button>
-                {isDesktop && onOpenDefault && (
-                  <Button variant="outline" onClick={onOpenDefault} className="text-xs font-semibold gap-1.5 cursor-pointer">
-                    <ExternalLink className="size-3.5" /> Mở bằng PowerPoint
-                  </Button>
-                )}
-              </div>
-            </div>
           ) : (
             <div className="w-full max-w-md bg-white p-6 rounded-2xl border border-slate-200 shadow-md text-center space-y-3">
               <File className="size-12 mx-auto text-slate-400" />
-              <h3 className="font-bold text-slate-900 text-sm">{resource.name}</h3>
-              <p className="text-xs text-slate-500">{resource.formattedSize} • {ext || resource.resourceType}</p>
+              <h3 className="font-bold text-slate-900 text-sm">{name}</h3>
+              <p className="text-xs text-slate-500">{formattedSize} • {ext}</p>
               <div className="flex justify-center gap-2 pt-2">
                 <Button onClick={onDownload} className="bg-teal-600 text-xs font-semibold gap-1.5 cursor-pointer">
                   <Download className="size-3.5" /> Tải xuống tệp tin
@@ -505,8 +555,21 @@ function ResourceCard({
   onRename: (res: TeachingResource) => void
   onOpenDefault?: (res: TeachingResource) => void
 }) {
-  const ext = (resource.extension || resource.originalFileName?.split('.').pop() || '').toUpperCase()
+  if (!resource || !resource.id) {
+    return (
+      <article className="flex flex-col items-center justify-center p-6 rounded-2xl border border-dashed border-rose-200 bg-rose-50/50 text-rose-700 text-xs text-center">
+        <AlertCircle className="size-6 mb-1.5 opacity-80" />
+        <p className="font-semibold">Không thể hiển thị tài nguyên này.</p>
+      </article>
+    )
+  }
+
+  const detected = detectResourceType(resource)
   const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+  const name = resource.name || resource.title || 'Tài nguyên chưa đặt tên'
+  const ext = (resource.extension || (resource.originalFileName?.includes('.') ? resource.originalFileName.split('.').pop() : '') || detected).toUpperCase()
+  const formattedSize = resource.formattedSize || '0 KB'
+  const createdAtFormatted = resource.createdAt ? new Date(resource.createdAt).toLocaleDateString('vi-VN') : 'Mới cập nhật'
 
   return (
     <article className="group flex flex-col rounded-2xl border border-slate-200/90 bg-white shadow-2xs hover:shadow-md hover:border-teal-300 transition-all duration-150 overflow-hidden">
@@ -515,11 +578,11 @@ function ResourceCard({
         onClick={() => onPreview(resource)}
         className="relative aspect-16/9 w-full bg-slate-100 overflow-hidden flex items-center justify-center cursor-pointer group-hover:opacity-95 transition select-none"
       >
-        {resource.resourceType === 'IMAGE' || ['PNG', 'JPG', 'JPEG', 'WEBP', 'GIF'].includes(ext) ? (
+        {detected === 'IMAGE' ? (
           <div className="w-full h-full bg-slate-100 flex items-center justify-center relative">
             <img
               src={getResourceInlineUrl(resource.id)}
-              alt={resource.name}
+              alt={name}
               className="w-full h-full object-cover"
               onError={(e) => {
                 ;(e.target as HTMLElement).style.display = 'none'
@@ -531,7 +594,7 @@ function ResourceCard({
               </span>
             </div>
           </div>
-        ) : resource.resourceType === 'VIDEO' || ['MP4', 'WEBM', 'MOV'].includes(ext) ? (
+        ) : detected === 'VIDEO' ? (
           <div className="w-full h-full bg-linear-to-br from-purple-900 via-indigo-900 to-slate-900 flex flex-col items-center justify-center text-white relative">
             <div className="size-11 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center group-hover:scale-110 transition shadow-lg">
               <Play className="size-5 fill-white text-white translate-x-0.5" />
@@ -540,7 +603,7 @@ function ResourceCard({
               🎬 Video
             </span>
           </div>
-        ) : resource.resourceType === 'AUDIO' || ['MP3', 'WAV', 'M4A', 'AAC'].includes(ext) ? (
+        ) : detected === 'AUDIO' ? (
           <div className="w-full h-full bg-linear-to-br from-amber-600 via-orange-600 to-slate-800 flex flex-col items-center justify-center text-white relative">
             <div className="size-11 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center group-hover:scale-110 transition shadow-lg">
               <Music className="size-5 text-white" />
@@ -549,17 +612,17 @@ function ResourceCard({
               🎵 Audio
             </span>
           </div>
-        ) : resource.resourceType === 'PRESENTATION' || ['PPTX', 'PPT'].includes(ext) ? (
+        ) : detected === 'POWERPOINT' ? (
           <div className="w-full h-full bg-linear-to-br from-orange-500 to-amber-600 flex flex-col items-center justify-center text-white p-4">
             <Presentation className="size-10 text-white/90 group-hover:scale-110 transition drop-shadow" />
             <span className="text-[11px] font-bold text-white/90 mt-1">Bài giảng trình chiếu</span>
           </div>
-        ) : ['XLSX', 'XLS', 'CSV'].includes(ext) ? (
+        ) : detected === 'EXCEL' ? (
           <div className="w-full h-full bg-linear-to-br from-emerald-600 to-teal-700 flex flex-col items-center justify-center text-white p-4">
             <TableIcon className="size-10 text-white/90 group-hover:scale-110 transition drop-shadow" />
             <span className="text-[11px] font-bold text-white/90 mt-1">Bảng tính Excel</span>
           </div>
-        ) : ext === 'PDF' ? (
+        ) : detected === 'PDF' ? (
           <div className="w-full h-full bg-linear-to-br from-rose-600 to-red-700 flex flex-col items-center justify-center text-white p-4">
             <FileText className="size-10 text-white/90 group-hover:scale-110 transition drop-shadow" />
             <span className="text-[11px] font-bold text-white/90 mt-1">Tài liệu PDF</span>
@@ -567,13 +630,13 @@ function ResourceCard({
         ) : (
           <div className="w-full h-full bg-linear-to-br from-blue-600 to-indigo-700 flex flex-col items-center justify-center text-white p-4">
             <FileText className="size-10 text-white/90 group-hover:scale-110 transition drop-shadow" />
-            <span className="text-[11px] font-bold text-white/90 mt-1">{ext === 'TXT' ? 'Văn bản Text' : 'Văn bản Word'}</span>
+            <span className="text-[11px] font-bold text-white/90 mt-1">{detected === 'TEXT' ? 'Văn bản Text' : 'Văn bản Word'}</span>
           </div>
         )}
 
-        {/* Extension Badge on Top Right */}
+        {/* Extension Badge */}
         <span className="absolute top-2 right-2 rounded-md bg-slate-900/80 backdrop-blur-xs px-2 py-0.5 text-[10px] font-bold text-white uppercase shadow-2xs">
-          {ext || resource.resourceType}
+          {ext}
         </span>
       </div>
 
@@ -582,17 +645,17 @@ function ResourceCard({
         <div className="space-y-1">
           <h2
             onClick={() => onPreview(resource)}
-            title={resource.name}
+            title={name}
             className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug hover:text-teal-700 transition cursor-pointer"
           >
-            {resource.name}
+            {name}
           </h2>
           <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
-            <span>{resource.resourceType === 'VIDEO' ? '🎬 Video' : resource.resourceType === 'AUDIO' ? '🎵 Audio' : resource.resourceType === 'IMAGE' ? '🖼️ Ảnh' : '📄 Tài liệu'}</span>
+            <span>{detected === 'VIDEO' ? '🎬 Video' : detected === 'AUDIO' ? '🎵 Audio' : detected === 'IMAGE' ? '🖼️ Ảnh' : '📄 Tài liệu'}</span>
             <span>•</span>
-            <span>{resource.formattedSize || '0 KB'}</span>
+            <span>{formattedSize}</span>
             <span>•</span>
-            <span>{new Date(resource.createdAt).toLocaleDateString('vi-VN')}</span>
+            <span>{createdAtFormatted}</span>
           </div>
           {resource.description && (
             <p className="text-[11px] text-slate-400 line-clamp-1 leading-normal pt-0.5">
@@ -601,7 +664,7 @@ function ResourceCard({
           )}
         </div>
 
-        {/* 3. Actions Row */}
+        {/* 3. Actions */}
         <div className="flex items-center justify-between pt-3 border-t border-slate-100">
           <div className="flex items-center gap-1.5">
             <Button
@@ -708,8 +771,7 @@ export function WorkspaceModule({ view }: { view: View }) {
     try {
       if (view === 'Tài nguyên') {
         const data = await getResources({
-          search: query || undefined,
-          resourceType: resourceTypeFilter !== 'ALL' ? resourceTypeFilter : undefined,
+          search: query.trim() || undefined,
         })
         setResources(data)
       } else {
@@ -725,12 +787,12 @@ export function WorkspaceModule({ view }: { view: View }) {
 
   useEffect(() => {
     loadData()
-  }, [view, resourceTypeFilter])
+  }, [view])
 
   // Load lesson plans when attach modal opens
   useEffect(() => {
     if (attachModalOpen) {
-      getLessonPlans().then(setLessonPlans)
+      getLessonPlans().then((plans) => setLessonPlans(Array.isArray(plans) ? plans : [])).catch(() => setLessonPlans([]))
     }
   }, [attachModalOpen])
 
@@ -738,24 +800,33 @@ export function WorkspaceModule({ view }: { view: View }) {
     () =>
       items.filter(
         (item) =>
+          item &&
           (status === 'Tất cả' || item.status === status) &&
-          `${item.title} ${item.subtitle} ${item.meta}`
+          `${item.title || ''} ${item.subtitle || ''} ${item.meta || ''}`
             .toLowerCase()
-            .includes(query.toLowerCase()),
+            .includes((query || '').toLowerCase().trim()),
       ),
     [items, query, status],
   )
 
-  const filteredResources = useMemo(
-    () =>
-      resources.filter(
-        (r) =>
-          `${r.name} ${r.title} ${r.subtitle} ${r.description} ${r.originalFileName}`
-            .toLowerCase()
-            .includes(query.toLowerCase()),
-      ),
-    [resources, query],
-  )
+  const filteredResources = useMemo(() => {
+    return resources.filter((r) => {
+      if (!r) return false
+      const detected = detectResourceType(r)
+      if (resourceTypeFilter !== 'ALL') {
+        if (resourceTypeFilter === 'DOCUMENT' && !['PDF', 'WORD', 'TEXT'].includes(detected)) return false
+        if (resourceTypeFilter === 'IMAGE' && detected !== 'IMAGE') return false
+        if (resourceTypeFilter === 'AUDIO' && detected !== 'AUDIO') return false
+        if (resourceTypeFilter === 'VIDEO' && detected !== 'VIDEO') return false
+        if (resourceTypeFilter === 'PRESENTATION' && detected !== 'POWERPOINT') return false
+        if (resourceTypeFilter === 'SPREADSHEET' && detected !== 'EXCEL') return false
+      }
+      const q = (query || '').toLowerCase().trim()
+      if (!q) return true
+      const hay = `${r.name || ''} ${r.title || ''} ${r.subtitle || ''} ${r.description || ''} ${r.originalFileName || ''}`.toLowerCase()
+      return hay.includes(q)
+    })
+  }, [resources, query, resourceTypeFilter])
 
   const flash = (message: string) => {
     setNotice(message)
@@ -1031,7 +1102,7 @@ export function WorkspaceModule({ view }: { view: View }) {
           label="Tài liệu & Bài giảng"
           value={String(
             view === 'Tài nguyên'
-              ? resources.filter((r) => ['DOCUMENT', 'PRESENTATION', 'SPREADSHEET'].includes(r.resourceType)).length
+              ? resources.filter((r) => ['PDF', 'WORD', 'POWERPOINT', 'EXCEL', 'TEXT'].includes(detectResourceType(r))).length
               : items.filter((item) => item.status !== 'Bản nháp').length,
           )}
           helper="PDF, Word, PPTX, Excel"
@@ -1041,7 +1112,7 @@ export function WorkspaceModule({ view }: { view: View }) {
           label="Đa phương tiện"
           value={String(
             view === 'Tài nguyên'
-              ? resources.filter((r) => ['IMAGE', 'VIDEO', 'AUDIO'].includes(r.resourceType)).length
+              ? resources.filter((r) => ['IMAGE', 'VIDEO', 'AUDIO'].includes(detectResourceType(r))).length
               : items.filter((item) => item.status === 'Bản nháp').length,
           )}
           helper="Hình ảnh, Audio & Video"
@@ -1078,7 +1149,7 @@ export function WorkspaceModule({ view }: { view: View }) {
               <button
                 key={option.value}
                 onClick={() => setResourceTypeFilter(option.value)}
-                className={`whitespace-nowrap rounded-xl border px-3 py-2 text-xs font-medium transition ${
+                className={`whitespace-nowrap rounded-xl border px-3 py-2 text-xs font-medium transition cursor-pointer ${
                   resourceTypeFilter === option.value
                     ? 'border-primary bg-primary/10 text-primary font-bold'
                     : 'border-border bg-background text-muted-foreground hover:bg-muted'
@@ -1444,7 +1515,7 @@ export function WorkspaceModule({ view }: { view: View }) {
                 </p>
                 <h2 className="mt-1 text-base font-semibold">Đổi tên học liệu</h2>
               </div>
-              <button onClick={() => setRenameModalOpen(false)} className="text-muted-foreground">
+              <button onClick={() => setRenameModalOpen(false)} className="text-muted-foreground cursor-pointer">
                 <X className="size-5" />
               </button>
             </div>
@@ -1466,14 +1537,14 @@ export function WorkspaceModule({ view }: { view: View }) {
                 <button
                   type="button"
                   onClick={() => setRenameModalOpen(false)}
-                  className="rounded-xl border px-4 py-2 text-sm"
+                  className="rounded-xl border px-4 py-2 text-sm cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={renaming || !renameName.trim()}
-                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50 cursor-pointer"
                 >
                   {renaming ? <Loader2 className="size-4 animate-spin" /> : null} Lưu thay đổi
                 </button>
@@ -1503,7 +1574,7 @@ export function WorkspaceModule({ view }: { view: View }) {
                   setAttachModalOpen(false)
                   setAttachTargetResource(null)
                 }}
-                className="text-muted-foreground hover:text-foreground text-lg"
+                className="text-muted-foreground hover:text-foreground text-lg cursor-pointer"
               >
                 <X className="size-5" />
               </button>
@@ -1532,12 +1603,12 @@ export function WorkspaceModule({ view }: { view: View }) {
                       key={plan.id}
                       disabled={attaching}
                       onClick={() => handleAttachToLessonPlan(plan.id!)}
-                      className="flex w-full items-center justify-between rounded-xl border border-border p-3 text-left hover:border-teal-400 hover:bg-teal-50/50 transition"
+                      className="flex w-full items-center justify-between rounded-xl border border-border p-3 text-left hover:border-teal-400 hover:bg-teal-50/50 transition cursor-pointer"
                     >
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-xs text-foreground truncate">{plan.title}</p>
                         <p className="text-[11px] text-muted-foreground">
-                          {plan.subject} · {plan.grade}
+                          {plan.subjectName || plan.subject || 'Môn học'} · {plan.gradeName || plan.grade || 'Khối'}
                         </p>
                       </div>
                       <BookOpen className="size-4 text-teal-600 shrink-0 ml-2" />
@@ -1553,7 +1624,7 @@ export function WorkspaceModule({ view }: { view: View }) {
                   setAttachModalOpen(false)
                   setAttachTargetResource(null)
                 }}
-                className="rounded-xl border px-4 py-2 text-xs"
+                className="rounded-xl border px-4 py-2 text-xs cursor-pointer"
               >
                 Đóng
               </button>
@@ -1600,7 +1671,7 @@ export function WorkspaceModule({ view }: { view: View }) {
               <button
                 onClick={() => setSelected(null)}
                 aria-label="Đóng chi tiết"
-                className="text-muted-foreground hover:text-foreground text-lg"
+                className="text-muted-foreground hover:text-foreground text-lg cursor-pointer"
               >
                 ×
               </button>
@@ -1625,28 +1696,28 @@ export function WorkspaceModule({ view }: { view: View }) {
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => handleExportWorksheet(selected, 'docx', false)}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-background py-2 text-xs font-medium hover:bg-muted"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-background py-2 text-xs font-medium hover:bg-muted cursor-pointer"
                   >
                     <FileType className="size-3.5 text-blue-600" />
                     <span>Xuất Word</span>
                   </button>
                   <button
                     onClick={() => handleExportWorksheet(selected, 'pdf', false)}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-background py-2 text-xs font-medium hover:bg-muted"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-background py-2 text-xs font-medium hover:bg-muted cursor-pointer"
                   >
                     <FileType className="size-3.5 text-rose-600" />
                     <span>Xuất PDF</span>
                   </button>
                   <button
                     onClick={() => handleExportWorksheet(selected, 'docx', true)}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 py-2 text-xs font-medium text-teal-700 hover:bg-teal-100"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 py-2 text-xs font-medium text-teal-700 hover:bg-teal-100 cursor-pointer"
                   >
                     <FileType className="size-3.5" />
                     <span>Word (có đáp án)</span>
                   </button>
                   <button
                     onClick={() => handleExportWorksheet(selected, 'pdf', true)}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 py-2 text-xs font-medium text-teal-700 hover:bg-teal-100"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 py-2 text-xs font-medium text-teal-700 hover:bg-teal-100 cursor-pointer"
                   >
                     <FileType className="size-3.5" />
                     <span>PDF (có đáp án)</span>
@@ -1658,7 +1729,7 @@ export function WorkspaceModule({ view }: { view: View }) {
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={() => setSelected(null)}
-                className="rounded-xl border px-4 py-2 text-sm"
+                className="rounded-xl border px-4 py-2 text-sm cursor-pointer"
               >
                 Đóng
               </button>
@@ -1675,7 +1746,7 @@ export function WorkspaceModule({ view }: { view: View }) {
                 <p className="text-xs font-semibold uppercase tracking-widest text-violet-600">AI</p>
                 <h2 className="mt-1 text-base font-semibold">✨ Tạo ảnh bằng AI</h2>
               </div>
-              <button onClick={() => setAiImageOpen(false)} className="text-muted-foreground"><X className="size-5" /></button>
+              <button onClick={() => setAiImageOpen(false)} className="text-muted-foreground cursor-pointer"><X className="size-5" /></button>
             </div>
             <div className="mt-4 grid gap-3 text-xs">
               <textarea
@@ -1703,7 +1774,7 @@ export function WorkspaceModule({ view }: { view: View }) {
               </select>
             </div>
             <div className="mt-4 flex justify-end gap-2">
-              <button onClick={() => setAiImageOpen(false)} className="rounded-xl border px-4 py-2 text-sm" disabled={aiImageGenerating}>Hủy</button>
+              <button onClick={() => setAiImageOpen(false)} className="rounded-xl border px-4 py-2 text-sm cursor-pointer" disabled={aiImageGenerating}>Hủy</button>
               <button
                 disabled={aiImageGenerating}
                 onClick={async () => {
@@ -1730,7 +1801,7 @@ export function WorkspaceModule({ view }: { view: View }) {
                     setAiImageGenerating(false)
                   }
                 }}
-                className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 cursor-pointer"
               >
                 {aiImageGenerating ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
                 {aiImageGenerating ? 'AI đang tạo nội dung...' : 'Tạo ảnh'}

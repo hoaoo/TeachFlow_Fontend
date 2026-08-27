@@ -43,13 +43,13 @@ jobs:
         run: npm run release:check
 
       - name: Build Tauri Desktop (Signed)
-        shell: pwsh
         env:
           NEXT_PUBLIC_API_URL: https://hoan-dev081202.onrender.com
-          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || secrets.TAURI_PRIVATE_KEY }}
-          SIGNING_PWD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || secrets.TAURI_KEY_PASSWORD || '' }}
-        run: |
-          npx cross-env TAURI_SIGNING_PRIVATE_KEY="$env:SIGNING_KEY" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$env:SIGNING_PWD" NEXT_PUBLIC_API_URL="$env:NEXT_PUBLIC_API_URL" npx tauri build
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || secrets.TAURI_KEY_PASSWORD || '' }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || secrets.TAURI_KEY_PASSWORD || '' }}
+        run: npx tauri build
 
       - name: Extract version from tag
         id: version

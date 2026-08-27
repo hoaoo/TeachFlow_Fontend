@@ -119,6 +119,19 @@ function Sidebar({
 
   const [sidebarClasses, setSidebarClasses] = useState<Array<{ id: string; name: string; grade: string; studentCount: number }>>([])
   const [loadingClasses, setLoadingClasses] = useState(true)
+  const [appVersion, setAppVersion] = useState<string>('')
+
+  useEffect(() => {
+    const platform = getPlatform()
+    if (platform.isDesktop()) {
+      platform
+        .getAppVersion()
+        .then((v) => {
+          if (v) setAppVersion(v)
+        })
+        .catch(() => {})
+    }
+  }, [])
 
   useEffect(() => {
     let isMounted = true
@@ -299,6 +312,12 @@ function Sidebar({
               </button>
             )}
           </div>
+          {appVersion ? (
+            <div className="mt-1 flex items-center justify-between px-2 pt-1 text-[11px] font-medium text-slate-400 select-none">
+              <span>TeachFlow</span>
+              <span className="font-mono font-semibold text-slate-500">v{appVersion}</span>
+            </div>
+          ) : null}
         </div>
       </aside>
     </>

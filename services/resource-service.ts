@@ -1,30 +1,100 @@
 import { api, apiClient, getAccessToken, API_BASE_URL } from './api-client';
 import { saveBlob } from './file-save-service';
 
+export type CanonicalResourceType =
+  | 'PDF'
+  | 'IMAGE'
+  | 'AUDIO'
+  | 'VIDEO'
+  | 'TEXT'
+  | 'WORD'
+  | 'EXCEL'
+  | 'POWERPOINT'
+  | 'OTHER';
+
 export interface TeachingResource {
   id: string;
   name: string;
   title: string;
-  originalFileName?: string;
-  storedFileName?: string;
+  originalFileName?: string | null;
+  storedFileName?: string | null;
   resourceType: 'DOCUMENT' | 'IMAGE' | 'AUDIO' | 'VIDEO' | 'PRESENTATION' | 'SPREADSHEET' | 'OTHER' | string;
-  mimeType?: string;
-  size?: number;
-  formattedSize?: string;
-  extension?: string;
-  subjectId?: string;
-  subjectName?: string;
-  gradeId?: string;
-  gradeName?: string;
-  lessonId?: string;
-  lessonTitle?: string;
-  subtitle?: string;
-  description?: string;
+  mimeType?: string | null;
+  size?: number | null;
+  formattedSize?: string | null;
+  extension?: string | null;
+  subjectId?: string | null;
+  subjectName?: string | null;
+  gradeId?: string | null;
+  gradeName?: string | null;
+  lessonId?: string | null;
+  lessonTitle?: string | null;
+  subtitle?: string | null;
+  description?: string | null;
   status: string;
   meta: string;
   tone: string;
+  previewStatus?: 'NONE' | 'PENDING' | 'READY' | 'FAILED' | string | null;
+  previewStorageKey?: string | null;
+  previewMimeType?: string | null;
+  previewGeneratedAt?: string | null;
+  previewError?: string | null;
   createdAt: string;
-  updatedAt?: string;
+  updatedAt?: string | null;
+}
+
+export function detectResourceType(input: {
+  mimeType?: string | null;
+  extension?: string | null;
+  resourceType?: string | null;
+  originalFileName?: string | null;
+  name?: string | null;
+}): CanonicalResourceType {
+  const mime = (input.mimeType || '').toLowerCase().trim();
+  const rawName = input.originalFileName || input.name || '';
+  const ext = (input.extension || (rawName.includes('.') ? rawName.split('.').pop() : '') || '')
+    .toLowerCase()
+    .replace(/^\./, '')
+    .trim();
+  const type = (input.resourceType || '').toUpperCase().trim();
+
+  // 1. Check MIME & Extension
+  if (mime === 'application/pdf' || ext === 'pdf') return 'PDF';
+  if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'svg'].includes(ext)) return 'IMAGE';
+  if (mime.startsWith('audio/') || ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'].includes(ext)) return 'AUDIO';
+  if (mime.startsWith('video/') || ['mp4', 'webm', 'mov', 'mkv', 'avi'].includes(ext)) return 'VIDEO';
+  if (
+    mime.includes('presentation') ||
+    mime.includes('powerpoint') ||
+    ['pptx', 'ppt'].includes(ext) ||
+    type === 'PRESENTATION'
+  ) {
+    return 'POWERPOINT';
+  }
+  if (
+    mime.includes('spreadsheet') ||
+    mime.includes('excel') ||
+    ['xlsx', 'xls', 'csv'].includes(ext) ||
+    type === 'SPREADSHEET'
+  ) {
+    return 'EXCEL';
+  }
+  if (
+    mime.includes('wordprocessingml') ||
+    mime.includes('msword') ||
+    ['docx', 'doc'].includes(ext)
+  ) {
+    return 'WORD';
+  }
+  if (mime.startsWith('text/') || ext === 'txt' || ext === 'md' || ext === 'json') return 'TEXT';
+
+  // 2. Resource type fallback
+  if (type === 'IMAGE') return 'IMAGE';
+  if (type === 'AUDIO') return 'AUDIO';
+  if (type === 'VIDEO') return 'VIDEO';
+  if (type === 'DOCUMENT') return 'WORD';
+
+  return 'OTHER';
 }
 
 export function uploadResourceFileWithProgress(
@@ -117,7 +187,8 @@ export async function getResources(params?: {
   if (params?.search) query.set('search', params.search);
 
   const queryString = query.toString() ? `?${query.toString()}` : '';
-  return api.get<TeachingResource[]>(`/resources${queryString}`);
+  const data = await api.get<TeachingResource[]>(`/resources${queryString}`);
+  return Array.isArray(data) ? data : [];
 }
 
 export async function getResource(id: string): Promise<TeachingResource> {
@@ -206,6 +277,46 @@ export async function getResourceFileBlob(id: string): Promise<{ blob: Blob; mim
   return { blob, mimeType, filename };
 }
 
+export async function getResourcePreviewBlob(id: string): Promise<{ blob: Blob; mimeType: string; filename: string }> {
+  const token = getAccessToken();
+  const url = `${API_BASE_URL}/resources/${id}/preview`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    let errorMsg = 'Không thể tải bản xem trước';
+    try {
+      const errorJson = await response.json();
+      errorMsg = errorJson.message || errorMsg;
+    } catch {}
+    throw new Error(errorMsg);
+  }
+
+  let filename = 'preview.pdf';
+  const disposition = response.headers.get('content-disposition');
+  if (disposition) {
+    const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utf8Match && utf8Match[1]) {
+      filename = decodeURIComponent(utf8Match[1]);
+    } else {
+      const regularMatch = disposition.match(/filename="?([^";]+)"?/i);
+      if (regularMatch && regularMatch[1]) {
+        filename = regularMatch[1];
+      }
+    }
+  }
+
+  const mimeType = response.headers.get('content-type') || 'application/pdf';
+  const blob = await response.blob();
+  return { blob, mimeType, filename };
+}
+
 export async function getResourceFileArrayBuffer(id: string): Promise<{ buffer: ArrayBuffer; mimeType: string; filename: string }> {
   const { blob, mimeType, filename } = await getResourceFileBlob(id);
   const buffer = await blob.arrayBuffer();
@@ -214,6 +325,10 @@ export async function getResourceFileArrayBuffer(id: string): Promise<{ buffer: 
 
 export function getResourceInlineUrl(id: string): string {
   return `${API_BASE_URL}/resources/${id}/file`;
+}
+
+export function getResourcePreviewUrl(id: string): string {
+  return `${API_BASE_URL}/resources/${id}/preview`;
 }
 
 export async function attachResourceToLessonPlan(
@@ -239,4 +354,3 @@ export async function openResourceInDefaultApp(id: string, fallbackName?: string
   const targetName = fallbackName || filename || 'tai_nguyen';
   await saveBlob(blob, targetName);
 }
-
