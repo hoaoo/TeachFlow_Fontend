@@ -42,13 +42,15 @@ jobs:
       - name: Check version synchronization
         run: npm run release:check
 
+      - name: Prepare Tauri signing credentials
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || secrets.TAURI_KEY_PASSWORD || '' }}
+        run: node scripts/prepare-signing-key.mjs
+
       - name: Build Tauri Desktop (Signed)
         env:
           NEXT_PUBLIC_API_URL: https://hoan-dev081202.onrender.com
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || secrets.TAURI_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || secrets.TAURI_KEY_PASSWORD || '' }}
-          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || secrets.TAURI_PRIVATE_KEY }}
-          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || secrets.TAURI_KEY_PASSWORD || '' }}
         run: npx tauri build
 
       - name: Extract version from tag
@@ -72,7 +74,7 @@ jobs:
           $nsisSig = (Get-Content $nsisSigPath -Raw).Trim()
           $json = @{
             version = $version
-            notes = "TeachFlow Desktop $version: Nang cap Resource & File Viewer V2, HTTP Range Streaming, upload tien do thoi gian thuc va mo ung dung mac dinh."
+            notes = "TeachFlow Desktop $version: Bo sung hien thi version runtime, nang cap Resource & File Viewer V2, HTTP Range Streaming, va mo ung dung mac dinh tren Windows."
             pub_date = $pubdate
             platforms = @{
               "windows-x86_64" = @{
