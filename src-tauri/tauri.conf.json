@@ -39,7 +39,7 @@
       "installMode": "passive"
     }
   }
-}
+},
   "bundle": {
     "active": true,
     "targets": ["nsis"],
