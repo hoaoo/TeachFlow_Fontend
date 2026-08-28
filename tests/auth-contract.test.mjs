@@ -49,7 +49,10 @@ test('auth bootstrap and refresh-cookie contract avoid protected render and refr
     readFile(new URL('../services/token-storage.ts', import.meta.url), 'utf8'),
     readFile(new URL('../components/teacher-app.tsx', import.meta.url), 'utf8'),
   ])
-  assert.match(context, /credentials: 'include'/)
+  assert.match(context, /function resolveCredentials/)
+  assert.match(context, /__TAURI_INTERNALS__/)
+  assert.match(context, /\? 'omit' : 'include'/)
+  assert.match(context, /credentials: resolveCredentials\(\)/)
   assert.match(client, /!endpoint\.includes\('\/auth\/register'\)/)
   assert.match(tokenStorage, /class LocalStorageTokenStorage/)
   assert.match(tokenStorage, /class SecureTokenStorage/)

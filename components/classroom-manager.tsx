@@ -86,6 +86,7 @@ import {
 import { ScheduleAttendanceDialog } from '@/components/schedule-attendance-dialog'
 import { generateStudentComment } from '@/services/ai-service'
 import { useAuth } from '@/context/auth-context'
+import { canManageClassroomRoster } from '@/services/roster-authorization.mjs'
 
 type ViewState = {
   page: 'classes' | 'class' | 'student'
@@ -1872,6 +1873,12 @@ function TabStudents({
   onOpenStudent: (student: StudentRecord) => void
   onClassUpdated: () => void
 }) {
+  const { user } = useAuth()
+  const authenticatedTeacherId = user?.teacher?.id
+  const canManageRoster = canManageClassroomRoster(classItem, authenticatedTeacherId)
+  const homeroomTargetClasses = allClasses.filter((classroom) =>
+    canManageClassroomRoster(classroom, authenticatedTeacherId),
+  )
   const [students, setStudents] = useState<StudentRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -1925,6 +1932,7 @@ function TabStudents({
   }, [students, search])
 
   const handleAddStudent = async () => {
+    if (!canManageRoster) return
     if (!addName.trim()) {
       toast.error('Vui lòng nhập họ và tên học sinh')
       return
@@ -2012,7 +2020,7 @@ function TabStudents({
   }
 
   const handleExecuteImport = async () => {
-    if (importRows.length === 0) return
+    if (!canManageRoster || importRows.length === 0) return
     setSubmittingImport(true)
     try {
       const res = await apiImportStudents(classItem.id, importRows)
@@ -2033,7 +2041,7 @@ function TabStudents({
   }
 
   const handleTransfer = async () => {
-    if (!transferTarget || !targetClassId) {
+    if (!canManageRoster || !transferTarget || !targetClassId) {
       toast.error('Vui lòng chọn lớp đích cần chuyển đến')
       return
     }
@@ -2057,7 +2065,7 @@ function TabStudents({
   }
 
   const handleRemoveStudent = async () => {
-    if (!deleteTarget) return
+    if (!canManageRoster || !deleteTarget) return
     try {
       await apiRemoveStudent(classItem.id, deleteTarget.id)
       toast.success(`Đã rút học sinh ${deleteTarget.name} khỏi lớp`)
@@ -2070,7 +2078,7 @@ function TabStudents({
     }
   }
 
-  const otherClasses = allClasses.filter((c) => c.id !== classItem.id && c.status !== 'COMPLETED')
+  const otherClasses = homeroomTargetClasses.filter((c) => c.id !== classItem.id && c.status !== 'COMPLETED')
 
   return (
     <Card className="border-slate-200 shadow-2xs">
@@ -2096,6 +2104,7 @@ function TabStudents({
             size="sm"
             variant="outline"
             onClick={() => setImportModalOpen(true)}
+            hidden={!canManageRoster}
             className="text-xs h-8.5 gap-1.5 cursor-pointer"
           >
             <FileSpreadsheet className="size-3.5 text-emerald-600" /> Tải lên file danh sách 
@@ -2103,6 +2112,7 @@ function TabStudents({
           <Button
             size="sm"
             onClick={() => setAddModalOpen(true)}
+            hidden={!canManageRoster}
             className="bg-teal-600 hover:bg-teal-700 text-white text-xs h-8.5 gap-1.5 font-semibold cursor-pointer"
           >
             <UserPlus className="size-3.5" /> Thêm học sinh
@@ -2187,6 +2197,7 @@ function TabStudents({
                             <Eye className="size-3.5 mr-2" /> Xem hồ sơ 360°
                           </DropdownMenuItem>
                           <DropdownMenuItem
+                            disabled={!canManageRoster}
                             onClick={() => {
                               setTransferTarget(s)
                               if (otherClasses.length > 0) setTargetClassId(otherClasses[0].id)
@@ -2195,7 +2206,7 @@ function TabStudents({
                             <ArrowRightLeft className="size-3.5 mr-2" /> Chuyển lớp
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => setDeleteTarget(s)} className="text-rose-600">
+                          <DropdownMenuItem disabled={!canManageRoster} onClick={() => setDeleteTarget(s)} className="text-rose-600">
                             <Trash2 className="size-3.5 mr-2" /> Rút khỏi lớp
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -4028,6 +4039,8 @@ function StudentProfileView({
   onBack: () => void
   onStudentUpdated: () => void
 }) {
+  const { user } = useAuth()
+  const canManageRoster = canManageClassroomRoster(classItem, user?.teacher?.id)
   const [comments, setComments] = useState<any[]>([])
   const [newComment, setNewComment] = useState('')
   const [savingComment, setSavingComment] = useState(false)
@@ -4091,7 +4104,7 @@ function StudentProfileView({
   }
 
   const handleSaveEdit = async () => {
-    if (!editFullName.trim()) return
+    if (!canManageRoster || !editFullName.trim()) return
     setSavingEdit(true)
     try {
       await apiUpdateStudent(student.id, {
@@ -4140,7 +4153,7 @@ function StudentProfileView({
             </div>
           </div>
 
-          <Button variant="outline" size="sm" onClick={() => setEditModalOpen(true)} className="text-xs gap-1.5 cursor-pointer">
+          <Button hidden={!canManageRoster} variant="outline" size="sm" onClick={() => setEditModalOpen(true)} className="text-xs gap-1.5 cursor-pointer">
             <Edit2 className="size-3.5" /> Sửa hồ sơ
           </Button>
         </CardContent>

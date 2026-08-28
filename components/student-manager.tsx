@@ -39,6 +39,8 @@ import {
 import { getStudentAcademicProfile, type StudentAcademicProfile } from '@/services/assessment-service'
 import { generateStudentComment } from '@/services/ai-service'
 import { saveBlob } from '@/services/file-save-service'
+import { canManageClassroomRoster } from '@/services/roster-authorization.mjs'
+import { useAuth } from '@/context/auth-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -69,6 +71,8 @@ const statusVariant = (status: StudentRecord['status']) =>
   status === 'Tốt' ? 'default' : status === 'Khá' ? 'secondary' : 'destructive'
 
 export function StudentManager({ initialStudentId }: { initialStudentId?: string }) {
+  const { user } = useAuth()
+  const authenticatedTeacherId = user?.teacher?.id
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(initialStudentId || null)
   const [students, setStudents] = useState<StudentRecord[]>([])
   const [summary, setSummary] = useState<StudentSummaryStats>({
@@ -173,6 +177,16 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
   const [importAnalyzing, setImportAnalyzing] = useState(false)
   const [importing, setImporting] = useState(false)
 
+  const homeroomClasses = useMemo(
+    () => classes.filter((classroom) => canManageClassroomRoster(classroom, authenticatedTeacherId)),
+    [authenticatedTeacherId, classes],
+  )
+  const canManageStudentRoster = useCallback(
+    (student: StudentRecord) =>
+      homeroomClasses.some((classroom) => classroom.id === student.classId),
+    [homeroomClasses],
+  )
+
   // Load Dropdown Options
   const loadOptions = useCallback(async () => {
     try {
@@ -185,15 +199,16 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
       setSchoolYears(years)
       setGrades(gs)
 
-      if (cls.length > 0) {
-        setFormClassId(cls[0].id)
-        setImportTargetClassId(cls[0].id)
-        setTransferTargetClassId(cls.length > 1 ? cls[1].id : cls[0].id)
-      }
+      const manageableClasses = cls.filter((classroom) =>
+        canManageClassroomRoster(classroom, authenticatedTeacherId),
+      )
+      setFormClassId(manageableClasses[0]?.id || '')
+      setImportTargetClassId(manageableClasses[0]?.id || '')
+      setTransferTargetClassId(manageableClasses[1]?.id || manageableClasses[0]?.id || '')
     } catch {
       // keep fallback
     }
-  }, [])
+  }, [authenticatedTeacherId])
 
   useEffect(() => {
     loadOptions()
@@ -418,6 +433,10 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
 
   // Create Student Handler
   const handleCreateStudent = async () => {
+    if (!homeroomClasses.some((classroom) => classroom.id === formClassId)) {
+      toast.error('Chỉ giáo viên chủ nhiệm mới có quyền thêm học sinh vào lớp này')
+      return
+    }
     if (!formName.trim()) {
       toast.error('Vui lòng nhập họ và tên học sinh')
       return
@@ -460,6 +479,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
 
   // Open Edit Modal
   const openEditModal = (s: StudentRecord) => {
+    if (!canManageStudentRoster(s)) return
     setEditTarget(s)
     setEditName(s.name || '')
     setEditCode(s.studentCode || '')
@@ -472,7 +492,8 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
   }
 
   const handleUpdateStudent = async () => {
-    if (!editTarget || !editName.trim()) {
+    if (!editTarget || !canManageStudentRoster(editTarget)) return
+    if (!editName.trim()) {
       toast.error('Họ tên học sinh không được để trống')
       return
     }
@@ -502,8 +523,9 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
 
   // Open Transfer Modal
   const openTransferModal = (s: StudentRecord) => {
+    if (!canManageStudentRoster(s)) return
     setTransferTarget(s)
-    const otherClasses = classes.filter((c) => c.id !== s.classId && c.status !== 'COMPLETED')
+    const otherClasses = homeroomClasses.filter((c) => c.id !== s.classId && c.status !== 'COMPLETED')
     if (otherClasses.length > 0) {
       setTransferTargetClassId(otherClasses[0].id)
     }
@@ -511,7 +533,11 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
   }
 
   const handleTransferStudent = async () => {
-    if (!transferTarget || !transferTargetClassId) {
+    if (!transferTarget || !canManageStudentRoster(transferTarget)) return
+    if (
+      !transferTargetClassId ||
+      !homeroomClasses.some((classroom) => classroom.id === transferTargetClassId)
+    ) {
       toast.error('Vui lòng chọn lớp học chuyển đến')
       return
     }
@@ -536,7 +562,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
 
   // Delete / Withdraw Handler
   const handleDeleteStudent = async () => {
-    if (!deleteTarget) return
+    if (!deleteTarget || !canManageStudentRoster(deleteTarget)) return
     try {
       const res = await deleteStudent(deleteTarget.id)
       setDeleteTarget(null)
@@ -690,6 +716,10 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
   }
 
   const handleConfirmImport = async () => {
+    if (!homeroomClasses.some((classroom) => classroom.id === importTargetClassId)) {
+      toast.error('Chỉ giáo viên chủ nhiệm mới có quyền import học sinh vào lớp này')
+      return
+    }
     if (!importTargetClassId) {
       toast.error('Vui lòng chọn lớp học tiếp nhận')
       return
@@ -740,6 +770,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
         <StudentDetailView
           student={activeStudent}
           classes={classes}
+          canManageRoster={canManageStudentRoster(activeStudent)}
           onBack={() => setSelectedStudentId(null)}
           onStudentUpdated={() => loadStudentsData()}
           onOpenEdit={() => openEditModal(activeStudent)}
@@ -778,12 +809,14 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                 variant="outline"
                 size="sm"
                 onClick={() => setImportDialogOpen(true)}
+                hidden={homeroomClasses.length === 0}
                 className="text-xs h-9 gap-1.5 font-semibold text-emerald-700 border-emerald-200 hover:bg-emerald-50 cursor-pointer"
               >
                 <FileSpreadsheet className="size-4 text-emerald-600" /> Import Excel
               </Button>
               <Button
                 onClick={() => setCreateDialogOpen(true)}
+                hidden={homeroomClasses.length === 0}
                 className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs gap-1.5 shadow-sm h-9 px-4 cursor-pointer"
               >
                 <Plus className="size-4" /> Thêm học sinh
@@ -1012,10 +1045,10 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                     Thêm học sinh mới hoặc Import danh sách từ file Excel để bắt đầu theo dõi quá trình học tập.
                   </p>
                   <div className="flex items-center justify-center gap-2 pt-2">
-                    <Button onClick={() => setImportDialogOpen(true)} variant="outline" size="sm" className="text-xs gap-1.5 font-semibold">
+                    <Button hidden={homeroomClasses.length === 0} onClick={() => setImportDialogOpen(true)} variant="outline" size="sm" className="text-xs gap-1.5 font-semibold">
                       <FileSpreadsheet className="size-3.5 text-emerald-600" />  Tải lên file
                     </Button>
-                    <Button onClick={() => setCreateDialogOpen(true)} size="sm" className="bg-teal-600 text-white text-xs font-semibold gap-1.5">
+                    <Button hidden={homeroomClasses.length === 0} onClick={() => setCreateDialogOpen(true)} size="sm" className="bg-teal-600 text-white text-xs font-semibold gap-1.5">
                       <Plus className="size-3.5" /> Thêm học sinh
                     </Button>
                   </div>
@@ -1168,14 +1201,14 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                                       <DropdownMenuItem onClick={() => openQuickAssessmentModal([s])}>
                                         <ClipboardCheck className="size-3.5 mr-2" /> Nhập đánh giá
                                       </DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => openEditModal(s)}>
+                                      <DropdownMenuItem disabled={!canManageStudentRoster(s)} onClick={() => openEditModal(s)}>
                                         <Edit2 className="size-3.5 mr-2" /> Chỉnh sửa hồ sơ
                                       </DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => openTransferModal(s)}>
+                                      <DropdownMenuItem disabled={!canManageStudentRoster(s)} onClick={() => openTransferModal(s)}>
                                         <ArrowRightLeft className="size-3.5 mr-2" /> Chuyển lớp
                                       </DropdownMenuItem>
                                       <DropdownMenuSeparator />
-                                      <DropdownMenuItem onClick={() => setDeleteTarget(s)} className="text-rose-600">
+                                      <DropdownMenuItem disabled={!canManageStudentRoster(s)} onClick={() => setDeleteTarget(s)} className="text-rose-600">
                                         <Trash2 className="size-3.5 mr-2" /> Rút khỏi lớp
                                       </DropdownMenuItem>
                                     </DropdownMenuContent>
@@ -1475,7 +1508,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                   onChange={(e) => setFormClassId(e.target.value)}
                   className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs focus:outline-teal-500"
                 >
-                  {classes.map((c) => (
+                  {homeroomClasses.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name} ({c.grade})
                     </option>
@@ -1680,7 +1713,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                 onChange={(e) => setTransferTargetClassId(e.target.value)}
                 className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs focus:outline-teal-500"
               >
-                {classes
+                {homeroomClasses
                   .filter((c) => c.id !== transferTarget?.classId)
                   .map((c) => (
                     <option key={c.id} value={c.id}>
@@ -1769,7 +1802,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                 className="h-9 min-w-[220px] rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 focus:outline-teal-500"
               >
                 <option value="">-- Chọn lớp học --</option>
-                {classes.map((c) => (
+                {homeroomClasses.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name} ({c.grade})
                   </option>
@@ -2046,6 +2079,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
 function StudentDetailView({
   student,
   classes,
+  canManageRoster,
   onBack,
   onStudentUpdated,
   onOpenEdit,
@@ -2055,6 +2089,7 @@ function StudentDetailView({
 }: {
   student: StudentRecord
   classes: ClassRecord[]
+  canManageRoster: boolean
   onBack: () => void
   onStudentUpdated: () => void
   onOpenEdit: () => void
@@ -2104,13 +2139,13 @@ function StudentDetailView({
             <Button size="sm" onClick={onOpenQuickAssess} className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs h-9 gap-1.5 shadow-sm cursor-pointer">
               <ClipboardCheck className="size-3.5" /> Nhập đánh giá
             </Button>
-            <Button variant="outline" size="sm" onClick={onOpenEdit} className="text-xs h-9 gap-1.5 cursor-pointer">
+            <Button hidden={!canManageRoster} variant="outline" size="sm" onClick={onOpenEdit} className="text-xs h-9 gap-1.5 cursor-pointer">
               <Edit2 className="size-3.5" /> Sửa hồ sơ
             </Button>
-            <Button variant="outline" size="sm" onClick={onOpenTransfer} className="text-xs h-9 gap-1.5 cursor-pointer">
+            <Button hidden={!canManageRoster} variant="outline" size="sm" onClick={onOpenTransfer} className="text-xs h-9 gap-1.5 cursor-pointer">
               <ArrowRightLeft className="size-3.5" /> Chuyển lớp
             </Button>
-            <Button variant="outline" size="sm" onClick={onOpenDelete} className="text-xs h-9 gap-1.5 text-rose-600 hover:bg-rose-50 cursor-pointer">
+            <Button hidden={!canManageRoster} variant="outline" size="sm" onClick={onOpenDelete} className="text-xs h-9 gap-1.5 text-rose-600 hover:bg-rose-50 cursor-pointer">
               <Trash2 className="size-3.5" /> Rút lớp
             </Button>
           </div>

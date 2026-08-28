@@ -23,3 +23,16 @@ test('API client requires the build-time URL and logs only safe diagnostic field
   assert.match(client, /url: string;[\s\S]*status: number \| null;[\s\S]*category: ApiErrorCategory;[\s\S]*requestId: string \| null;/)
   assert.doesNotMatch(client, /console\.(?:log|error)\([^\n]*(?:password|accessToken|refreshToken|Authorization)/)
 })
+
+test('Windows release workflow embeds the production API prefix at build time', async () => {
+  const workflow = await readFile(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8')
+
+  assert.match(
+    workflow,
+    /NEXT_PUBLIC_API_URL:\s*https:\/\/hoan-dev081202\.onrender\.com\/api/,
+  )
+  assert.doesNotMatch(
+    workflow,
+    /NEXT_PUBLIC_API_URL:\s*https:\/\/hoan-dev081202\.onrender\.com\s*$/m,
+  )
+})

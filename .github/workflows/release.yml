@@ -58,7 +58,7 @@ jobs:
 
       - name: Build Tauri Desktop (Signed)
         env:
-          NEXT_PUBLIC_API_URL: https://hoan-dev081202.onrender.com
+          NEXT_PUBLIC_API_URL: https://hoan-dev081202.onrender.com/api
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npx tauri build
