@@ -4,6 +4,12 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { api, setAuthTokens, getAccessToken, clearAuthTokens, notifyAuthStateChanged, API_BASE_URL, fetchWithResilience } from '@/services/api-client';
 import { getStoredRefreshToken, initializeTokenStorage } from '@/services/token-storage';
 
+/** Mirror of api-client's logic: no cookies on Tauri WebView (tauri://localhost is not a whitelisted CORS credentialed origin). */
+function resolveCredentials(): RequestCredentials {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window ? 'omit' : 'include';
+}
+
+
 export type UserProfile = {
   id: string;
   email: string;
@@ -48,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: refreshToken ? JSON.stringify({ refreshToken }) : undefined,
-          credentials: 'include',
+          credentials: resolveCredentials(),
         }, true);
         if (refreshRes.ok) {
           const refreshData = await refreshRes.json();

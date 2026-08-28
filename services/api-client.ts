@@ -6,6 +6,27 @@ import {
 } from './token-storage';
 
 /**
+ * Returns true when running inside the Tauri WebView (desktop).
+ * Avoids importing the full platform module at this level to keep the bundle clean.
+ */
+function isDesktopRuntime(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
+/**
+ * On desktop (Tauri) we authenticate exclusively with Bearer tokens stored in
+ * Windows Credential Manager. HttpOnly cookies are a web-only mechanism.
+ * Sending credentials:'include' from tauri://localhost to an external HTTPS origin
+ * triggers a CORS preflight that the backend rejects (it does not whitelist tauri://localhost),
+ * causing every request to fail with a NETWORK_ERROR before it even reaches the server.
+ * On web we keep credentials:'include' so the browser automatically sends the HttpOnly
+ * refresh token cookie for server-side session management.
+ */
+function resolveCredentials(): RequestCredentials {
+  return isDesktopRuntime() ? 'omit' : 'include';
+}
+
+/**
  * TeachFlow API Client
  * Handles token attachment, refresh token flow, error parsing and standardized requests.
  */
@@ -80,7 +101,12 @@ function logApiFailure(input: {
   requestId: string | null;
 }): void {
   if (process.env.NODE_ENV !== 'production') {
-    console.error('[TeachFlow API]', input);
+    console.error('[TeachFlow API]', {
+      ...input,
+      apiBase: API_BASE_URL,
+      desktop: isDesktopRuntime(),
+      credentials: resolveCredentials(),
+    });
   }
 }
 
@@ -187,7 +213,11 @@ export async function apiClient<T = any>(
   const config: RequestInit = {
     ...options,
     headers,
-    credentials: 'include', // Support HttpOnly cookies for refresh token cross-origin
+    // Web: send HttpOnly cookie for server-side session (credentials:'include').
+    // Desktop (Tauri): omit credentials — the backend does not whitelist tauri://localhost,
+    // so a credentialed cross-origin request triggers a CORS preflight failure. Bearer
+    // tokens in the Authorization header are sufficient for desktop authentication.
+    credentials: resolveCredentials(),
   };
 
   try {
@@ -210,7 +240,7 @@ export async function apiClient<T = any>(
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: refreshToken ? JSON.stringify({ refreshToken }) : undefined,
-            credentials: 'include',
+            credentials: resolveCredentials(),
           }, true);
 
           if (refreshRes.ok) {
@@ -392,7 +422,7 @@ export const api = {
     const res = await fetch(url, {
       method: 'GET',
       headers: reqHeaders,
-      credentials: 'include',
+      credentials: resolveCredentials(),
     });
     if (!res.ok) {
       throw new ApiError(`Tải tệp thất bại: ${res.statusText}`, res.status);

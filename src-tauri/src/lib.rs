@@ -199,6 +199,16 @@ pub fn run() {
                 tray = tray.icon(icon.clone());
             }
             tray.build(app)?;
+
+            // In debug builds only: open DevTools so network/CORS errors are visible.
+            // This block is compiled out entirely in release builds.
+            #[cfg(debug_assertions)]
+            {
+                if let Some(win) = app.get_webview_window("main") {
+                    win.open_devtools();
+                }
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| {
