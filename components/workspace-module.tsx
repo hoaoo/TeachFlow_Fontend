@@ -158,6 +158,9 @@ function ResourcePreviewModal({
 
   useEffect(() => {
     let alive = true
+    const controller = new AbortController()
+    let createdUrl: string | null = null
+
     setLoading(true)
     setError(null)
     setBlobUrl(null)
@@ -168,32 +171,32 @@ function ResourcePreviewModal({
     async function loadPreview() {
       try {
         if (detected === 'IMAGE' || detected === 'VIDEO' || detected === 'AUDIO' || detected === 'PDF') {
-          const { blob } = await getResourceFileBlob(resource.id)
+          const { blob } = await getResourceFileBlob(resource.id, controller.signal)
           if (!alive) return
-          const url = URL.createObjectURL(blob)
-          setBlobUrl(url)
+          createdUrl = URL.createObjectURL(blob)
+          setBlobUrl(createdUrl)
         } else if (detected === 'POWERPOINT') {
           if (resource.previewStatus === 'READY') {
-            const { blob } = await getResourcePreviewBlob(resource.id)
+            const { blob } = await getResourcePreviewBlob(resource.id, controller.signal)
             if (!alive) return
-            const url = URL.createObjectURL(blob)
-            setBlobUrl(url)
+            createdUrl = URL.createObjectURL(blob)
+            setBlobUrl(createdUrl)
           } else {
             // Presentation preview pending or fallback
           }
         } else if (detected === 'TEXT') {
-          const { blob } = await getResourceFileBlob(resource.id)
+          const { blob } = await getResourceFileBlob(resource.id, controller.signal)
           if (!alive) return
           const text = await blob.text()
           setTxtContent(text)
         } else if (detected === 'WORD') {
-          const { buffer } = await getResourceFileArrayBuffer(resource.id)
+          const { buffer } = await getResourceFileArrayBuffer(resource.id, controller.signal)
           if (!alive) return
           const result = await mammoth.convertToHtml({ arrayBuffer: buffer })
           const cleanHtml = sanitizeDocxHtml(result.value || '')
           setDocxHtml(cleanHtml || '<p class="text-slate-400 italic">Tài liệu không có nội dung văn bản.</p>')
         } else if (detected === 'EXCEL') {
-          const { buffer } = await getResourceFileArrayBuffer(resource.id)
+          const { buffer } = await getResourceFileArrayBuffer(resource.id, controller.signal)
           if (!alive) return
           const wb = XLSX.read(buffer, { type: 'array' })
           const sheets = wb.SheetNames.map((sheetName) => {
@@ -207,7 +210,7 @@ function ResourcePreviewModal({
           setXlsxSheets(sheets)
         }
       } catch (err: any) {
-        if (alive) {
+        if (alive && !controller.signal.aborted) {
           setError(err?.message || 'Không thể tải bản xem trước tệp tin.')
         }
       } finally {
@@ -221,8 +224,9 @@ function ResourcePreviewModal({
 
     return () => {
       alive = false
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl)
+      controller.abort()
+      if (createdUrl) {
+        URL.revokeObjectURL(createdUrl)
       }
     }
   }, [resource.id, detected, resource.previewStatus])
@@ -539,6 +543,86 @@ function ResourcePreviewModal({
   )
 }
 
+function ResourceImageThumbnail({
+  resourceId,
+  alt,
+}: {
+  resourceId: string
+  alt: string
+}) {
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    const controller = new AbortController()
+    let createdUrl: string | null = null
+
+    setLoading(true)
+    setError(false)
+
+    async function fetchThumbnail() {
+      try {
+        const { blob } = await getResourceFileBlob(resourceId, controller.signal)
+        if (!alive) return
+        createdUrl = URL.createObjectURL(blob)
+        setImageUrl(createdUrl)
+      } catch {
+        if (!alive || controller.signal.aborted) return
+        setError(true)
+      } finally {
+        if (alive) {
+          setLoading(false)
+        }
+      }
+    }
+
+    fetchThumbnail()
+
+    return () => {
+      alive = false
+      controller.abort()
+      if (createdUrl) {
+        URL.revokeObjectURL(createdUrl)
+      }
+    }
+  }, [resourceId])
+
+  if (loading) {
+    return (
+      <div className="w-full h-full bg-slate-100 flex flex-col items-center justify-center text-slate-400 gap-1.5 animate-pulse">
+        <Loader2 className="size-5 animate-spin text-teal-600" />
+        <span className="text-[10px] font-medium text-slate-400">Đang tải ảnh...</span>
+      </div>
+    )
+  }
+
+  if (error || !imageUrl) {
+    return (
+      <div className="w-full h-full bg-linear-to-br from-teal-700 via-cyan-800 to-slate-800 flex flex-col items-center justify-center text-white p-4">
+        <ImageIcon className="size-10 text-white/90 group-hover:scale-110 transition drop-shadow" />
+        <span className="text-[11px] font-bold text-white/90 mt-1">Hình ảnh</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-full h-full bg-slate-100 flex items-center justify-center relative">
+      <img
+        src={imageUrl}
+        alt={alt}
+        className="w-full h-full object-cover"
+      />
+      <div className="absolute inset-0 bg-slate-900/10 group-hover:bg-slate-900/20 transition flex items-center justify-center opacity-0 group-hover:opacity-100">
+        <span className="p-2 rounded-full bg-white/90 shadow-md text-teal-700">
+          <Eye className="size-4" />
+        </span>
+      </div>
+    </div>
+  )
+}
+
 function ResourceCard({
   resource,
   onPreview,
@@ -582,21 +666,7 @@ function ResourceCard({
         className="relative aspect-16/9 w-full bg-slate-100 overflow-hidden flex items-center justify-center cursor-pointer group-hover:opacity-95 transition select-none"
       >
         {detected === 'IMAGE' ? (
-          <div className="w-full h-full bg-slate-100 flex items-center justify-center relative">
-            <img
-              src={getResourceInlineUrl(resource.id)}
-              alt={name}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                ;(e.target as HTMLElement).style.display = 'none'
-              }}
-            />
-            <div className="absolute inset-0 bg-slate-900/10 group-hover:bg-slate-900/20 transition flex items-center justify-center opacity-0 group-hover:opacity-100">
-              <span className="p-2 rounded-full bg-white/90 shadow-md text-teal-700">
-                <Eye className="size-4" />
-              </span>
-            </div>
-          </div>
+          <ResourceImageThumbnail resourceId={resource.id} alt={name} />
         ) : detected === 'VIDEO' ? (
           <div className="w-full h-full bg-linear-to-br from-purple-900 via-indigo-900 to-slate-900 flex flex-col items-center justify-center text-white relative">
             <div className="size-11 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center group-hover:scale-110 transition shadow-lg">

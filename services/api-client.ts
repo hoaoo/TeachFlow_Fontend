@@ -22,7 +22,7 @@ function isDesktopRuntime(): boolean {
  * On web we keep credentials:'include' so the browser automatically sends the HttpOnly
  * refresh token cookie for server-side session management.
  */
-function resolveCredentials(): RequestCredentials {
+export function resolveCredentials(): RequestCredentials {
   return isDesktopRuntime() ? 'omit' : 'include';
 }
 

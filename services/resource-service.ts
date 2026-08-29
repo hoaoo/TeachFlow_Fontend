@@ -1,4 +1,4 @@
-import { api, apiClient, getAccessToken, API_BASE_URL } from './api-client';
+import { api, apiClient, getAccessToken, API_BASE_URL, resolveCredentials, fetchWithResilience, ApiError } from './api-client';
 import { saveBlob } from './file-save-service';
 
 export type CanonicalResourceType =
@@ -227,13 +227,20 @@ export async function downloadResourceFile(id: string, fallbackName?: string): P
   const token = getAccessToken();
   const url = `${API_BASE_URL}/resources/${id}/download`;
 
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetchWithResilience(
+    url,
+    {
+      method: 'GET',
+      headers,
+      credentials: resolveCredentials(),
     },
-    credentials: 'include',
-  });
+    true,
+  );
 
   if (!response.ok) {
     let errorMsg = 'Không thể tải xuống tệp tin';
@@ -241,7 +248,7 @@ export async function downloadResourceFile(id: string, fallbackName?: string): P
       const errorJson = await response.json();
       errorMsg = errorJson.message || errorMsg;
     } catch {}
-    throw new Error(errorMsg);
+    throw new ApiError(errorMsg, response.status);
   }
 
   let filename = fallbackName || 'tai_nguyen_day_hoc';
@@ -249,7 +256,11 @@ export async function downloadResourceFile(id: string, fallbackName?: string): P
   if (disposition) {
     const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
     if (utf8Match && utf8Match[1]) {
-      filename = decodeURIComponent(utf8Match[1]);
+      try {
+        filename = decodeURIComponent(utf8Match[1]);
+      } catch {
+        filename = utf8Match[1];
+      }
     } else {
       const regularMatch = disposition.match(/filename="?([^";]+)"?/i);
       if (regularMatch && regularMatch[1]) {
@@ -261,17 +272,28 @@ export async function downloadResourceFile(id: string, fallbackName?: string): P
   await saveBlob(await response.blob(), filename);
 }
 
-export async function getResourceFileBlob(id: string): Promise<{ blob: Blob; mimeType: string; filename: string }> {
+export async function getResourceFileBlob(
+  id: string,
+  signal?: AbortSignal,
+): Promise<{ blob: Blob; mimeType: string; filename: string }> {
   const token = getAccessToken();
   const url = `${API_BASE_URL}/resources/${id}/file`;
 
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetchWithResilience(
+    url,
+    {
+      method: 'GET',
+      headers,
+      credentials: resolveCredentials(),
+      signal,
     },
-    credentials: 'include',
-  });
+    true,
+  );
 
   if (!response.ok) {
     let errorMsg = 'Không thể tải tệp tin xem trước';
@@ -279,7 +301,7 @@ export async function getResourceFileBlob(id: string): Promise<{ blob: Blob; mim
       const errorJson = await response.json();
       errorMsg = errorJson.message || errorMsg;
     } catch {}
-    throw new Error(errorMsg);
+    throw new ApiError(errorMsg, response.status);
   }
 
   let filename = 'tai_nguyen';
@@ -287,7 +309,11 @@ export async function getResourceFileBlob(id: string): Promise<{ blob: Blob; mim
   if (disposition) {
     const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
     if (utf8Match && utf8Match[1]) {
-      filename = decodeURIComponent(utf8Match[1]);
+      try {
+        filename = decodeURIComponent(utf8Match[1]);
+      } catch {
+        filename = utf8Match[1];
+      }
     } else {
       const regularMatch = disposition.match(/filename="?([^";]+)"?/i);
       if (regularMatch && regularMatch[1]) {
@@ -301,17 +327,28 @@ export async function getResourceFileBlob(id: string): Promise<{ blob: Blob; mim
   return { blob, mimeType, filename };
 }
 
-export async function getResourcePreviewBlob(id: string): Promise<{ blob: Blob; mimeType: string; filename: string }> {
+export async function getResourcePreviewBlob(
+  id: string,
+  signal?: AbortSignal,
+): Promise<{ blob: Blob; mimeType: string; filename: string }> {
   const token = getAccessToken();
   const url = `${API_BASE_URL}/resources/${id}/preview`;
 
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetchWithResilience(
+    url,
+    {
+      method: 'GET',
+      headers,
+      credentials: resolveCredentials(),
+      signal,
     },
-    credentials: 'include',
-  });
+    true,
+  );
 
   if (!response.ok) {
     let errorMsg = 'Không thể tải bản xem trước';
@@ -319,7 +356,7 @@ export async function getResourcePreviewBlob(id: string): Promise<{ blob: Blob; 
       const errorJson = await response.json();
       errorMsg = errorJson.message || errorMsg;
     } catch {}
-    throw new Error(errorMsg);
+    throw new ApiError(errorMsg, response.status);
   }
 
   let filename = 'preview.pdf';
@@ -327,7 +364,11 @@ export async function getResourcePreviewBlob(id: string): Promise<{ blob: Blob; 
   if (disposition) {
     const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
     if (utf8Match && utf8Match[1]) {
-      filename = decodeURIComponent(utf8Match[1]);
+      try {
+        filename = decodeURIComponent(utf8Match[1]);
+      } catch {
+        filename = utf8Match[1];
+      }
     } else {
       const regularMatch = disposition.match(/filename="?([^";]+)"?/i);
       if (regularMatch && regularMatch[1]) {
@@ -341,8 +382,11 @@ export async function getResourcePreviewBlob(id: string): Promise<{ blob: Blob; 
   return { blob, mimeType, filename };
 }
 
-export async function getResourceFileArrayBuffer(id: string): Promise<{ buffer: ArrayBuffer; mimeType: string; filename: string }> {
-  const { blob, mimeType, filename } = await getResourceFileBlob(id);
+export async function getResourceFileArrayBuffer(
+  id: string,
+  signal?: AbortSignal,
+): Promise<{ buffer: ArrayBuffer; mimeType: string; filename: string }> {
+  const { blob, mimeType, filename } = await getResourceFileBlob(id, signal);
   const buffer = await blob.arrayBuffer();
   return { buffer, mimeType, filename };
 }
