@@ -1,5 +1,6 @@
 import { api, API_BASE_URL } from './api-client';
 import { saveBlob } from './file-save-service';
+import type { HtmlGame } from './html-game-service';
 
 export type Activity = {
   id: string;
@@ -43,7 +44,9 @@ export type LessonPlan = {
   title: string;
   topic?: string;
   subject: string;
+  subjectName?: string | null;
   grade: string;
+  gradeName?: string | null;
   classroomId?: string | null;
   subjectId?: string | null;
   date: string;
@@ -64,6 +67,7 @@ export type LessonPlan = {
   version?: number;
   activities: Activity[];
   resources?: any[];
+  htmlGames?: HtmlGame[];
   schedules?: LessonPlanScheduleLink[];
   versions?: LessonPlanVersionRecord[];
   activitiesCount?: number;

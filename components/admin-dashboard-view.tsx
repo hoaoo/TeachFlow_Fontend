@@ -14,6 +14,7 @@ import {
   Loader2,
   ArrowUpRight,
   RefreshCw,
+  Gamepad2,
 } from 'lucide-react'
 import {
   getAdminDashboardStats,
@@ -284,6 +285,13 @@ export function AdminDashboardView({
 
               {/* Fast links */}
               <div className="mt-5 pt-4 border-t border-slate-100 flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => onNavigate('Trò chơi HTML')}
+                  className="gap-2 text-xs"
+                >
+                  <Gamepad2 className="size-3.5" /> Trò chơi HTML
+                </Button>
                 <Button
                   onClick={() => onNavigate('Quản lý giáo viên')}
                   className="gap-2 text-xs"

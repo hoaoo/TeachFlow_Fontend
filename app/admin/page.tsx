@@ -52,6 +52,7 @@ export default function AdminDashboardPage() {
         if (view === 'Quản lý giáo viên') router.push('/admin/teachers');
         else if (view === 'Nhật ký hệ thống') router.push('/admin/audit');
         else if (view === 'Sức khỏe hệ thống') router.push('/admin/health');
+        else if (view === 'Trò chơi HTML') router.push('/admin/html-games');
       }} />
     </div>
   );

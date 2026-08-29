@@ -25,8 +25,8 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' data: blob: https://hoan-dev081202.onrender.com; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://hoan-dev081202.onrender.com;",
-      "devCsp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data: https:; connect-src 'self' ipc: http://ipc.localhost http://localhost:3000 http://localhost:3001 ws://localhost:3000 ws://localhost:3001 https://hoan-dev081202.onrender.com;"
+      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' data: blob: https:; frame-src https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://hoan-dev081202.onrender.com;",
+      "devCsp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' data: blob: https:; frame-src https: http://localhost:*; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data: https:; connect-src 'self' ipc: http://ipc.localhost http://localhost:3000 http://localhost:3001 ws://localhost:3000 ws://localhost:3001 https://hoan-dev081202.onrender.com;"
     }
   },
   "plugins": {

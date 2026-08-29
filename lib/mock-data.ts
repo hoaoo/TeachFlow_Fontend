@@ -11,6 +11,7 @@ export const navItems = [
   { label: 'Điểm danh', icon: 'CheckCircle2' },
   { label: 'Báo cáo & Thống kê', icon: 'FileText' },
   { label: 'Tài nguyên', icon: 'Files' },
+  { label: 'Trò chơi HTML', icon: 'Gamepad2' },
   { label: 'Cài đặt', icon: 'Settings' },
   { label: 'Trợ lý AI', icon: 'Sparkles' },
   { label: 'Mẫu của tôi', icon: 'Bookmark' },

@@ -19,6 +19,7 @@ import { AdminTeachersView } from '@/components/admin-teachers-view'
 import { AdminDashboardView } from '@/components/admin-dashboard-view'
 import { AdminAuditView } from '@/components/admin-audit-view'
 import { AdminHealthView } from '@/components/admin-health-view'
+import { HtmlGameLibraryView } from '@/components/html-game-library-view'
 import { HomeroomView } from '@/components/homeroom-view'
 import { ReportsView } from '@/components/reports-view'
 import { TeacherSettingsView } from '@/components/teacher-settings-view'
@@ -76,7 +77,7 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { getPlatform } from '@/platform'
 
-const iconMap = { LayoutDashboard, CalendarDays, BookOpen, Library, Users, GraduationCap, Files, ClipboardCheck, School, CheckCircle2, Settings, Sparkles, FileText, Bookmark, MessageSquarePlus, Grid2X2 }
+const iconMap = { LayoutDashboard, CalendarDays, BookOpen, Library, Users, GraduationCap, Files, ClipboardCheck, School, CheckCircle2, Settings, Sparkles, FileText, Bookmark, MessageSquarePlus, Grid2X2, Gamepad2 }
 
 type View =
   | 'Tổng quan'
@@ -91,6 +92,7 @@ type View =
   | 'Điểm danh'
   | 'Báo cáo & Thống kê'
   | 'Tài nguyên'
+  | 'Trò chơi HTML'
   | 'Cài đặt'
   | 'Trợ lý AI'
   | 'Sơ đồ chỗ ngồi'
@@ -212,6 +214,13 @@ function Sidebar({
               >
                 <Users className="size-[18px]" />
                 Tài khoản giáo viên
+              </button>
+              <button
+                onClick={() => { onSelect('Trò chơi HTML'); onClose() }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${active === 'Trò chơi HTML' ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+              >
+                <Gamepad2 className="size-[18px]" />
+                Trò chơi HTML
               </button>
               <button
                 onClick={() => { onSelect('Nhật ký hệ thống'); onClose() }}
@@ -1490,6 +1499,9 @@ function GenericView({
     if (view === 'Sức khỏe hệ thống') {
       return <AdminHealthView />
     }
+    if (view === 'Trò chơi HTML') {
+      return <HtmlGameLibraryView />
+    }
 
     // Direct access to teacher views by admin is restricted
     return (
@@ -1545,6 +1557,7 @@ function GenericView({
   if (view === 'Mẫu của tôi') return <TemplatesView />
   if (view === 'Nhận xét nhanh') return <QuickCommentsView />
   if (view === 'Tài nguyên') return <WorkspaceModule view="Tài nguyên" />
+  if (view === 'Trò chơi HTML') return <HtmlGameLibraryView />
   return (
     <div className="flex flex-col gap-6">
       <PageTitle
