@@ -1,0 +1,124 @@
+'use client'
+
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { AlertTriangle, Fullscreen, Loader2, RefreshCw, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import type { HtmlGamePlay } from '@/services/html-game-service'
+
+const BRIDGE_VERSION = 1
+const MAX_MESSAGE_BYTES = 256 * 1024
+const ALLOWED_MESSAGES = new Set(['TEACHFLOW_GAME_READY', 'TEACHFLOW_GAME_RESULT'])
+
+function payloadSize(value: unknown) {
+  try {
+    return new TextEncoder().encode(JSON.stringify(value)).length
+  } catch {
+    return MAX_MESSAGE_BYTES + 1
+  }
+}
+
+export function GamePlayer({ play, onExit }: { play: HtmlGamePlay; onExit?: () => void }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [retryKey, setRetryKey] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<{ score: number; total: number } | null>(null)
+  const instanceId = useMemo(
+    () => globalThis.crypto?.randomUUID?.() || `game-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    [retryKey],
+  )
+  const src = useMemo(() => {
+    const url = new URL(play.playUrl)
+    url.searchParams.set('teachflowGameInstanceId', instanceId)
+    return url.toString()
+  }, [instanceId, play.playUrl])
+  const expectedOrigin = useMemo(() => new URL(play.playUrl).origin, [play.playUrl])
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== iframeRef.current?.contentWindow) return
+      if (event.origin !== 'null' && event.origin !== expectedOrigin) return
+      const data = event.data
+      if (!data || typeof data !== 'object' || payloadSize(data) > MAX_MESSAGE_BYTES) return
+      if (!ALLOWED_MESSAGES.has(data.type) || data.version !== BRIDGE_VERSION || data.gameInstanceId !== instanceId) return
+
+      if (data.type === 'TEACHFLOW_GAME_READY') {
+        setLoading(false)
+        if (!play.supportsQuestionConfig) return
+        const init = {
+          type: 'TEACHFLOW_GAME_INIT',
+          version: BRIDGE_VERSION,
+          gameInstanceId: instanceId,
+          questions: Array.isArray(play.questions) ? play.questions : [],
+        }
+        if (payloadSize(init) > MAX_MESSAGE_BYTES) {
+          setError('Bộ câu hỏi vượt quá giới hạn truyền sang trò chơi')
+          return
+        }
+        // A sandbox without allow-same-origin has an opaque origin, so targetOrigin must be "*".
+        // The receiver and this parent both validate source, instance id, version, type, and size.
+        iframeRef.current?.contentWindow?.postMessage(init, '*')
+      } else if (
+        Number.isFinite(data.score) &&
+        Number.isFinite(data.total) &&
+        Array.isArray(data.answers)
+      ) {
+        setResult({ score: Number(data.score), total: Number(data.total) })
+      }
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [expectedOrigin, instanceId, play.questions, play.supportsQuestionConfig])
+
+  const retry = () => {
+    setError(null)
+    setResult(null)
+    setLoading(true)
+    setRetryKey((value) => value + 1)
+  }
+
+  return (
+    <div ref={containerRef} className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-slate-950">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-slate-900 px-3 py-2 text-white">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold">{play.title}</p>
+          <p className="text-[11px] text-slate-400">{play.supportsQuestionConfig ? 'TeachFlow configurable' : 'Legacy HTML'}</p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {result && <span className="rounded-lg bg-emerald-500/20 px-2.5 py-1 text-xs text-emerald-200">{result.score}/{result.total}</span>}
+          <Button size="icon-sm" variant="ghost" className="text-white hover:bg-white/10" onClick={() => containerRef.current?.requestFullscreen()} title="Toàn màn hình">
+            <Fullscreen className="size-4" />
+          </Button>
+          <Button size="icon-sm" variant="ghost" className="text-white hover:bg-white/10" onClick={retry} title="Tải lại">
+            <RefreshCw className="size-4" />
+          </Button>
+          {onExit && <Button size="icon-sm" variant="ghost" className="text-white hover:bg-white/10" onClick={onExit} title="Thoát"><X className="size-4" /></Button>}
+        </div>
+      </div>
+      {loading && !error && (
+        <div className="absolute inset-0 z-10 grid place-items-center bg-slate-950/80 text-white">
+          <div className="flex items-center gap-3 text-sm"><Loader2 className="size-5 animate-spin text-teal-400" /> Đang tải trò chơi...</div>
+        </div>
+      )}
+      {error ? (
+        <div className="grid min-h-80 flex-1 place-items-center p-8 text-center text-white">
+          <div><AlertTriangle className="mx-auto size-10 text-amber-400" /><p className="mt-3 text-sm">{error}</p><Button className="mt-4 gap-2" onClick={retry}><RefreshCw className="size-4" /> Thử lại</Button></div>
+        </div>
+      ) : (
+        <iframe
+          key={retryKey}
+          ref={iframeRef}
+          title={play.title}
+          src={src}
+          sandbox="allow-scripts"
+          referrerPolicy="no-referrer"
+          allow="fullscreen"
+          className="min-h-80 flex-1 border-0 bg-white"
+          onLoad={() => { if (!play.supportsQuestionConfig) setLoading(false) }}
+          onError={() => { setLoading(false); setError('Không thể tải nội dung trò chơi') }}
+        />
+      )}
+    </div>
+  )
+}

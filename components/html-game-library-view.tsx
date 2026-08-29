@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   BookOpen,
   CheckCircle2,
+  Code2,
   Edit2,
+  Eye,
   Gamepad2,
   Info,
   Loader2,
@@ -33,19 +35,25 @@ import { getGrades, type GradeOption } from '@/services/classroom-service'
 import { getLessonPlans, type LessonPlan } from '@/services/lesson-service'
 import { getSubjects, type SubjectOption } from '@/services/teaching-assignment-service'
 import {
+  attachHtmlGameCustomizationToLessonPlan,
   attachHtmlGameToLessonPlan,
+  createOrGetHtmlGameCustomization,
   createHtmlGame,
   deleteHtmlGame,
   getHtmlGamePlay,
+  getHtmlGameCustomizationPlay,
   getHtmlGames,
   updateHtmlGame,
   updateHtmlGameStatus,
+  uploadHtmlGameSource,
   uploadHtmlGamePackage,
   type HtmlGame,
   type HtmlGamePayload,
   type HtmlGamePlay,
   type HtmlGameStatus,
 } from '@/services/html-game-service'
+import { GamePlayer } from '@/components/html-games/game-player'
+import { HtmlGameQuestionEditor } from '@/components/html-games/html-game-question-editor'
 
 type GameForm = {
   title: string
@@ -54,6 +62,7 @@ type GameForm = {
   thumbnailAlt: string
   gradeId: string
   subjectId: string
+  supportsQuestionConfig: boolean
 }
 
 const EMPTY_FORM: GameForm = {
@@ -63,6 +72,7 @@ const EMPTY_FORM: GameForm = {
   thumbnailAlt: '',
   gradeId: '',
   subjectId: '',
+  supportsQuestionConfig: false,
 }
 
 const STATUS_LABELS: Record<HtmlGameStatus, string> = {
@@ -98,6 +108,8 @@ function payloadFromForm(form: GameForm): HtmlGamePayload {
       : null,
     gradeId: form.gradeId || null,
     subjectId: form.subjectId || null,
+    supportsQuestionConfig: form.supportsQuestionConfig,
+    configSchemaVersion: form.supportsQuestionConfig ? 1 : null,
   }
 }
 
@@ -109,6 +121,7 @@ function formFromGame(game: HtmlGame): GameForm {
     thumbnailAlt: game.thumbnail?.alt || '',
     gradeId: game.gradeId || '',
     subjectId: game.subjectId || '',
+    supportsQuestionConfig: game.supportsQuestionConfig,
   }
 }
 
@@ -130,6 +143,8 @@ export function HtmlGameLibraryView() {
   const [editing, setEditing] = useState<HtmlGame | null>(null)
   const [form, setForm] = useState<GameForm>(EMPTY_FORM)
   const [packageFile, setPackageFile] = useState<File | null>(null)
+  const [contentMode, setContentMode] = useState<'FILE' | 'SOURCE'>('FILE')
+  const [sourceHtml, setSourceHtml] = useState('')
   const [saving, setSaving] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [detail, setDetail] = useState<HtmlGame | null>(null)
@@ -139,6 +154,7 @@ export function HtmlGameLibraryView() {
   const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([])
   const [selectedLessonPlanId, setSelectedLessonPlanId] = useState('')
   const [attachLoading, setAttachLoading] = useState(false)
+  const [questionTarget, setQuestionTarget] = useState<{ mode: 'ADMIN' | 'TEACHER'; id: string; title: string } | null>(null)
 
   const loadGames = useCallback(async () => {
     setLoading(true)
@@ -185,6 +201,8 @@ export function HtmlGameLibraryView() {
     setEditing(null)
     setForm(EMPTY_FORM)
     setPackageFile(null)
+    setContentMode('FILE')
+    setSourceHtml('')
     setFormOpen(true)
   }
 
@@ -192,6 +210,8 @@ export function HtmlGameLibraryView() {
     setEditing(game)
     setForm(formFromGame(game))
     setPackageFile(null)
+    setContentMode('FILE')
+    setSourceHtml('')
     setFormOpen(true)
   }
 
@@ -205,7 +225,8 @@ export function HtmlGameLibraryView() {
       const saved = editing
         ? await updateHtmlGame(editing.id, payloadFromForm(form))
         : await createHtmlGame(payloadFromForm(form))
-      if (packageFile) await uploadHtmlGamePackage(saved.id, packageFile)
+      if (contentMode === 'FILE' && packageFile) await uploadHtmlGamePackage(saved.id, packageFile)
+      if (contentMode === 'SOURCE' && sourceHtml.trim()) await uploadHtmlGameSource(saved.id, sourceHtml)
       toast.success(editing ? 'Đã cập nhật trò chơi' : 'Đã tạo trò chơi ở trạng thái bản nháp')
       setFormOpen(false)
       setRefreshKey((value) => value + 1)
@@ -246,11 +267,50 @@ export function HtmlGameLibraryView() {
   const openPlay = async (game: HtmlGame) => {
     setPlayLoading(true)
     try {
-      setPlay(await getHtmlGamePlay(game.id))
+      setPlay(
+        !isAdmin && game.customizationId
+          ? await getHtmlGameCustomizationPlay(game.customizationId)
+          : await getHtmlGamePlay(game.id),
+      )
     } catch (err: any) {
       toast.error(err?.message || 'Trò chơi chưa có gói HTML hợp lệ')
     } finally {
       setPlayLoading(false)
+    }
+  }
+
+  const previewSource = () => {
+    if (!sourceHtml.trim()) {
+      toast.error('Vui lòng dán mã HTML trước khi preview')
+      return
+    }
+    const playUrl = URL.createObjectURL(new Blob([sourceHtml], { type: 'text/html' }))
+    setPlay({
+      id: 'source-preview',
+      title: form.title || 'Preview mã HTML',
+      playUrl,
+      sandbox: 'allow-scripts',
+      referrerPolicy: 'no-referrer',
+      supportsQuestionConfig: false,
+      configSchemaVersion: null,
+    })
+  }
+
+  const closePlay = () => {
+    if (play?.playUrl.startsWith('blob:')) URL.revokeObjectURL(play.playUrl)
+    setPlay(null)
+  }
+
+  const openCustomization = async (game: HtmlGame) => {
+    setBusyId(game.id)
+    try {
+      const customization = await createOrGetHtmlGameCustomization(game.id)
+      setGames((current) => current.map((item) => item.id === game.id ? { ...item, customizationId: customization.id } : item))
+      setQuestionTarget({ mode: 'TEACHER', id: customization.id, title: customization.title || game.title })
+    } catch (err: any) {
+      toast.error(err?.message || 'Không thể tạo bản tùy chỉnh')
+    } finally {
+      setBusyId(null)
     }
   }
 
@@ -273,7 +333,11 @@ export function HtmlGameLibraryView() {
     if (!attachGame || !selectedLessonPlanId) return
     setAttachLoading(true)
     try {
-      await attachHtmlGameToLessonPlan(selectedLessonPlanId, attachGame.id)
+      if (attachGame.customizationId) {
+        await attachHtmlGameCustomizationToLessonPlan(selectedLessonPlanId, attachGame.customizationId)
+      } else {
+        await attachHtmlGameToLessonPlan(selectedLessonPlanId, attachGame.id)
+      }
       toast.success('Đã gắn trò chơi vào giáo án')
       setAttachGame(null)
     } catch (err: any) {
@@ -408,15 +472,27 @@ export function HtmlGameLibraryView() {
                     <Info className="size-3.5" /> Xem chi tiết
                   </Button>
                   {!isAdmin && (
-                    <Button size="sm" variant="outline" onClick={() => openAttach(game)} className="gap-1.5">
-                      <BookOpen className="size-3.5" /> Gắn vào giáo án
-                    </Button>
+                    <>
+                      {game.supportsQuestionConfig && (
+                        <Button size="sm" variant="outline" disabled={busyId === game.id} onClick={() => openCustomization(game)} className="gap-1.5 text-violet-700">
+                          <Edit2 className="size-3.5" /> Tùy chỉnh
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" onClick={() => openAttach(game)} className="gap-1.5">
+                        <BookOpen className="size-3.5" /> Gắn {game.customizationId ? 'bản tùy chỉnh' : 'vào giáo án'}
+                      </Button>
+                    </>
                   )}
                   {isAdmin && (
                     <>
                       <Button size="sm" variant="outline" onClick={() => openEdit(game)} className="gap-1.5">
                         <Edit2 className="size-3.5" /> Sửa
                       </Button>
+                      {game.supportsQuestionConfig && (
+                        <Button size="sm" variant="outline" onClick={() => setQuestionTarget({ mode: 'ADMIN', id: game.id, title: game.title })} className="gap-1.5 text-violet-700">
+                          <Code2 className="size-3.5" /> Câu hỏi mặc định
+                        </Button>
+                      )}
                       {game.status !== 'PUBLISHED' ? (
                         <Button size="sm" variant="outline" disabled={busyId === game.id} onClick={() => changeStatus(game, 'PUBLISHED')} className="gap-1.5 text-emerald-700">
                           <Send className="size-3.5" /> Xuất bản
@@ -449,6 +525,10 @@ export function HtmlGameLibraryView() {
               <Label htmlFor="game-title">Tên trò chơi *</Label>
               <Input id="game-title" maxLength={200} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
             </div>
+            <label className="flex items-start gap-3 rounded-xl border border-violet-200 bg-violet-50 p-4 sm:col-span-2">
+              <input type="checkbox" checked={form.supportsQuestionConfig} onChange={(event) => setForm({ ...form, supportsQuestionConfig: event.target.checked })} className="mt-0.5 size-4" />
+              <span><b className="block text-sm text-violet-900">TeachFlow configurable game</b><span className="text-xs leading-5 text-violet-700">Chỉ bật khi game tích hợp runtime bridge. Game legacy vẫn chơi được nhưng không có chỉnh sửa câu hỏi.</span></span>
+            </label>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="game-description">Mô tả</Label>
               <textarea id="game-description" maxLength={5000} rows={4} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} className="w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-teal-500" />
@@ -475,13 +555,14 @@ export function HtmlGameLibraryView() {
               <Label htmlFor="thumbnail-alt">Mô tả ảnh bìa</Label>
               <Input id="thumbnail-alt" maxLength={200} value={form.thumbnailAlt} onChange={(event) => setForm({ ...form, thumbnailAlt: event.target.value })} />
             </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="game-package">{editing ? 'Thay gói HTML/ZIP (không bắt buộc)' : 'Gói HTML/ZIP'}</Label>
-              <label htmlFor="game-package" className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600 hover:border-teal-400">
-                <Upload className="size-5 text-teal-600" />
-                <span className="min-w-0 truncate">{packageFile?.name || 'Chọn một tệp .html hoặc .zip (tối đa 25 MB)'}</span>
-              </label>
-              <input id="game-package" type="file" accept=".html,.zip,text/html,application/zip" className="sr-only" onChange={(event) => setPackageFile(event.target.files?.[0] || null)} />
+            <div className="space-y-3 sm:col-span-2">
+              <Label>Nội dung trò chơi</Label>
+              <div className="inline-flex rounded-lg bg-slate-100 p-1 text-sm"><button type="button" onClick={() => setContentMode('FILE')} className={`rounded-md px-3 py-1.5 ${contentMode === 'FILE' ? 'bg-white font-semibold text-teal-700 shadow-sm' : 'text-slate-500'}`}>Tải file</button><button type="button" onClick={() => setContentMode('SOURCE')} className={`rounded-md px-3 py-1.5 ${contentMode === 'SOURCE' ? 'bg-white font-semibold text-teal-700 shadow-sm' : 'text-slate-500'}`}>Dán mã</button></div>
+              {contentMode === 'FILE' ? (
+                <><label htmlFor="game-package" className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600 hover:border-teal-400"><Upload className="size-5 text-teal-600" /><span className="min-w-0 truncate">{packageFile?.name || `${editing ? 'Thay gói (không bắt buộc)' : 'Chọn'} .html hoặc .zip (tối đa 25 MB)`}</span></label><input id="game-package" type="file" accept=".html,.zip,text/html,application/zip" className="sr-only" onChange={(event) => setPackageFile(event.target.files?.[0] || null)} /></>
+              ) : (
+                <div className="space-y-2"><textarea value={sourceHtml} onChange={(event) => setSourceHtml(event.target.value)} maxLength={80000} rows={12} spellCheck={false} placeholder="<!doctype html>..." className="w-full rounded-xl border border-slate-800 bg-slate-950 p-4 font-mono text-xs leading-5 text-emerald-300 outline-none focus:border-teal-500" /><div className="flex items-center justify-between text-xs text-slate-400"><span>{new Blob([sourceHtml]).size.toLocaleString('vi-VN')} / 81.920 bytes</span><Button type="button" size="sm" variant="outline" onClick={previewSource} className="gap-2"><Eye className="size-3.5" /> Preview mã</Button></div></div>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -518,22 +599,13 @@ export function HtmlGameLibraryView() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(play)} onOpenChange={(open) => !open && setPlay(null)}>
+      <Dialog open={Boolean(play)} onOpenChange={(open) => !open && closePlay()}>
         <DialogContent size="full" className="h-[92dvh] p-4">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Gamepad2 className="size-4 text-teal-600" /> {play?.title}</DialogTitle>
             <DialogDescription>Nội dung chạy trong vùng cách ly; không được cấp quyền truy cập cùng nguồn.</DialogDescription>
           </DialogHeader>
-          {play && (
-            <iframe
-              title={play.title}
-              src={play.playUrl}
-              sandbox="allow-scripts allow-forms"
-              referrerPolicy="no-referrer"
-              className="min-h-0 flex-1 rounded-xl border border-slate-200 bg-white"
-              allow="fullscreen"
-            />
-          )}
+          {play && <GamePlayer play={play} onExit={closePlay} />}
         </DialogContent>
       </Dialog>
 
@@ -572,6 +644,19 @@ export function HtmlGameLibraryView() {
           <div className="flex items-center gap-3 rounded-xl bg-white px-5 py-3 text-sm font-medium shadow-xl"><Loader2 className="size-4 animate-spin text-teal-600" /> Đang mở trò chơi...</div>
         </div>
       )}
+      <HtmlGameQuestionEditor
+        target={questionTarget}
+        open={Boolean(questionTarget)}
+        onOpenChange={(open) => !open && setQuestionTarget(null)}
+        onPreview={() => {
+          if (!questionTarget) return
+          setPlayLoading(true)
+          const request = questionTarget.mode === 'ADMIN'
+            ? getHtmlGamePlay(questionTarget.id)
+            : getHtmlGameCustomizationPlay(questionTarget.id)
+          request.then(setPlay).catch((err: any) => toast.error(err?.message || 'Không thể preview')).finally(() => setPlayLoading(false))
+        }}
+      />
     </div>
   )
 }
