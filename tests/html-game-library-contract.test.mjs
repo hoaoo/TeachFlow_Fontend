@@ -60,6 +60,18 @@ test('runtime bridge validates message source, instance, version, type and size 
   assert.match(player, /data\.gameInstanceId !== instanceId/)
   assert.match(player, /type: 'TEACHFLOW_GAME_INIT'/)
   assert.match(player, /postMessage\(init, '\*'\)/)
+  assert.match(player, /TEACHFLOW_GAME_STARTED/)
+  assert.match(player, /TEACHFLOW_GAME_ANSWER_SUBMITTED/)
+  assert.match(player, /TEACHFLOW_GAME_COMPLETED/)
+  assert.match(player, /teachflow:html-game-event/)
+  assert.match(player, /GAME_COMPLETED/)
+})
+
+test('admin action uses the requested create-game label and refreshes after save', async () => {
+  const component = await readFile(new URL('../components/html-game-library-view.tsx', import.meta.url), 'utf8')
+
+  assert.match(component, /Tạo trò chơi/)
+  assert.match(component, /setRefreshKey\(\(value\) => value \+ 1\)/)
 })
 
 test('admin and teacher navigation expose the HTML game library', async () => {

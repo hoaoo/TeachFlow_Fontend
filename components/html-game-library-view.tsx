@@ -365,7 +365,7 @@ export function HtmlGameLibraryView() {
         </div>
         {isAdmin && (
           <Button onClick={openCreate} className="gap-2 self-start sm:self-auto">
-            <Plus className="size-4" /> Thêm trò chơi
+            <Plus className="size-4" /> Tạo trò chơi
           </Button>
         )}
       </div>
@@ -517,7 +517,7 @@ export function HtmlGameLibraryView() {
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent size="lg">
           <DialogHeader>
-            <DialogTitle>{editing ? 'Chỉnh sửa trò chơi HTML' : 'Thêm trò chơi HTML'}</DialogTitle>
+            <DialogTitle>{editing ? 'Chỉnh sửa trò chơi HTML' : 'Tạo trò chơi HTML'}</DialogTitle>
             <DialogDescription>Metadata được lưu trước; gói chạy chỉ nhận một tệp HTML hoặc ZIP có index.html ở thư mục gốc.</DialogDescription>
           </DialogHeader>
           <div className="grid min-h-0 gap-4 overflow-y-auto py-4 sm:grid-cols-2">

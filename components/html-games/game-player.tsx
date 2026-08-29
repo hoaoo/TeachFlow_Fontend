@@ -7,7 +7,20 @@ import type { HtmlGamePlay } from '@/services/html-game-service'
 
 const BRIDGE_VERSION = 1
 const MAX_MESSAGE_BYTES = 256 * 1024
-const ALLOWED_MESSAGES = new Set(['TEACHFLOW_GAME_READY', 'TEACHFLOW_GAME_RESULT'])
+const ALLOWED_MESSAGES = new Set([
+  'TEACHFLOW_GAME_READY',
+  'TEACHFLOW_GAME_STARTED',
+  'TEACHFLOW_GAME_ANSWER_SUBMITTED',
+  'TEACHFLOW_GAME_COMPLETED',
+  // Kept for games uploaded before the full lifecycle bridge was introduced.
+  'TEACHFLOW_GAME_RESULT',
+])
+
+type GameLifecycleEvent =
+  | 'GAME_READY'
+  | 'GAME_STARTED'
+  | 'ANSWER_SUBMITTED'
+  | 'GAME_COMPLETED'
 
 function payloadSize(value: unknown) {
   try {
@@ -17,6 +30,13 @@ function payloadSize(value: unknown) {
   }
 }
 
+function normalizeLifecycleEvent(type: string): GameLifecycleEvent {
+  if (type === 'TEACHFLOW_GAME_READY') return 'GAME_READY'
+  if (type === 'TEACHFLOW_GAME_STARTED') return 'GAME_STARTED'
+  if (type === 'TEACHFLOW_GAME_ANSWER_SUBMITTED') return 'ANSWER_SUBMITTED'
+  return 'GAME_COMPLETED'
+}
+
 export function GamePlayer({ play, onExit }: { play: HtmlGamePlay; onExit?: () => void }) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -24,6 +44,7 @@ export function GamePlayer({ play, onExit }: { play: HtmlGamePlay; onExit?: () =
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ score: number; total: number } | null>(null)
+  const [lifecycleEvent, setLifecycleEvent] = useState<GameLifecycleEvent | null>(null)
   const instanceId = useMemo(
     () => globalThis.crypto?.randomUUID?.() || `game-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     [retryKey],
@@ -45,35 +66,54 @@ export function GamePlayer({ play, onExit }: { play: HtmlGamePlay; onExit?: () =
 
       if (data.type === 'TEACHFLOW_GAME_READY') {
         setLoading(false)
-        if (!play.supportsQuestionConfig) return
         const init = {
           type: 'TEACHFLOW_GAME_INIT',
           version: BRIDGE_VERSION,
           gameInstanceId: instanceId,
-          questions: Array.isArray(play.questions) ? play.questions : [],
+          questions: play.supportsQuestionConfig && Array.isArray(play.questions) ? play.questions : [],
         }
         if (payloadSize(init) > MAX_MESSAGE_BYTES) {
           setError('Bộ câu hỏi vượt quá giới hạn truyền sang trò chơi')
           return
         }
-        // A sandbox without allow-same-origin has an opaque origin, so targetOrigin must be "*".
-        // The receiver and this parent both validate source, instance id, version, type, and size.
+        // The sandbox intentionally has an opaque origin. Both sides validate
+        // source, instance id, protocol version, message type, and payload size.
         iframeRef.current?.contentWindow?.postMessage(init, '*')
-      } else if (
-        Number.isFinite(data.score) &&
-        Number.isFinite(data.total) &&
-        Array.isArray(data.answers)
-      ) {
+      } else if (data.type === 'TEACHFLOW_GAME_STARTED') {
+        if (!Number.isFinite(data.startedAt)) return
+      } else if (data.type === 'TEACHFLOW_GAME_ANSWER_SUBMITTED') {
+        if (
+          typeof data.questionId !== 'string' ||
+          !data.questionId ||
+          !Object.prototype.hasOwnProperty.call(data, 'answer') ||
+          !Number.isFinite(data.submittedAt)
+        ) return
+      } else {
+        if (
+          !Number.isFinite(data.score) ||
+          !Number.isFinite(data.total) ||
+          data.score < 0 ||
+          data.total < 0 ||
+          data.score > data.total ||
+          !Array.isArray(data.answers)
+        ) return
         setResult({ score: Number(data.score), total: Number(data.total) })
       }
+
+      const normalizedType = normalizeLifecycleEvent(data.type)
+      setLifecycleEvent(normalizedType)
+      window.dispatchEvent(new CustomEvent('teachflow:html-game-event', {
+        detail: { type: normalizedType, gameId: play.id, gameInstanceId: instanceId },
+      }))
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
-  }, [expectedOrigin, instanceId, play.questions, play.supportsQuestionConfig])
+  }, [expectedOrigin, instanceId, play.id, play.questions, play.supportsQuestionConfig])
 
   const retry = () => {
     setError(null)
     setResult(null)
+    setLifecycleEvent(null)
     setLoading(true)
     setRetryKey((value) => value + 1)
   }
@@ -86,6 +126,7 @@ export function GamePlayer({ play, onExit }: { play: HtmlGamePlay; onExit?: () =
           <p className="text-[11px] text-slate-400">{play.supportsQuestionConfig ? 'TeachFlow configurable' : 'Legacy HTML'}</p>
         </div>
         <div className="flex items-center gap-1.5">
+          {lifecycleEvent && <span className="hidden rounded-lg bg-sky-500/15 px-2 py-1 text-[10px] font-semibold text-sky-200 sm:inline">{lifecycleEvent}</span>}
           {result && <span className="rounded-lg bg-emerald-500/20 px-2.5 py-1 text-xs text-emerald-200">{result.score}/{result.total}</span>}
           <Button size="icon-sm" variant="ghost" className="text-white hover:bg-white/10" onClick={() => containerRef.current?.requestFullscreen()} title="Toàn màn hình">
             <Fullscreen className="size-4" />
@@ -115,7 +156,7 @@ export function GamePlayer({ play, onExit }: { play: HtmlGamePlay; onExit?: () =
           referrerPolicy="no-referrer"
           allow="fullscreen"
           className="min-h-80 flex-1 border-0 bg-white"
-          onLoad={() => { if (!play.supportsQuestionConfig) setLoading(false) }}
+          onLoad={() => setLoading(false)}
           onError={() => { setLoading(false); setError('Không thể tải nội dung trò chơi') }}
         />
       )}
