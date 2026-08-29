@@ -97,7 +97,7 @@ jobs:
 
           $json = @{
             version = $version
-            notes = "TeachFlow Desktop ${version}: Bo sung hien thi version runtime, nang cap Resource & File Viewer V2, HTTP Range Streaming, va mo ung dung mac dinh tren Windows."
+            notes = "TeachFlow Desktop ${version}: Trinh chieu PowerPoint truc tiep trong ung dung voi dieu huong ban phim va che do toan man hinh."
             pub_date = $pubdate
             platforms = @{
               "windows-x86_64" = @{
@@ -124,6 +124,9 @@ jobs:
 
             ### Cài đặt
             - Tải installer: `TeachFlow_${{ steps.version.outputs.VERSION }}_x64-setup.exe`
+
+            ### Tính năng mới
+            - Trình chiếu tệp PowerPoint trực tiếp trong TeachFlow với điều hướng slide, bàn phím và toàn màn hình.
 
             ### Cập nhật tự động
             Ứng dụng TeachFlow đã cài đặt sẽ tự động nhận diện và cập nhật lên phiên bản này thông qua Tauri Updater.

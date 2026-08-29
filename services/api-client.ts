@@ -85,6 +85,7 @@ export async function fetchWithResilience(
       return response;
     } catch (error) {
       lastError = error;
+      if (options.signal?.aborted || (error instanceof DOMException && error.name === 'AbortError')) throw error;
       if (attempt >= delays.length - 1) throw error;
       emitConnectionEvent('teachflow:server-starting');
     } finally {
@@ -406,7 +407,7 @@ export const api = {
       headers,
     }),
 
-  getBlob: async (endpoint: string, headers?: HeadersInit): Promise<Blob> => {
+  getBlob: async (endpoint: string, headers?: HeadersInit, signal?: AbortSignal): Promise<Blob> => {
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${cleanEndpoint}`;
     const token = getAccessToken();
@@ -419,11 +420,12 @@ export const api = {
     if (token && !reqHeaders['Authorization'] && !reqHeaders['authorization']) {
       reqHeaders['Authorization'] = `Bearer ${token}`;
     }
-    const res = await fetch(url, {
+    const res = await fetchWithResilience(url, {
       method: 'GET',
       headers: reqHeaders,
       credentials: resolveCredentials(),
-    });
+      signal,
+    }, true);
     if (!res.ok) {
       throw new ApiError(`Tải tệp thất bại: ${res.statusText}`, res.status);
     }

@@ -67,3 +67,46 @@ test('frontend upload dialog validates extensions including documents, images, a
   assert.match(workspaceFile, /\.pptx/)
   assert.match(workspaceFile, /\.txt/)
 })
+
+test('PowerPoint resources expose direct presentation APIs and action without public URLs', () => {
+  const serviceFile = fs.readFileSync(
+    path.resolve(process.cwd(), 'services/resource-service.ts'),
+    'utf8',
+  )
+  const workspaceFile = fs.readFileSync(
+    path.resolve(process.cwd(), 'components/workspace-module.tsx'),
+    'utf8',
+  )
+
+  assert.match(serviceFile, /export async function getResourcePresentation/)
+  assert.match(serviceFile, /export async function getPresentationSlideBlob/)
+  assert.match(serviceFile, /api\.getBlob\(slideUrl, undefined, signal\)/)
+  assert.match(workspaceFile, /detected === 'POWERPOINT'[\s\S]*Trình chiếu/)
+  assert.match(workspaceFile, /<PowerPointPresentationViewer/)
+  assert.match(workspaceFile, /<Eye className="size-3" \/> Xem/)
+  assert.match(workspaceFile, /<Download className="size-3" \/> Tải xuống/)
+})
+
+test('presentation viewer supports lazy slides, navigation, fullscreen and lifecycle cleanup', () => {
+  const viewer = fs.readFileSync(
+    path.resolve(process.cwd(), 'components/resources/powerpoint-presentation-viewer.tsx'),
+    'utf8',
+  )
+
+  assert.match(viewer, /Slide \{currentSlide\} \/ \{metadata\?\.slideCount \|\| 0\}/)
+  assert.match(viewer, /\['ArrowRight', ' ', 'PageDown'\]/)
+  assert.match(viewer, /\['ArrowLeft', 'PageUp'\]/)
+  assert.match(viewer, /event\.key === 'Home'/)
+  assert.match(viewer, /event\.key === 'End'/)
+  assert.match(viewer, /event\.key === 'Escape'/)
+  assert.match(viewer, /requestFullscreen/)
+  assert.match(viewer, /exitFullscreen/)
+  assert.match(viewer, /fullscreenchange/)
+  assert.match(viewer, /ensureSlide\(currentSlide \+ 1/)
+  assert.match(viewer, /ensureSlide\(currentSlide - 1/)
+  assert.match(viewer, /URL\.revokeObjectURL/)
+  assert.match(viewer, /removeEventListener\('keydown'/)
+  assert.match(viewer, /removeEventListener\('fullscreenchange'/)
+  assert.match(viewer, /controller\.abort\(\)/)
+  assert.doesNotMatch(viewer, /slides\.map\([^)]*getPresentationSlideBlob/)
+})

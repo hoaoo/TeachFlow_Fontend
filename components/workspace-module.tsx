@@ -73,6 +73,7 @@ import {
 import { getLessonPlans, type LessonPlan } from '@/services/lesson-service'
 import { generateImage } from '@/services/ai-service'
 import { exportService } from '@/services/export-service'
+import { PowerPointPresentationViewer } from '@/components/resources/powerpoint-presentation-viewer'
 
 type View =
   | 'Chủ nhiệm'
@@ -541,6 +542,7 @@ function ResourcePreviewModal({
 function ResourceCard({
   resource,
   onPreview,
+  onPresent,
   onDownload,
   onAttach,
   onDelete,
@@ -549,6 +551,7 @@ function ResourceCard({
 }: {
   resource: TeachingResource
   onPreview: (res: TeachingResource) => void
+  onPresent: (res: TeachingResource) => void
   onDownload: (res: TeachingResource) => void
   onAttach: (res: TeachingResource) => void
   onDelete: (res: TeachingResource) => void
@@ -666,7 +669,7 @@ function ResourceCard({
 
         {/* 3. Actions */}
         <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Button
               variant="outline"
               size="sm"
@@ -675,6 +678,16 @@ function ResourceCard({
             >
               <Eye className="size-3" /> Xem
             </Button>
+            {detected === 'POWERPOINT' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onPresent(resource)}
+                className="h-7 px-2.5 text-xs font-semibold text-orange-700 border-orange-200 hover:bg-orange-50 gap-1 cursor-pointer shadow-2xs"
+              >
+                <Presentation className="size-3" /> Trình chiếu
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
@@ -682,7 +695,7 @@ function ResourceCard({
               title="Tải xuống tệp tin"
               className="h-7 px-2 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 gap-1 cursor-pointer"
             >
-              <Download className="size-3" /> Lưu...
+              <Download className="size-3" /> Tải xuống
             </Button>
           </div>
 
@@ -696,8 +709,13 @@ function ResourceCard({
               <DropdownMenuItem onClick={() => onPreview(resource)}>
                 <Eye className="size-3.5 mr-2 text-teal-600" /> Xem trực tiếp
               </DropdownMenuItem>
+              {detected === 'POWERPOINT' && (
+                <DropdownMenuItem onClick={() => onPresent(resource)}>
+                  <Presentation className="size-3.5 mr-2 text-orange-600" /> Trình chiếu
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => onDownload(resource)}>
-                <Download className="size-3.5 mr-2 text-slate-600" /> Lưu thành...
+                <Download className="size-3.5 mr-2 text-slate-600" /> Tải xuống
               </DropdownMenuItem>
               {isDesktop && onOpenDefault && (
                 <DropdownMenuItem onClick={() => onOpenDefault(resource)}>
@@ -732,6 +750,7 @@ export function WorkspaceModule({ view }: { view: View }) {
   const [notice, setNotice] = useState('')
   const [selected, setSelected] = useState<WorkspaceRecord | null>(null)
   const [selectedResource, setSelectedResource] = useState<TeachingResource | null>(null)
+  const [presentationResource, setPresentationResource] = useState<TeachingResource | null>(null)
   const [exportMenuId, setExportMenuId] = useState<string | null>(null)
   const [exportingKey, setExportingKey] = useState<string | null>(null)
 
@@ -1192,6 +1211,7 @@ export function WorkspaceModule({ view }: { view: View }) {
               key={res.id}
               resource={res}
               onPreview={(target) => setSelectedResource(target)}
+              onPresent={(target) => setPresentationResource(target)}
               onDownload={(target) => handleDownloadResource(target)}
               onAttach={(target) => {
                 setAttachTargetResource(target)
@@ -1650,6 +1670,13 @@ export function WorkspaceModule({ view }: { view: View }) {
             setSelectedResource(null)
             handleDeleteResource(target)
           }}
+        />
+      )}
+
+      {presentationResource && (
+        <PowerPointPresentationViewer
+          resource={presentationResource}
+          onClose={() => setPresentationResource(null)}
         />
       )}
 

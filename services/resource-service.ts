@@ -43,6 +43,13 @@ export interface TeachingResource {
   updatedAt?: string | null;
 }
 
+export interface PresentationMetadata {
+  resourceId: string;
+  title: string;
+  slideCount: number;
+  slides: Array<{ index: number; url: string }>;
+}
+
 export function detectResourceType(input: {
   mimeType?: string | null;
   extension?: string | null;
@@ -193,6 +200,23 @@ export async function getResources(params?: {
 
 export async function getResource(id: string): Promise<TeachingResource> {
   return api.get<TeachingResource>(`/resources/${id}`);
+}
+
+export async function getResourcePresentation(
+  id: string,
+  signal?: AbortSignal,
+): Promise<PresentationMetadata> {
+  return apiClient<PresentationMetadata>(`/resources/${id}/presentation`, { method: 'GET', signal });
+}
+
+export async function getPresentationSlideBlob(
+  slideUrl: string,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  if (!/^\/resources\/[0-9a-f-]+\/presentation\/slides\/\d+$/i.test(slideUrl)) {
+    throw new Error('Đường dẫn trang trình chiếu không hợp lệ');
+  }
+  return api.getBlob(slideUrl, undefined, signal);
 }
 
 export async function deleteResource(id: string): Promise<void> {
