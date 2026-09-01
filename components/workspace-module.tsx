@@ -858,6 +858,15 @@ export function WorkspaceModule({ view }: { view: View }) {
   const [dragActive, setDragActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const workspacePlaylist: PlaylistItem[] = useMemo(() => {
+    return resources.map((r) => ({
+      id: r.id,
+      title: r.name || r.title || 'Tài nguyên',
+      type: detectResourceType(r),
+      resource: r,
+    }))
+  }, [resources])
+
   // Attach to lesson plan state
   const [attachModalOpen, setAttachModalOpen] = useState(false)
   const [attachTargetResource, setAttachTargetResource] = useState<TeachingResource | null>(null)
@@ -1738,12 +1747,7 @@ export function WorkspaceModule({ view }: { view: View }) {
       {selectedResource && (
         <ResourceViewer
           resource={selectedResource}
-          playlist={resources.map((r) => ({
-            id: r.id,
-            title: r.name || r.title || 'Tài nguyên',
-            type: detectResourceType(r),
-            resource: r,
-          }))}
+          playlist={workspacePlaylist}
           currentIndex={Math.max(0, resources.findIndex((r) => r.id === selectedResource.id))}
           onIndexChange={(idx) => setSelectedResource(resources[idx] || null)}
           onClose={() => setSelectedResource(null)}

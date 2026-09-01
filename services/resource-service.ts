@@ -395,6 +395,16 @@ export function getResourceInlineUrl(id: string): string {
   return `${API_BASE_URL}/resources/${id}/file`;
 }
 
+export async function getResourceSignedUrl(id: string): Promise<string> {
+  try {
+    const res = await api.get<{ url: string }>(`/resources/${id}/presign-url`);
+    if (res && res.url) {
+      return res.url;
+    }
+  } catch {}
+  return `${API_BASE_URL}/resources/${id}/file`;
+}
+
 export function getResourcePreviewUrl(id: string): string {
   return `${API_BASE_URL}/resources/${id}/preview`;
 }

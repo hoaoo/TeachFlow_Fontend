@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   ArrowLeft,
@@ -33,11 +33,13 @@ import {
   getResourceFileArrayBuffer,
   getResourceFileBlob,
   getResourcePresentation,
+  getResourceSignedUrl,
   type CanonicalResourceType,
   type PresentationMetadata,
   type TeachingResource,
 } from '@/services/resource-service'
 import { getHtmlGamePlayUrl, type HtmlGame, type TeacherHtmlGame } from '@/services/html-game-service'
+import { ResourceErrorBoundary } from './resource-error-boundary'
 import mammoth from 'mammoth'
 import * as XLSX from 'xlsx'
 
@@ -81,7 +83,18 @@ function sanitizeDocxHtml(raw: string): string {
     .replace(/javascript:/gi, '')
 }
 
-export function ResourceViewer({
+export function ResourceViewer(props: ResourceViewerProps) {
+  return (
+    <ResourceErrorBoundary
+      fallbackTitle="Không thể hiển thị tài nguyên này."
+      onClose={props.onClose}
+    >
+      <ResourceViewerInner {...props} />
+    </ResourceErrorBoundary>
+  )
+}
+
+function ResourceViewerInner({
   resource,
   game,
   customGameId,
@@ -101,42 +114,43 @@ export function ResourceViewer({
   const mountedRef = useRef(true)
   const activeBlobUrlRef = useRef<string | null>(null)
 
-  // Determine active item from playlist or direct props
-  const activeItem: PlaylistItem =
-    playlist && playlist.length > 0 && currentIndex >= 0 && currentIndex < playlist.length
-      ? playlist[currentIndex]
-      : {
-          id: resource?.id || game?.id || worksheet?.id || 'res-single',
-          title: title || resource?.name || resource?.title || game?.title || worksheet?.title || 'Tài nguyên',
-          type: type || (resource ? detectResourceType(resource) : game ? 'HTML_GAME' : worksheet ? 'WORKSHEET' : 'OTHER'),
-          resource,
-          game,
-          customGameId,
-          worksheet,
-          url,
-        }
+  // 1. Stable Active Item derivation
+  const activeItem: PlaylistItem = useMemo(() => {
+    if (playlist && playlist.length > 0 && currentIndex >= 0 && currentIndex < playlist.length) {
+      return playlist[currentIndex]
+    }
+    return {
+      id: resource?.id || game?.id || worksheet?.id || 'res-single',
+      title: title || resource?.name || resource?.title || game?.title || worksheet?.title || 'Tài nguyên',
+      type: type || (resource ? detectResourceType(resource) : game ? 'HTML_GAME' : worksheet ? 'WORKSHEET' : 'OTHER'),
+      resource,
+      game,
+      customGameId,
+      worksheet,
+      url,
+    }
+  }, [playlist, currentIndex, resource, game, customGameId, worksheet, url, title, type])
 
-  const activeResource = activeItem.resource || (resource?.id === activeItem.id ? resource : null)
-  const activeGame = activeItem.game || (game?.id === activeItem.id ? game : null)
+  const activeResourceId = activeItem.resource?.id || (resource?.id === activeItem.id ? resource?.id : null)
+  const activeGameId = activeItem.game?.id || (game?.id === activeItem.id ? game?.id : null)
   const activeCustomGameId = activeItem.customGameId || customGameId
   const activeWorksheet = activeItem.worksheet || worksheet
 
-  const detectedType: string =
-    activeItem.type ||
-    (activeGame
-      ? 'HTML_GAME'
-      : activeWorksheet
-        ? 'WORKSHEET'
-        : activeResource
-          ? detectResourceType(activeResource)
-          : 'OTHER')
+  const detectedType: string = useMemo(() => {
+    if (activeItem.type) return activeItem.type
+    if (activeGameId) return 'HTML_GAME'
+    if (activeWorksheet) return 'WORKSHEET'
+    if (activeItem.resource) return detectResourceType(activeItem.resource)
+    if (resource) return detectResourceType(resource)
+    return 'OTHER'
+  }, [activeItem.type, activeItem.resource, activeGameId, activeWorksheet, resource])
 
-  const displayName = activeItem.title || activeResource?.name || activeResource?.title || 'Tài nguyên'
+  const displayName = activeItem.title || activeItem.resource?.name || 'Tài nguyên'
 
   // Viewer state
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null)
   const [docxHtml, setDocxHtml] = useState<string | null>(null)
   const [xlsxSheets, setXlsxSheets] = useState<Array<{ name: string; rows: any[][] }>>([])
   const [activeSheetIdx, setActiveSheetIdx] = useState(0)
@@ -146,35 +160,37 @@ export function ResourceViewer({
   const [pptMetadata, setPptMetadata] = useState<PresentationMetadata | null>(null)
   const [pptSlideUrls, setPptSlideUrls] = useState<Record<number, string>>({})
   const [pptCurrentSlide, setPptCurrentSlide] = useState(1)
-  const pptObjectUrlsRef = useRef(new Map<number, string>())
-  const pptPendingLoadsRef = useRef(new Map<number, Promise<void>>())
+  const pptObjectUrlsRef = useRef<Map<number, string>>(new Map())
+  const pptPendingLoadsRef = useRef<Map<number, Promise<void>>>(new Map())
 
   // Visual Controls state
   const [zoom, setZoom] = useState(100)
   const [rotation, setRotation] = useState(0)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [showPptThumbnails, setShowPptThumbnails] = useState(false)
 
-  // Cleanup blob URL on unmount / change
-  const cleanupBlob = useCallback(() => {
+  // Cleanup object URLs safely
+  const cleanupBlobs = useCallback(() => {
     if (activeBlobUrlRef.current) {
       URL.revokeObjectURL(activeBlobUrlRef.current)
       activeBlobUrlRef.current = null
     }
-    for (const url of pptObjectUrlsRef.current.values()) {
-      URL.revokeObjectURL(url)
+    for (const u of pptObjectUrlsRef.current.values()) {
+      URL.revokeObjectURL(u)
     }
     pptObjectUrlsRef.current.clear()
     pptPendingLoadsRef.current.clear()
   }, [])
 
-  // Load resource data
-  const loadActiveContent = useCallback(async (signal?: AbortSignal) => {
+  // 2. Load Content with Streaming & Memory Safety
+  useEffect(() => {
+    mountedRef.current = true
+    const controller = new AbortController()
+
     setLoading(true)
     setError(null)
-    cleanupBlob()
-    setBlobUrl(null)
+    cleanupBlobs()
+    setMediaUrl(null)
     setDocxHtml(null)
     setTxtContent(null)
     setXlsxSheets([])
@@ -184,93 +200,152 @@ export function ResourceViewer({
     setZoom(100)
     setRotation(0)
 
-    try {
-      if (detectedType === 'HTML_GAME' && (activeGame || activeResource)) {
-        const gameId = activeGame?.id || activeResource?.id || ''
-        const playUrl = await getHtmlGamePlayUrl(gameId, activeCustomGameId)
-        if (!mountedRef.current || signal?.aborted) return
-        setBlobUrl(playUrl)
-        setLoading(false)
-        return
-      }
+    async function load() {
+      try {
+        // A. HTML Game
+        if (detectedType === 'HTML_GAME' && (activeGameId || activeResourceId)) {
+          const gId = activeGameId || activeResourceId || ''
+          const playUrl = await getHtmlGamePlayUrl(gId, activeCustomGameId)
+          if (!mountedRef.current || controller.signal.aborted) return
+          setMediaUrl(playUrl)
+          setLoading(false)
+          return
+        }
 
-      if (detectedType === 'WORKSHEET' && activeWorksheet) {
-        setLoading(false)
-        return
-      }
+        // B. Worksheet
+        if (detectedType === 'WORKSHEET' && activeWorksheet) {
+          setLoading(false)
+          return
+        }
 
-      if (!activeResource?.id && !activeItem.url) {
-        throw new Error('Không tìm thấy thông tin tài nguyên để hiển thị.')
-      }
+        // C. Direct URL passed
+        if (activeItem.url) {
+          setMediaUrl(activeItem.url)
+          setLoading(false)
+          return
+        }
 
-      if (activeResource?.id) {
-        if (detectedType === 'IMAGE' || detectedType === 'VIDEO' || detectedType === 'AUDIO' || detectedType === 'PDF') {
-          const { blob } = await getResourceFileBlob(activeResource.id, signal)
-          if (!mountedRef.current || signal?.aborted) return
+        if (!activeResourceId) {
+          throw new Error('Không tìm thấy thông tin tài nguyên để hiển thị.')
+        }
+
+        // D. VIDEO & AUDIO: Stream with signed URL without heap memory exhaustion
+        if (detectedType === 'VIDEO' || detectedType === 'AUDIO') {
+          const streamUrl = await getResourceSignedUrl(activeResourceId)
+          if (!mountedRef.current || controller.signal.aborted) return
+          setMediaUrl(streamUrl)
+          setLoading(false)
+          return
+        }
+
+        // E. PDF: Stream with signed URL or inline blob
+        if (detectedType === 'PDF') {
+          try {
+            const streamUrl = await getResourceSignedUrl(activeResourceId)
+            if (!mountedRef.current || controller.signal.aborted) return
+            setMediaUrl(streamUrl)
+            setLoading(false)
+            return
+          } catch {
+            const { blob } = await getResourceFileBlob(activeResourceId, controller.signal)
+            if (!mountedRef.current || controller.signal.aborted) return
+            const objectUrl = URL.createObjectURL(blob)
+            activeBlobUrlRef.current = objectUrl
+            setMediaUrl(objectUrl)
+            setLoading(false)
+            return
+          }
+        }
+
+        // F. IMAGE: Fetch blob safely for authenticated viewing
+        if (detectedType === 'IMAGE') {
+          const { blob } = await getResourceFileBlob(activeResourceId, controller.signal)
+          if (!mountedRef.current || controller.signal.aborted) return
           const objectUrl = URL.createObjectURL(blob)
           activeBlobUrlRef.current = objectUrl
-          setBlobUrl(objectUrl)
-        } else if (detectedType === 'POWERPOINT') {
-          const presentation = await getResourcePresentation(activeResource.id, signal)
-          if (!mountedRef.current || signal?.aborted) return
+          setMediaUrl(objectUrl)
+          setLoading(false)
+          return
+        }
+
+        // G. POWERPOINT (PPT/PPTX)
+        if (detectedType === 'POWERPOINT') {
+          const presentation = await getResourcePresentation(activeResourceId, controller.signal)
+          if (!mountedRef.current || controller.signal.aborted) return
           if (!presentation.slideCount) {
             throw new Error('Không thể hiển thị tệp PowerPoint này (không tìm thấy slide).')
           }
           setPptMetadata(presentation)
 
-          // Load first slide
+          // Load slide 1
           const firstSlide = presentation.slides.find((s) => s.index === 1)
           if (firstSlide) {
-            const slideBlob = await getPresentationSlideBlob(firstSlide.url, signal)
-            if (!mountedRef.current || signal?.aborted) return
+            const slideBlob = await getPresentationSlideBlob(firstSlide.url, controller.signal)
+            if (!mountedRef.current || controller.signal.aborted) return
             const slideObjUrl = URL.createObjectURL(slideBlob)
             pptObjectUrlsRef.current.set(1, slideObjUrl)
             setPptSlideUrls({ 1: slideObjUrl })
           }
 
-          // Prefetch second slide
+          // Prefetch slide 2
           const secondSlide = presentation.slides.find((s) => s.index === 2)
           if (secondSlide) {
-            void getPresentationSlideBlob(secondSlide.url, signal).then((blob) => {
-              if (!mountedRef.current || signal?.aborted) return
+            void getPresentationSlideBlob(secondSlide.url, controller.signal).then((blob) => {
+              if (!mountedRef.current || controller.signal.aborted) return
               const u = URL.createObjectURL(blob)
               pptObjectUrlsRef.current.set(2, u)
               setPptSlideUrls((prev) => ({ ...prev, 2: u }))
             }).catch(() => undefined)
           }
-        } else if (detectedType === 'WORD') {
-          const { buffer } = await getResourceFileArrayBuffer(activeResource.id, signal)
-          if (!mountedRef.current || signal?.aborted) return
+
+          setLoading(false)
+          return
+        }
+
+        // H. WORD (DOCX)
+        if (detectedType === 'WORD') {
+          const { buffer } = await getResourceFileArrayBuffer(activeResourceId, controller.signal)
+          if (!mountedRef.current || controller.signal.aborted) return
           const mammothResult = await mammoth.convertToHtml({ arrayBuffer: buffer })
           const clean = sanitizeDocxHtml(mammothResult.value || '')
           setDocxHtml(clean || '<p class="text-slate-400 italic">Tài liệu không có nội dung văn bản.</p>')
-        } else if (detectedType === 'EXCEL') {
-          const { buffer } = await getResourceFileArrayBuffer(activeResource.id, signal)
-          if (!mountedRef.current || signal?.aborted) return
+          setLoading(false)
+          return
+        }
+
+        // I. EXCEL (XLSX)
+        if (detectedType === 'EXCEL') {
+          const { buffer } = await getResourceFileArrayBuffer(activeResourceId, controller.signal)
+          if (!mountedRef.current || controller.signal.aborted) return
           const wb = XLSX.read(buffer, { type: 'array' })
           const sheets = wb.SheetNames.map((name) => ({
             name,
             rows: XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' }) as any[][],
           }))
           setXlsxSheets(sheets)
-        } else if (detectedType === 'TEXT') {
-          const { blob } = await getResourceFileBlob(activeResource.id, signal)
-          if (!mountedRef.current || signal?.aborted) return
+          setLoading(false)
+          return
+        }
+
+        // J. TEXT
+        if (detectedType === 'TEXT') {
+          const { blob } = await getResourceFileBlob(activeResourceId, controller.signal)
+          if (!mountedRef.current || controller.signal.aborted) return
           const text = await blob.text()
           setTxtContent(text)
-        } else {
-          // Fallback direct blob
-          const { blob } = await getResourceFileBlob(activeResource.id, signal)
-          if (!mountedRef.current || signal?.aborted) return
-          const objectUrl = URL.createObjectURL(blob)
-          activeBlobUrlRef.current = objectUrl
-          setBlobUrl(objectUrl)
+          setLoading(false)
+          return
         }
-      } else if (activeItem.url) {
-        setBlobUrl(activeItem.url)
-      }
-    } catch (err: any) {
-      if (mountedRef.current && !signal?.aborted) {
+
+        // K. Fallback default
+        const { blob } = await getResourceFileBlob(activeResourceId, controller.signal)
+        if (!mountedRef.current || controller.signal.aborted) return
+        const objectUrl = URL.createObjectURL(blob)
+        activeBlobUrlRef.current = objectUrl
+        setMediaUrl(objectUrl)
+        setLoading(false)
+      } catch (err: any) {
+        if (!mountedRef.current || controller.signal.aborted) return
         const msg = err?.message || ''
         if (msg.includes('403') || msg.includes('quyền')) {
           setError('Bạn không có quyền truy cập tài nguyên này.')
@@ -283,24 +358,18 @@ export function ResourceViewer({
         } else {
           setError(msg || 'Không thể tải bản xem trước tài nguyên.')
         }
-      }
-    } finally {
-      if (mountedRef.current && !signal?.aborted) {
         setLoading(false)
       }
     }
-  }, [activeItem.id, activeItem.url, activeResource, activeGame, activeCustomGameId, activeWorksheet, detectedType, cleanupBlob])
 
-  useEffect(() => {
-    mountedRef.current = true
-    const controller = new AbortController()
-    void loadActiveContent(controller.signal)
+    void load()
+
     return () => {
       mountedRef.current = false
       controller.abort()
-      cleanupBlob()
+      cleanupBlobs()
     }
-  }, [loadActiveContent, cleanupBlob])
+  }, [activeResourceId, activeGameId, activeCustomGameId, activeItem.url, detectedType, activeWorksheet, cleanupBlobs])
 
   // Slide loader for PPTX
   const ensurePptSlide = useCallback(
@@ -338,23 +407,28 @@ export function ResourceViewer({
     [pptMetadata, ensurePptSlide],
   )
 
-  // Fullscreen handler
+  // Fullscreen Handler (Safe Browser & Desktop)
   const toggleFullscreen = useCallback(async () => {
-    if (!containerRef.current) return
+    if (!containerRef.current || typeof document === 'undefined') return
     try {
       if (!document.fullscreenElement) {
-        await containerRef.current.requestFullscreen()
-        setIsFullscreen(true)
+        if (containerRef.current.requestFullscreen) {
+          await containerRef.current.requestFullscreen()
+          setIsFullscreen(true)
+        }
       } else {
-        await document.exitFullscreen()
-        setIsFullscreen(false)
+        if (document.exitFullscreen) {
+          await document.exitFullscreen()
+          setIsFullscreen(false)
+        }
       }
     } catch {
-      setIsFullscreen(!isFullscreen)
+      setIsFullscreen((prev) => !prev)
     }
-  }, [isFullscreen])
+  }, [])
 
   useEffect(() => {
+    if (typeof document === 'undefined') return
     const handleFsChange = () => {
       setIsFullscreen(!!document.fullscreenElement)
     }
@@ -364,13 +438,19 @@ export function ResourceViewer({
 
   // Keyboard navigation
   useEffect(() => {
+    if (typeof window === 'undefined') return
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Do not trigger if typing in input/textarea
-      const tag = (document.activeElement?.tagName || '').toLowerCase()
-      if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+      const activeTag = (document.activeElement?.tagName || '').toLowerCase()
+      const isInput =
+        activeTag === 'input' ||
+        activeTag === 'textarea' ||
+        activeTag === 'select' ||
+        document.activeElement?.getAttribute('contenteditable') === 'true'
+
+      if (isInput) return
 
       if (e.key === 'Escape') {
-        if (isFullscreen) {
+        if (document.fullscreenElement) {
           void document.exitFullscreen().catch(() => setIsFullscreen(false))
         } else if (onClose) {
           onClose()
@@ -382,7 +462,7 @@ export function ResourceViewer({
           } else if (playlist && onIndexChange && currentIndex < playlist.length - 1) {
             onIndexChange(currentIndex + 1)
           }
-        } else if (playlist && onIndexChange && currentIndex < playlist.length - 1) {
+        } else if (playlist && onIndexChange && currentIndex < (playlist.length - 1)) {
           onIndexChange(currentIndex + 1)
         }
       } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
@@ -400,7 +480,7 @@ export function ResourceViewer({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [detectedType, pptMetadata, pptCurrentSlide, goToPptSlide, playlist, currentIndex, onIndexChange, isFullscreen, onClose])
+  }, [detectedType, pptMetadata, pptCurrentSlide, goToPptSlide, playlist, currentIndex, onIndexChange, onClose])
 
   // Download handler
   const handleDownload = () => {
@@ -408,18 +488,18 @@ export function ResourceViewer({
       onDownload()
       return
     }
-    if (blobUrl) {
+    if (mediaUrl) {
       const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = activeResource?.originalFileName || `${displayName}.${detectedType.toLowerCase()}`
+      a.href = mediaUrl
+      a.download = activeItem.resource?.originalFileName || `${displayName}.${detectedType.toLowerCase()}`
       a.click()
     }
   }
 
   // Print handler
   const handlePrint = () => {
-    if (blobUrl && detectedType === 'PDF') {
-      const w = window.open(blobUrl, '_blank')
+    if (mediaUrl && detectedType === 'PDF') {
+      const w = window.open(mediaUrl, '_blank')
       if (w) {
         w.focus()
         setTimeout(() => w.print(), 500)
@@ -444,9 +524,8 @@ export function ResourceViewer({
     >
       {/* Top Header */}
       {showControls && (
-        <div className="flex items-center justify-between px-4 py-3 bg-slate-900/90 border-b border-slate-800 shrink-0 z-20">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900/90 border-b border-slate-800 shrink-0 z-20">
           <div className="flex items-center gap-3 min-w-0">
-            {/* Back / Close button */}
             {onClose && (
               <Button
                 size="sm"
@@ -460,7 +539,6 @@ export function ResourceViewer({
               </Button>
             )}
 
-            {/* Icon & Title */}
             <div className="flex items-center gap-2 min-w-0">
               {detectedType === 'POWERPOINT' && <Presentation className="size-4 text-orange-400 shrink-0" />}
               {detectedType === 'PDF' && <FileText className="size-4 text-rose-400 shrink-0" />}
@@ -489,7 +567,6 @@ export function ResourceViewer({
 
           {/* Quick Toolbar */}
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* PPTX Slide Indicator */}
             {detectedType === 'POWERPOINT' && pptMetadata && (
               <div className="flex items-center gap-1 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700 text-xs font-semibold mr-1">
                 <button
@@ -514,12 +591,11 @@ export function ResourceViewer({
               </div>
             )}
 
-            {/* Image / Docx / PDF Zoom controls */}
             {(detectedType === 'IMAGE' || detectedType === 'WORD') && (
               <div className="hidden sm:flex items-center gap-1 bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700">
                 <button
                   onClick={() => setZoom((z) => Math.max(50, z - 25))}
-                  className="p-1 text-slate-300 hover:text-white"
+                  className="p-1 text-slate-300 hover:text-white cursor-pointer"
                   title="Thu nhỏ"
                 >
                   <ZoomOut className="size-3.5" />
@@ -527,7 +603,7 @@ export function ResourceViewer({
                 <span className="text-[11px] font-mono text-slate-300 min-w-[36px] text-center">{zoom}%</span>
                 <button
                   onClick={() => setZoom((z) => Math.min(300, z + 25))}
-                  className="p-1 text-slate-300 hover:text-white"
+                  className="p-1 text-slate-300 hover:text-white cursor-pointer"
                   title="Phóng to"
                 >
                   <ZoomIn className="size-3.5" />
@@ -535,7 +611,7 @@ export function ResourceViewer({
                 {detectedType === 'IMAGE' && (
                   <button
                     onClick={() => setRotation((r) => (r + 90) % 360)}
-                    className="p-1 text-slate-300 hover:text-white ml-1 border-l border-slate-700 pl-1.5"
+                    className="p-1 text-slate-300 hover:text-white ml-1 border-l border-slate-700 pl-1.5 cursor-pointer"
                     title="Xoay 90°"
                   >
                     <RotateCw className="size-3.5" />
@@ -544,7 +620,6 @@ export function ResourceViewer({
               </div>
             )}
 
-            {/* Video / Audio Speed Control */}
             {(detectedType === 'VIDEO' || detectedType === 'AUDIO') && (
               <select
                 value={playbackSpeed}
@@ -561,48 +636,44 @@ export function ResourceViewer({
               </select>
             )}
 
-            {/* Print button (PDF) */}
             {detectedType === 'PDF' && (
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={handlePrint}
-                className="text-slate-300 hover:text-white hover:bg-slate-800 p-1.5 h-8"
+                className="text-slate-300 hover:text-white hover:bg-slate-800 p-1.5 h-8 cursor-pointer"
                 title="In tài liệu"
               >
                 <Printer className="size-4" />
               </Button>
             )}
 
-            {/* Download button */}
             <Button
               size="sm"
               variant="ghost"
               onClick={handleDownload}
-              className="text-slate-300 hover:text-white hover:bg-slate-800 p-1.5 h-8"
+              className="text-slate-300 hover:text-white hover:bg-slate-800 p-1.5 h-8 cursor-pointer"
               title="Tải xuống tệp gốc"
             >
               <Download className="size-4" />
             </Button>
 
-            {/* Fullscreen toggle */}
             <Button
               size="sm"
               variant="ghost"
               onClick={toggleFullscreen}
-              className="text-slate-300 hover:text-white hover:bg-slate-800 p-1.5 h-8"
+              className="text-slate-300 hover:text-white hover:bg-slate-800 p-1.5 h-8 cursor-pointer"
               title={isFullscreen ? 'Thu nhỏ (Esc)' : 'Toàn màn hình (F)'}
             >
               {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
             </Button>
 
-            {/* Close button for modals */}
             {!isEmbedded && onClose && (
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={onClose}
-                className="text-slate-400 hover:text-rose-400 hover:bg-slate-800 p-1.5 h-8 ml-1"
+                className="text-slate-400 hover:text-rose-400 hover:bg-slate-800 p-1.5 h-8 ml-1 cursor-pointer"
                 title="Đóng (Esc)"
               >
                 <X className="size-5" />
@@ -614,7 +685,6 @@ export function ResourceViewer({
 
       {/* Main Presentation Viewport */}
       <div className="relative flex-1 w-full h-full min-h-0 flex items-center justify-center overflow-hidden p-2 sm:p-4 bg-slate-950">
-        {/* Previous / Next Playlist Floaters */}
         {hasPlaylist && canGoPrev && (
           <button
             onClick={() => onIndexChange?.(currentIndex - 1)}
@@ -635,7 +705,6 @@ export function ResourceViewer({
           </button>
         )}
 
-        {/* Loading Indicator */}
         {loading && (
           <div className="flex flex-col items-center gap-3 text-slate-400 py-16">
             <Loader2 className="size-10 animate-spin text-teal-500" />
@@ -643,7 +712,6 @@ export function ResourceViewer({
           </div>
         )}
 
-        {/* Error Fallback */}
         {error && !loading && (
           <div className="flex flex-col items-center gap-4 text-center max-w-md p-6 bg-slate-900 rounded-2xl border border-slate-800 text-slate-300">
             <AlertCircle className="size-12 text-rose-500" />
@@ -656,14 +724,6 @@ export function ResourceViewer({
             <div className="flex items-center gap-3 mt-2">
               <Button
                 size="sm"
-                variant="outline"
-                onClick={() => void loadActiveContent()}
-                className="gap-1.5 text-xs text-slate-200 border-slate-700 hover:bg-slate-800"
-              >
-                <RefreshCw className="size-3.5" /> Thử lại
-              </Button>
-              <Button
-                size="sm"
                 onClick={handleDownload}
                 className="gap-1.5 text-xs bg-teal-600 hover:bg-teal-700 text-white font-semibold"
               >
@@ -673,14 +733,13 @@ export function ResourceViewer({
           </div>
         )}
 
-        {/* Content Renderers */}
         {!loading && !error && (
           <div className="w-full h-full flex items-center justify-center overflow-auto">
             {/* 1. IMAGE VIEWER */}
-            {detectedType === 'IMAGE' && blobUrl && (
+            {detectedType === 'IMAGE' && mediaUrl && (
               <div className="w-full h-full flex items-center justify-center overflow-auto p-2">
                 <img
-                  src={blobUrl}
+                  src={mediaUrl}
                   alt={displayName}
                   style={{
                     transform: `scale(${zoom / 100}) rotate(${rotation}deg)`,
@@ -695,10 +754,10 @@ export function ResourceViewer({
             )}
 
             {/* 2. PDF VIEWER */}
-            {detectedType === 'PDF' && blobUrl && (
+            {detectedType === 'PDF' && mediaUrl && (
               <div className="w-full h-full rounded-xl overflow-hidden bg-slate-900 border border-slate-800 flex flex-col">
                 <iframe
-                  src={`${blobUrl}#toolbar=1&navpanes=0&scrollbar=1`}
+                  src={`${mediaUrl}#toolbar=1&navpanes=0&scrollbar=1`}
                   className="w-full h-full border-none rounded-xl"
                   title={displayName}
                 />
@@ -719,7 +778,6 @@ export function ResourceViewer({
             {/* 4. PPTX PRESENTATION VIEWER */}
             {detectedType === 'POWERPOINT' && pptMetadata && (
               <div className="w-full h-full flex flex-col items-center justify-center relative">
-                {/* Slide Canvas */}
                 <div className="relative flex-1 w-full max-h-[82vh] flex items-center justify-center p-2">
                   {pptSlideUrls[pptCurrentSlide] ? (
                     <img
@@ -734,7 +792,6 @@ export function ResourceViewer({
                     </div>
                   )}
 
-                  {/* On-slide nav buttons */}
                   <button
                     onClick={() => goToPptSlide(pptCurrentSlide - 1)}
                     disabled={pptCurrentSlide <= 1}
@@ -754,7 +811,6 @@ export function ResourceViewer({
                   </button>
                 </div>
 
-                {/* Thumbnails Rail (Bottom) */}
                 <div className="w-full py-2 px-4 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-2 overflow-x-auto py-1 max-w-[85vw]">
                     {pptMetadata.slides.map((s) => {
@@ -791,22 +847,21 @@ export function ResourceViewer({
               </div>
             )}
 
-            {/* 5. VIDEO VIEWER */}
-            {detectedType === 'VIDEO' && blobUrl && (
+            {/* 5. VIDEO VIEWER (HTTP RANGE STREAMING) */}
+            {detectedType === 'VIDEO' && mediaUrl && (
               <div className="w-full h-full max-h-[85vh] max-w-5xl flex items-center justify-center p-2">
                 <video
-                  src={blobUrl}
+                  src={mediaUrl}
                   controls
                   autoPlay
                   playsInline
-                  playbackRate={playbackSpeed}
                   className="w-full h-full max-h-[82vh] object-contain rounded-2xl bg-black border border-slate-800 shadow-2xl"
                 />
               </div>
             )}
 
             {/* 6. AUDIO VIEWER */}
-            {detectedType === 'AUDIO' && blobUrl && (
+            {detectedType === 'AUDIO' && mediaUrl && (
               <div className="flex flex-col items-center justify-center gap-6 p-8 bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl max-w-lg w-full">
                 <div className="size-24 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 animate-pulse">
                   <Headphones className="size-12" />
@@ -815,15 +870,15 @@ export function ResourceViewer({
                   <h3 className="font-bold text-white text-base">{displayName}</h3>
                   <p className="text-xs text-slate-400 mt-1">Học liệu âm thanh bài giảng</p>
                 </div>
-                <audio src={blobUrl} controls autoPlay className="w-full" playbackRate={playbackSpeed} />
+                <audio src={mediaUrl} controls autoPlay className="w-full" />
               </div>
             )}
 
-            {/* 7. HTML GAME VIEWER */}
-            {detectedType === 'HTML_GAME' && blobUrl && (
+            {/* 7. HTML GAME VIEWER (SANDBOXED IFRAME) */}
+            {detectedType === 'HTML_GAME' && mediaUrl && (
               <div className="w-full h-full rounded-2xl overflow-hidden bg-black border border-slate-800 shadow-2xl flex flex-col">
                 <iframe
-                  src={blobUrl}
+                  src={mediaUrl}
                   sandbox="allow-scripts allow-same-origin allow-forms"
                   className="w-full h-full border-none"
                   title={displayName}

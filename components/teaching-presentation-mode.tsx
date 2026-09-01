@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   ArrowLeft,
@@ -33,6 +33,7 @@ import { Button } from '@/components/ui/button'
 import { getLessonPlanById, type LessonPlan, type Activity } from '@/services/lesson-service'
 import { getStudents, type StudentRecord } from '@/services/student-service'
 import { ResourceViewer, type PlaylistItem } from '@/components/resources/resource-viewer'
+import { ResourceErrorBoundary } from '@/components/resources/resource-error-boundary'
 import { detectResourceType } from '@/services/resource-service'
 import { toast } from 'sonner'
 
@@ -48,7 +49,22 @@ export interface TeachingSessionContext {
   endTime?: string
 }
 
-export function TeachingPresentationMode({
+export function TeachingPresentationMode(props: {
+  session: TeachingSessionContext
+  onClose: () => void
+  onFinish?: () => void
+}) {
+  return (
+    <ResourceErrorBoundary
+      fallbackTitle="Đã xảy ra sự cố trong chế độ tiết dạy."
+      onClose={props.onClose}
+    >
+      <TeachingPresentationModeInner {...props} />
+    </ResourceErrorBoundary>
+  )
+}
+
+function TeachingPresentationModeInner({
   session,
   onClose,
   onFinish,
@@ -83,7 +99,7 @@ export function TeachingPresentationMode({
   const [isFullscreen, setIsFullscreen] = useState(false)
 
   // ─── QUICK TOOLS STATE ─────────────────────────────────────────────────────
-  // 1. Clock
+  // 1. Clock (isolated state)
   const [timeStr, setTimeStr] = useState('')
   useEffect(() => {
     const updateTime = () => {
@@ -157,13 +173,14 @@ export function TeachingPresentationMode({
     }, 100)
   }
 
-  // ─── LOAD LESSON PLAN & STUDENTS ──────────────────────────────────────────
+  // ─── LOAD LESSON PLAN & STUDENTS (STABLE DEPENDENCY) ──────────────────────
+  const { lessonPlanId, classroomId } = session
   useEffect(() => {
     mountedRef.current = true
     setLoading(true)
     setError(null)
 
-    getLessonPlanById(session.lessonPlanId)
+    getLessonPlanById(lessonPlanId)
       .then((fullPlan) => {
         if (!mountedRef.current) return
         setLesson(fullPlan)
@@ -171,7 +188,6 @@ export function TeachingPresentationMode({
         // Build presentation playlist from attached resources & games
         const items: PlaylistItem[] = []
 
-        // 1. Attached resources
         if (Array.isArray(fullPlan.resources)) {
           for (const item of fullPlan.resources) {
             const res = (item as any).resource || item
@@ -186,7 +202,6 @@ export function TeachingPresentationMode({
           }
         }
 
-        // 2. Attached HTML games
         if (Array.isArray(fullPlan.htmlGames)) {
           for (const item of fullPlan.htmlGames) {
             const g = (item as any).htmlGame || item
@@ -217,6 +232,22 @@ export function TeachingPresentationMode({
         }
 
         setPlaylist(items)
+
+        // Load students for target classroom
+        const targetClassId = classroomId || fullPlan.classroomId
+        if (targetClassId) {
+          setLoadingStudents(true)
+          getStudents({ classroomId: targetClassId })
+            .then((res) => {
+              if (!mountedRef.current) return
+              const activeStudents = (res.students || []).filter((s) => s.status !== 'TRANSFER_OUT')
+              setStudents(activeStudents)
+            })
+            .catch(() => undefined)
+            .finally(() => {
+              if (mountedRef.current) setLoadingStudents(false)
+            })
+        }
       })
       .catch((err) => {
         if (!mountedRef.current) return
@@ -226,43 +257,44 @@ export function TeachingPresentationMode({
         if (mountedRef.current) setLoading(false)
       })
 
-    // Load students for the session's classroom
-    const targetClassId = session.classroomId || lesson?.classroomId
-    if (targetClassId) {
-      setLoadingStudents(true)
-      getStudents({ classroomId: targetClassId })
-        .then((res) => {
-          if (!mountedRef.current) return
-          const activeStudents = (res.students || []).filter((s) => s.status !== 'TRANSFER_OUT')
-          setStudents(activeStudents)
-        })
-        .catch(() => undefined)
-        .finally(() => {
-          if (mountedRef.current) setLoadingStudents(false)
-        })
+    return () => {
+      mountedRef.current = false
     }
-  }, [session.lessonPlanId, session.classroomId, lesson?.classroomId])
+  }, [lessonPlanId, classroomId])
 
-  // Fullscreen toggle
+  // Fullscreen toggle (Safe Browser & Desktop)
   const toggleFullscreen = useCallback(async () => {
-    if (!containerRef.current) return
+    if (!containerRef.current || typeof document === 'undefined') return
     try {
       if (!document.fullscreenElement) {
-        await containerRef.current.requestFullscreen()
-        setIsFullscreen(true)
+        if (containerRef.current.requestFullscreen) {
+          await containerRef.current.requestFullscreen()
+          setIsFullscreen(true)
+        }
       } else {
-        await document.exitFullscreen()
-        setIsFullscreen(false)
+        if (document.exitFullscreen) {
+          await document.exitFullscreen()
+          setIsFullscreen(false)
+        }
       }
     } catch {
-      setIsFullscreen(!isFullscreen)
+      setIsFullscreen((prev) => !prev)
     }
-  }, [isFullscreen])
+  }, [])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const handleFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+    document.addEventListener('fullscreenchange', handleFsChange)
+    return () => document.removeEventListener('fullscreenchange', handleFsChange)
+  }, [])
 
   // Handle Exit Confirmation
   const handleExit = () => {
     if (window.confirm('Bạn có chắc chắn muốn thoát chế độ trình chiếu tiết dạy?')) {
-      if (document.fullscreenElement) {
+      if (typeof document !== 'undefined' && document.fullscreenElement) {
         document.exitFullscreen().catch(() => undefined)
       }
       onClose()
@@ -272,7 +304,7 @@ export function TeachingPresentationMode({
   // Handle Finish Lesson
   const handleFinishLesson = () => {
     if (window.confirm('Xác nhận hoàn thành tiết dạy và lưu tiến trình?')) {
-      if (document.fullscreenElement) {
+      if (typeof document !== 'undefined' && document.fullscreenElement) {
         document.exitFullscreen().catch(() => undefined)
       }
       toast.success('🎉 Tiết dạy đã hoàn thành xuất sắc!')
@@ -316,16 +348,14 @@ export function TeachingPresentationMode({
       ref={containerRef}
       className="fixed inset-0 z-50 flex flex-col bg-slate-950 text-white select-none overflow-hidden font-sans"
     >
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* 1. TOP HEADER (Distraction-Free Classroom Bar) */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
       <header className="flex items-center justify-between px-4 py-2.5 bg-slate-900 border-b border-slate-800 shrink-0 z-30">
         <div className="flex items-center gap-3 min-w-0">
           <Button
             size="sm"
             variant="ghost"
             onClick={handleExit}
-            className="text-slate-300 hover:text-white hover:bg-slate-800 gap-1.5 h-8 font-semibold"
+            className="text-slate-300 hover:text-white hover:bg-slate-800 gap-1.5 h-8 font-semibold cursor-pointer"
             title="Thoát chế độ tiết dạy"
           >
             <ArrowLeft className="size-4" />
@@ -334,7 +364,6 @@ export function TeachingPresentationMode({
 
           <div className="h-4 w-px bg-slate-800" />
 
-          {/* Lesson Info */}
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-xs font-bold text-teal-400 bg-teal-950/80 border border-teal-800/80 px-2 py-0.5 rounded-md shrink-0">
               {session.subjectName || lesson?.subject || 'Môn học'}
@@ -348,20 +377,17 @@ export function TeachingPresentationMode({
           </div>
         </div>
 
-        {/* Quick Teaching Tools */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Realtime Clock */}
           <div className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700/80 text-xs font-mono font-bold text-slate-200">
             <Clock className="size-3.5 text-teal-400" />
             <span>{timeStr}</span>
           </div>
 
-          {/* Countdown Timer Button */}
           <Button
             size="sm"
             variant="outline"
             onClick={() => setTimerModalOpen(true)}
-            className={`text-xs h-8 gap-1.5 font-semibold border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 ${
+            className={`text-xs h-8 gap-1.5 font-semibold border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 cursor-pointer ${
               isTimerRunning ? 'border-amber-500/80 text-amber-300 animate-pulse' : ''
             }`}
             title="Mở đồng hồ đếm ngược"
@@ -370,7 +396,6 @@ export function TeachingPresentationMode({
             <span>{isTimerRunning ? formatTimer(timeLeft) : 'Đếm ngược'}</span>
           </Button>
 
-          {/* Random Student Picker */}
           <Button
             size="sm"
             variant="outline"
@@ -380,19 +405,18 @@ export function TeachingPresentationMode({
                 pickRandomStudent()
               }
             }}
-            className="text-xs h-8 gap-1.5 font-semibold border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+            className="text-xs h-8 gap-1.5 font-semibold border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 cursor-pointer"
             title="Chọn học sinh ngẫu nhiên"
           >
             <Dice5 className="size-3.5 text-indigo-400" />
             <span className="hidden sm:inline">Gọi ngẫu nhiên</span>
           </Button>
 
-          {/* Fullscreen Toggle */}
           <Button
             size="sm"
             variant="ghost"
             onClick={toggleFullscreen}
-            className="text-slate-300 hover:text-white hover:bg-slate-800 p-1.5 h-8"
+            className="text-slate-300 hover:text-white hover:bg-slate-800 p-1.5 h-8 cursor-pointer"
             title={isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}
           >
             {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
@@ -400,9 +424,7 @@ export function TeachingPresentationMode({
         </div>
       </header>
 
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* 2. ACTIVITY TABS & STAGE SWITCHER */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
       <div className="flex items-center justify-between px-4 py-2 bg-slate-900/90 border-b border-slate-800 overflow-x-auto gap-2 shrink-0 z-20">
         <div className="flex items-center gap-2 overflow-x-auto py-0.5">
           {activities.map((act, idx) => {
@@ -455,7 +477,6 @@ export function TeachingPresentationMode({
           </button>
         </div>
 
-        {/* View Switcher if resources exist */}
         {playlist.length > 0 && (
           <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-xl shrink-0">
             <button
@@ -478,9 +499,7 @@ export function TeachingPresentationMode({
         )}
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* 3. MAIN PRESENTATION STAGE */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
       <main className="relative flex-1 w-full h-full min-h-0 overflow-hidden bg-slate-950 flex flex-col">
         {loading && (
           <div className="flex flex-col items-center justify-center flex-1 gap-3 text-slate-400">
@@ -493,7 +512,7 @@ export function TeachingPresentationMode({
           <div className="flex flex-col items-center justify-center flex-1 gap-3 p-6 text-center text-slate-300">
             <AlertCircle className="size-12 text-rose-500" />
             <p className="text-base font-bold text-white">{error}</p>
-            <Button size="sm" onClick={onClose} className="mt-2 bg-slate-800 text-white hover:bg-slate-700">
+            <Button size="sm" onClick={onClose} className="mt-2 bg-slate-800 text-white hover:bg-slate-700 cursor-pointer">
               Quay lại danh sách
             </Button>
           </div>
@@ -505,7 +524,6 @@ export function TeachingPresentationMode({
             {stageMode === 'ACTIVITY_SCRIPT' && currentActivity && (
               <div className="flex-1 overflow-y-auto p-4 sm:p-8 flex justify-center">
                 <div className="w-full max-w-5xl flex flex-col gap-6">
-                  {/* Activity Banner */}
                   <div className="flex flex-wrap items-center justify-between gap-4 p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
@@ -523,7 +541,7 @@ export function TeachingPresentationMode({
                       <Button
                         size="sm"
                         onClick={() => toggleActivityDone(currentActivity.id)}
-                        className={`gap-1.5 font-semibold text-xs ${
+                        className={`gap-1.5 font-semibold text-xs cursor-pointer ${
                           completedActivities[currentActivity.id]
                             ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                             : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
@@ -535,7 +553,6 @@ export function TeachingPresentationMode({
                     </div>
                   </div>
 
-                  {/* Objective & Equipment */}
                   {(currentActivity.objective || currentActivity.equipment) && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {currentActivity.objective && (
@@ -557,7 +574,6 @@ export function TeachingPresentationMode({
                     </div>
                   )}
 
-                  {/* Attached Resources Quick Launch Rail */}
                   {playlist.length > 0 && (
                     <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col gap-3">
                       <div className="flex items-center justify-between">
@@ -594,9 +610,7 @@ export function TeachingPresentationMode({
                     </div>
                   )}
 
-                  {/* 2-Column Teaching Plan Script (GV & HS) */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-8">
-                    {/* Teacher Activity */}
                     <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col gap-2">
                       <div className="flex items-center gap-2 pb-2 border-b border-slate-800">
                         <span className="size-2 rounded-full bg-teal-500" />
@@ -609,7 +623,6 @@ export function TeachingPresentationMode({
                       </div>
                     </div>
 
-                    {/* Student Activity */}
                     <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col gap-2">
                       <div className="flex items-center gap-2 pb-2 border-b border-slate-800">
                         <span className="size-2 rounded-full bg-blue-500" />
@@ -637,24 +650,22 @@ export function TeachingPresentationMode({
                   onClose={() => setStageMode('ACTIVITY_SCRIPT')}
                 />
 
-                {/* Floating Peek Script Button */}
                 <div className="absolute bottom-4 left-4 z-40">
                   <Button
                     size="sm"
                     onClick={() => setPeekScriptOpen(!peekScriptOpen)}
-                    className="gap-1.5 text-xs font-semibold bg-slate-900/90 text-slate-200 hover:bg-slate-800 border border-slate-700 shadow-xl backdrop-blur-md"
+                    className="gap-1.5 text-xs font-semibold bg-slate-900/90 text-slate-200 hover:bg-slate-800 border border-slate-700 shadow-xl backdrop-blur-md cursor-pointer"
                   >
                     <BookOpen className="size-3.5 text-teal-400" />
                     {peekScriptOpen ? 'Ẩn kịch bản GV' : '📄 Xem kịch bản GV'}
                   </Button>
                 </div>
 
-                {/* Peek Script Drawer */}
                 {peekScriptOpen && currentActivity && (
                   <div className="absolute bottom-14 left-4 z-40 w-96 max-h-[60vh] bg-slate-900/95 border border-slate-700 rounded-2xl p-4 shadow-2xl overflow-y-auto text-xs space-y-3 backdrop-blur-md">
                     <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                       <span className="font-bold text-teal-400">{currentActivity.phase}: {currentActivity.title}</span>
-                      <button onClick={() => setPeekScriptOpen(false)} className="text-slate-400 hover:text-white">
+                      <button onClick={() => setPeekScriptOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
                         <X className="size-4" />
                       </button>
                     </div>
@@ -724,9 +735,7 @@ export function TeachingPresentationMode({
         )}
       </main>
 
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* 4. BOTTOM ACTION TOOLBAR */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
       <footer className="flex items-center justify-between px-4 py-2.5 bg-slate-900 border-t border-slate-800 shrink-0 z-30">
         <div className="flex items-center gap-2">
           <Button
@@ -734,7 +743,7 @@ export function TeachingPresentationMode({
             variant="outline"
             onClick={handlePrevActivity}
             disabled={currentActivityIndex <= 0}
-            className="text-xs h-8 gap-1.5 border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-30"
+            className="text-xs h-8 gap-1.5 border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-30 cursor-pointer"
           >
             <ChevronLeft className="size-4" />
             <span className="hidden sm:inline">Hoạt động trước</span>
@@ -745,14 +754,13 @@ export function TeachingPresentationMode({
             variant="outline"
             onClick={handleNextActivity}
             disabled={currentActivityIndex >= activities.length - 1}
-            className="text-xs h-8 gap-1.5 border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-30"
+            className="text-xs h-8 gap-1.5 border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-30 cursor-pointer"
           >
             <span className="hidden sm:inline">Hoạt động tiếp</span>
             <ChevronRight className="size-4" />
           </Button>
         </div>
 
-        {/* Current Activity Status Pill */}
         {currentActivity && (
           <div className="hidden md:flex items-center gap-2 text-xs text-slate-400">
             <span>Tiến trình:</span>
@@ -766,7 +774,7 @@ export function TeachingPresentationMode({
           <Button
             size="sm"
             onClick={handleFinishLesson}
-            className="text-xs h-8 gap-1.5 bg-teal-600 hover:bg-teal-700 font-bold text-white shadow-lg"
+            className="text-xs h-8 gap-1.5 bg-teal-600 hover:bg-teal-700 font-bold text-white shadow-lg cursor-pointer"
           >
             <CheckCircle2 className="size-4" />
             <span>Kết thúc tiết dạy</span>
@@ -774,9 +782,7 @@ export function TeachingPresentationMode({
         </div>
       </footer>
 
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* MODAL 1: COUNTDOWN TIMER DIALOG */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
       {timerModalOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl flex flex-col items-center gap-5 text-center">
@@ -789,12 +795,10 @@ export function TeachingPresentationMode({
               </button>
             </div>
 
-            {/* Timer Display */}
             <div className="text-5xl font-extrabold font-mono text-amber-400 tracking-wider py-4">
               {formatTimer(timeLeft)}
             </div>
 
-            {/* Preset Buttons */}
             <div className="grid grid-cols-4 gap-2 w-full">
               {[60, 120, 180, 300].map((sec) => (
                 <button
@@ -815,7 +819,6 @@ export function TeachingPresentationMode({
               ))}
             </div>
 
-            {/* Controls */}
             <div className="flex items-center gap-3 w-full pt-2">
               <Button
                 size="sm"
@@ -824,14 +827,14 @@ export function TeachingPresentationMode({
                   setIsTimerRunning(false)
                   setTimeLeft(timerDuration)
                 }}
-                className="flex-1 border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 gap-1.5 text-xs font-semibold"
+                className="flex-1 border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 gap-1.5 text-xs font-semibold cursor-pointer"
               >
                 <RotateCcw className="size-3.5" /> Đặt lại
               </Button>
               <Button
                 size="sm"
                 onClick={() => setIsTimerRunning(!isTimerRunning)}
-                className={`flex-1 gap-1.5 text-xs font-bold text-white shadow-lg ${
+                className={`flex-1 gap-1.5 text-xs font-bold text-white shadow-lg cursor-pointer ${
                   isTimerRunning ? 'bg-rose-600 hover:bg-rose-700' : 'bg-amber-600 hover:bg-amber-700'
                 }`}
               >
@@ -842,9 +845,7 @@ export function TeachingPresentationMode({
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* MODAL 2: RANDOM STUDENT PICKER DIALOG */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
       {randomPickerOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl flex flex-col items-center gap-5 text-center">
@@ -857,7 +858,6 @@ export function TeachingPresentationMode({
               </button>
             </div>
 
-            {/* Selected Student Card */}
             <div className="py-6 flex flex-col items-center gap-3 w-full">
               {selectedStudent ? (
                 <div className={`p-6 rounded-2xl border w-full transition-all ${
@@ -878,13 +878,12 @@ export function TeachingPresentationMode({
               )}
             </div>
 
-            {/* Action Buttons */}
             <div className="flex items-center gap-3 w-full">
               <Button
                 size="sm"
                 onClick={pickRandomStudent}
                 disabled={isSpinning || students.length === 0}
-                className="w-full gap-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg py-2 h-9"
+                className="w-full gap-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg py-2 h-9 cursor-pointer"
               >
                 <Dice5 className={`size-4 ${isSpinning ? 'animate-spin' : ''}`} />
                 {isSpinning ? 'Đang chọn...' : 'Quay ngẫu nhiên'}
