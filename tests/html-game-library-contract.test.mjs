@@ -88,3 +88,12 @@ test('desktop CSP permits HTTPS game frames without broadening API connections',
   assert.match(config.app.security.csp, /frame-src blob: https:/)
   assert.doesNotMatch(config.app.security.csp, /frame-src \*/)
 })
+
+test('play URL validator accepts HTTPS and blob, rejecting dangerous schemes', async () => {
+  const service = await readFile(new URL('../services/html-game-service.ts', import.meta.url), 'utf8')
+
+  assert.match(service, /export function isValidHtmlGamePlayUrl/)
+  assert.match(service, /parsed\.protocol === 'javascript:' \|\| parsed\.protocol === 'data:'/)
+  assert.match(service, /parsed\.protocol === 'https:'/)
+  assert.match(service, /isDev && isLocalhost/)
+})

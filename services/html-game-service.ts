@@ -198,3 +198,30 @@ export function detachHtmlGameFromLessonPlan(lessonPlanId: string, htmlGameId: s
 export function getLessonPlanHtmlGames(lessonPlanId: string): Promise<HtmlGame[]> {
   return api.get<HtmlGame[]>(`/lesson-plans/${lessonPlanId}/html-games`)
 }
+
+export function isValidHtmlGamePlayUrl(rawUrl: string): boolean {
+  if (!rawUrl || typeof rawUrl !== 'string') return false
+  const trimmed = rawUrl.trim()
+  if (trimmed.startsWith('blob:')) return true
+
+  try {
+    const parsed = new URL(trimmed)
+    if (parsed.protocol === 'javascript:' || parsed.protocol === 'data:') {
+      return false
+    }
+    if (parsed.protocol === 'https:') {
+      return true
+    }
+    if (parsed.protocol === 'http:') {
+      const isDev = process.env.NODE_ENV !== 'production'
+      const isLocalhost =
+        ['localhost', '127.0.0.1'].includes(parsed.hostname) ||
+        parsed.hostname.endsWith('.localhost')
+      return isDev && isLocalhost
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+

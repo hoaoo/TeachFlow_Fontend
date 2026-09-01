@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Fullscreen, Loader2, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { HtmlGamePlay } from '@/services/html-game-service'
+import { isValidHtmlGamePlayUrl, type HtmlGamePlay } from '@/services/html-game-service'
 
 const BRIDGE_VERSION = 1
 const MAX_MESSAGE_BYTES = 256 * 1024
@@ -49,12 +49,31 @@ export function GamePlayer({ play, onExit }: { play: HtmlGamePlay; onExit?: () =
     () => globalThis.crypto?.randomUUID?.() || `game-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     [retryKey],
   )
+  const isValidUrl = useMemo(() => isValidHtmlGamePlayUrl(play.playUrl), [play.playUrl])
   const src = useMemo(() => {
-    const url = new URL(play.playUrl)
-    url.searchParams.set('teachflowGameInstanceId', instanceId)
-    return url.toString()
-  }, [instanceId, play.playUrl])
-  const expectedOrigin = useMemo(() => new URL(play.playUrl).origin, [play.playUrl])
+    if (!isValidUrl) return ''
+    try {
+      const url = new URL(play.playUrl)
+      url.searchParams.set('teachflowGameInstanceId', instanceId)
+      return url.toString()
+    } catch {
+      return play.playUrl
+    }
+  }, [instanceId, isValidUrl, play.playUrl])
+  const expectedOrigin = useMemo(() => {
+    try {
+      return new URL(play.playUrl).origin
+    } catch {
+      return 'null'
+    }
+  }, [play.playUrl])
+
+  useEffect(() => {
+    if (!isValidUrl) {
+      setError('URL trò chơi không hợp lệ hoặc không an toàn')
+      setLoading(false)
+    }
+  }, [isValidUrl])
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
