@@ -18,7 +18,7 @@ test('HTML game service matches the backend read, admin mutation, play, and less
 test('game execution uses a sandboxed iframe and never injects uploaded HTML into the app DOM', async () => {
   const component = await readFile(new URL('../components/html-games/game-player.tsx', import.meta.url), 'utf8')
 
-  assert.match(component, /<iframe[\s\S]*sandbox="allow-scripts"[\s\S]*referrerPolicy="no-referrer"/)
+  assert.match(component, /<iframe[\s\S]*sandbox="allow-scripts allow-forms allow-pointer-lock"[\s\S]*referrerPolicy="no-referrer"/)
   assert.doesNotMatch(component, /srcDoc=/)
   assert.doesNotMatch(component, /dangerouslySetInnerHTML/)
   assert.doesNotMatch(component, /sandbox="[^"]*allow-same-origin/)

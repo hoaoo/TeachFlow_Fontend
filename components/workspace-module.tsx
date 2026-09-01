@@ -124,6 +124,7 @@ function ResourcePreviewModal({
   onAttach,
   onDelete,
   onOpenDefault,
+  onPresent,
 }: {
   resource: TeachingResource
   onClose: () => void
@@ -131,6 +132,7 @@ function ResourcePreviewModal({
   onAttach: () => void
   onDelete: () => void
   onOpenDefault?: () => void
+  onPresent?: () => void
 }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -396,11 +398,20 @@ function ResourcePreviewModal({
                     Bài trình chiếu PowerPoint ({ext}) • {formattedSize}
                   </p>
                   <p className="text-xs text-slate-400 mt-2">
-                    Mở bằng PowerPoint hoặc ứng dụng mặc định trên máy để trình chiếu đầy đủ hiệu ứng.
+                    Xem và trình chiếu trực tiếp trong ứng dụng TeachFlow.
                   </p>
                 </div>
                 <div className="flex justify-center gap-2 pt-2">
-                  <Button onClick={onDownload} className="bg-teal-600 hover:bg-teal-700 text-xs font-semibold gap-1.5 cursor-pointer">
+                  <Button
+                    onClick={() => {
+                      onClose()
+                      onPresent?.()
+                    }}
+                    className="bg-teal-600 hover:bg-teal-700 text-xs font-semibold gap-1.5 cursor-pointer"
+                  >
+                    <Presentation className="size-3.5" /> Trình chiếu ngay
+                  </Button>
+                  <Button onClick={onDownload} variant="outline" className="text-xs font-semibold gap-1.5 cursor-pointer">
                     <Download className="size-3.5" /> Tải về máy
                   </Button>
                   {isDesktop && onOpenDefault && (
@@ -662,7 +673,7 @@ function ResourceCard({
     <article className="group flex flex-col rounded-2xl border border-slate-200/90 bg-white shadow-2xs hover:shadow-md hover:border-teal-300 transition-all duration-150 overflow-hidden">
       {/* 1. Thumbnail Header */}
       <div
-        onClick={() => onPreview(resource)}
+        onClick={() => (detected === 'POWERPOINT' ? onPresent(resource) : onPreview(resource))}
         className="relative aspect-16/9 w-full bg-slate-100 overflow-hidden flex items-center justify-center cursor-pointer group-hover:opacity-95 transition select-none"
       >
         {detected === 'IMAGE' ? (
@@ -717,7 +728,7 @@ function ResourceCard({
       <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
         <div className="space-y-1">
           <h2
-            onClick={() => onPreview(resource)}
+            onClick={() => (detected === 'POWERPOINT' ? onPresent(resource) : onPreview(resource))}
             title={name}
             className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug hover:text-teal-700 transition cursor-pointer"
           >
@@ -1739,6 +1750,11 @@ export function WorkspaceModule({ view }: { view: View }) {
             const target = selectedResource
             setSelectedResource(null)
             handleDeleteResource(target)
+          }}
+          onPresent={() => {
+            const target = selectedResource
+            setSelectedResource(null)
+            setPresentationResource(target)
           }}
         />
       )}
