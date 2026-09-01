@@ -1,6 +1,6 @@
 [package]
 name = "teachflow"
-version = "2.1.8"
+version = "2.1.9"
 description = "TeachFlow - Tro ly so danh cho giao vien"
 authors = ["Nguyen Do Hoan"]
 license = ""

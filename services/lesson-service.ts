@@ -191,6 +191,12 @@ export async function uploadLessonPlanFile(formData: FormData): Promise<LessonPl
   return await api.postForm<LessonPlan>('/lesson-plans/upload', formData);
 }
 
+export async function importDocxToLessonPlan(id: string, file: File): Promise<LessonPlan> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return await api.postForm<LessonPlan>(`/lesson-plans/${id}/import-docx`, formData);
+}
+
 export function getLessonPlanFileUrl(id: string): string {
   return `${API_BASE_URL}/lesson-plans/${id}/file`;
 }

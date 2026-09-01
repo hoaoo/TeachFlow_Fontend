@@ -188,9 +188,9 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
       toast.error(err?.message || 'Không thể tải giáo án để xem')
     }
   }
-  // Autosave mechanism (only for NATIVE lesson plans)
+  // Autosave mechanism (for all editable lesson plans)
   const triggerAutosave = useCallback((updatedLesson: LessonPlan) => {
-    if (!updatedLesson.id || updatedLesson.sourceType === 'UPLOADED') return
+    if (!updatedLesson.id) return
     isDirtyRef.current = true
     setAutosaveStatus('Đang lưu...')
 
@@ -225,13 +225,86 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
         const timeStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
         setAutosaveStatus(`Đã lưu tự động lúc ${timeStr} (v${saved.version || 1})`)
       } catch (err: any) {
-        setAutosaveStatus('Lưu thất bại (vui lòng thử lại)')
-        toast.error(err?.message || 'Lỗi lưu tự động giáo án')
+        const msg = err?.message || ''
+        if (msg.includes('phiên') || msg.includes('cập nhật') || err?.status === 409) {
+          setAutosaveStatus('Xung đột phiên bản (Vui lòng tải lại)')
+          toast.error('Giáo án đã được thay đổi ở một phiên khác. Vui lòng tải lại trước khi lưu.')
+        } else {
+          setAutosaveStatus('Lưu thất bại (vui lòng thử lại)')
+          toast.error(msg || 'Lỗi lưu tự động giáo án')
+        }
       } finally {
         setIsAutosaving(false)
       }
     }, 1500)
   }, [])
+
+  const handleManualSave = async () => {
+    if (!lesson.id) return
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current)
+    }
+    setIsAutosaving(true)
+    setAutosaveStatus('Đang lưu...')
+    try {
+      const saved = await updateLessonPlan(lesson.id, {
+        title: lesson.title,
+        topic: lesson.topic,
+        subject: lesson.subject,
+        grade: lesson.grade,
+        date: lesson.date,
+        duration: lesson.duration,
+        objective: lesson.objective,
+        specificCompetencies: lesson.specificCompetencies,
+        generalCompetencies: lesson.generalCompetencies,
+        qualities: lesson.qualities,
+        teachingEquipment: lesson.teachingEquipment,
+        postLessonAdjustment: lesson.postLessonAdjustment,
+        notes: lesson.notes,
+        status: lesson.status,
+        version: lesson.version,
+        activities: lesson.activities,
+      })
+      isDirtyRef.current = false
+      setLesson(saved)
+      const timeStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      setAutosaveStatus(`Đã lưu lúc ${timeStr} (v${saved.version || 1})`)
+      toast.success('Đã lưu giáo án thành công!')
+    } catch (err: any) {
+      const msg = err?.message || ''
+      if (msg.includes('phiên') || msg.includes('cập nhật') || err?.status === 409) {
+        setAutosaveStatus('Xung đột phiên bản (Vui lòng tải lại)')
+        toast.error('Giáo án đã được thay đổi ở một phiên khác. Vui lòng tải lại trước khi lưu.')
+      } else {
+        setAutosaveStatus('Lưu thất bại')
+        toast.error(msg || 'Lỗi khi lưu giáo án')
+      }
+    } finally {
+      setIsAutosaving(false)
+    }
+  }
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirtyRef.current && viewMode === 'editor') {
+        e.preventDefault()
+        e.returnValue = 'Bạn có thay đổi chưa được lưu. Bạn có chắc muốn rời khỏi trang?'
+        return e.returnValue
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [viewMode])
+
+  const handleBackToList = () => {
+    if (isDirtyRef.current) {
+      const confirmed = window.confirm('Bạn có thay đổi chưa được lưu. Bạn có chắc muốn rời khỏi trang?')
+      if (!confirmed) return
+    }
+    isDirtyRef.current = false
+    setViewMode('list')
+    loadPlans()
+  }
 
   // Update top-level lesson field
   const updateLessonField = (key: keyof LessonPlan, value: any) => {
@@ -353,14 +426,18 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
       return
     }
 
-    // If UPLOADED plan, download original file directly
-    if (targetPlan.sourceType === 'UPLOADED') {
+    const isPdfFile =
+      targetPlan.mimeType === 'application/pdf' ||
+      targetPlan.originalFileName?.toLowerCase().endsWith('.pdf')
+
+    // If PDF uploaded plan, download original file directly
+    if (targetPlan.sourceType === 'UPLOADED' && isPdfFile) {
       try {
-        toast.info('Đang tải tệp giáo án gốc...')
-        await downloadLessonPlanFile(targetPlan.id, targetPlan.originalFileName || `${targetPlan.title}.docx`)
+        toast.info('Đang tải tệp PDF gốc...')
+        await downloadLessonPlanFile(targetPlan.id, targetPlan.originalFileName || `${targetPlan.title}.pdf`)
         toast.success('Đã tải tệp thành công!')
       } catch (err: any) {
-        toast.error(err?.message || 'Lỗi khi tải tệp giáo án')
+        toast.error(err?.message || 'Lỗi khi tải tệp PDF')
       }
       return
     }
@@ -532,18 +609,12 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      {isUploaded ? (
-                        <span className="font-bold text-slate-900 text-base truncate">
-                          {p.title}
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => handleOpenEditor(p.id!)}
-                          className="text-left font-bold text-slate-900 hover:text-teal-700 text-base truncate transition"
-                        >
-                          {p.title}
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleOpenEditor(p.id!)}
+                        className="text-left font-bold text-slate-900 hover:text-teal-700 text-base truncate transition"
+                      >
+                        {p.title}
+                      </button>
 
                       <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
                         {p.subject} · {p.grade}
@@ -614,52 +685,33 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
 
                   {/* Actions */}
                   <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                    {isUploaded ? (
-                      <>
-                        {isPdf ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setPdfPreviewTarget(p)}
-                            className="text-xs h-8 gap-1 font-semibold text-rose-700 border-rose-200 hover:bg-rose-50"
-                          >
-                            <Eye className="size-3.5" /> Xem PDF
-                          </Button>
-                        ) : null}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => downloadLessonPlanFile(p.id!, p.originalFileName || `${p.title}.docx`)}
-                          className="text-xs h-8 gap-1 font-semibold text-blue-700 border-blue-200 hover:bg-blue-50"
-                        >
-                          <Download className="size-3.5" /> Tải xuống
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <Button size="sm" variant="outline" onClick={() => handleOpenPreview(p.id!)} className="text-xs h-8 gap-1 hover:text-teal-700 font-semibold">
-                          <Eye className="size-3.5" /> Xem
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleOpenEditor(p.id!)}
-                          className="text-xs h-8 gap-1 hover:text-teal-700 font-semibold"
-                        >
-                          <Edit2 className="size-3.5" /> Chỉnh sửa
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleExport('docx', p)}
-                          disabled={exportingType !== null}
-                          className="text-xs h-8 gap-1"
-                          title="Xuất Microsoft Word (.docx)"
-                        >
-                          <FileDown className="size-3.5" /> Xuất Word
-                        </Button>
-                      </>
-                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleOpenEditor(p.id!)}
+                      className="text-xs h-8 gap-1 font-semibold text-teal-700 border-teal-200 hover:bg-teal-50"
+                      title="Xem và chỉnh sửa giáo án"
+                    >
+                      <Eye className="size-3.5" /> Xem / Sửa
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        if (isPdf) {
+                          downloadLessonPlanFile(p.id!, p.originalFileName || `${p.title}.pdf`)
+                        } else if (isUploaded) {
+                          downloadLessonPlanFile(p.id!, p.originalFileName || `${p.title}.docx`)
+                        } else {
+                          handleExport('docx', p)
+                        }
+                      }}
+                      className="text-xs h-8 gap-1 font-medium text-slate-700 hover:text-blue-700"
+                      title="Tải xuống tệp giáo án"
+                    >
+                      <Download className="size-3.5" /> Tải xuống
+                    </Button>
 
                     <Button
                       size="sm"
@@ -670,6 +722,7 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
                     >
                       <Link2 className="size-3.5" /> Lịch dạy
                     </Button>
+
                     <Button
                       size="sm"
                       variant="ghost"
@@ -679,6 +732,7 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
                     >
                       <Copy className="size-3.5" />
                     </Button>
+
                     <Button
                       size="sm"
                       variant="ghost"
@@ -710,8 +764,9 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
           open={uploadModalOpen}
           classes={classes}
           onClose={() => setUploadModalOpen(false)}
-          onUploaded={() => {
+          onUploaded={(created) => {
             loadPlans()
+            handleOpenEditor(created.id!)
           }}
         />
 
@@ -726,9 +781,7 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
           onClose={() => setDuplicateTarget(null)}
           onDuplicated={(dup) => {
             loadPlans()
-            if (dup.sourceType !== 'UPLOADED') {
-              handleOpenEditor(dup.id!)
-            }
+            handleOpenEditor(dup.id!)
           }}
         />
 
@@ -778,10 +831,7 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => {
-              setViewMode('list')
-              loadPlans()
-            }}
+            onClick={handleBackToList}
             className="gap-1.5 text-slate-600 hover:text-slate-900"
           >
             <ArrowLeft className="size-4" /> Danh sách
@@ -833,6 +883,16 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
 
           <Button
             size="sm"
+            onClick={handleManualSave}
+            disabled={isAutosaving}
+            className="bg-teal-600 hover:bg-teal-700 text-xs h-8 gap-1 font-semibold text-white shadow-2xs"
+            title="Lưu giáo án"
+          >
+            {isAutosaving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />} Lưu
+          </Button>
+
+          <Button
+            size="sm"
             variant="outline"
             onClick={() => setVersionHistoryOpen(true)}
             className="text-xs h-8 gap-1"
@@ -860,7 +920,7 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
             size="sm"
             onClick={() => handleExport('docx')}
             disabled={exportingType !== null}
-            className="bg-teal-600 hover:bg-teal-700 text-xs h-8 gap-1 font-semibold"
+            className="bg-teal-600 hover:bg-teal-700 text-xs h-8 gap-1 font-semibold text-white"
           >
             {exportingType === 'docx' ? <Loader2 className="size-3.5 animate-spin" /> : <FileDown className="size-3.5" />} Xuất Word
           </Button>
@@ -876,8 +936,115 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
         </div>
       </div>
 
-      {/* Mode A: Document Preview */}
-      {editorSubTab === 'preview' ? (
+      {/* Mode A: PDF Mode */}
+      {lesson.mimeType === 'application/pdf' || lesson.originalFileName?.endsWith('.pdf') ? (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-2 p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-800">
+            <AlertCircle className="size-4 shrink-0 text-amber-600" />
+            <span>Tệp PDF là tài liệu định dạng cố định. Bạn có thể xem trực tiếp bên dưới, chỉnh sửa thông tin bài dạy hoặc tải xuống.</span>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Metadata panel */}
+            <div className="lg:col-span-5 flex flex-col gap-4">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs flex flex-col gap-4">
+                <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                  <FileText className="size-4 text-rose-600" /> Thông tin giáo án PDF
+                </h3>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-semibold text-slate-700">Tên bài dạy</Label>
+                  <Input
+                    value={lesson.title}
+                    onChange={(e) => updateLessonField('title', e.target.value)}
+                    placeholder="Nhập tên bài..."
+                    className="text-xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-semibold text-slate-700">Môn học</Label>
+                    <Input
+                      value={lesson.subject}
+                      onChange={(e) => updateLessonField('subject', e.target.value)}
+                      placeholder="Toán..."
+                      className="text-xs"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-semibold text-slate-700">Khối lớp</Label>
+                    <Input
+                      value={lesson.grade}
+                      onChange={(e) => updateLessonField('grade', e.target.value)}
+                      placeholder="Lớp 4A..."
+                      className="text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-semibold text-slate-700">Thời lượng (phút)</Label>
+                    <Input
+                      type="number"
+                      value={lesson.duration}
+                      onChange={(e) => updateLessonField('duration', parseInt(e.target.value, 10) || 40)}
+                      className="text-xs"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-semibold text-slate-700">Ngày dạy</Label>
+                    <Input
+                      type="date"
+                      value={lesson.date ? lesson.date.split('T')[0] : ''}
+                      onChange={(e) => updateLessonField('date', e.target.value)}
+                      className="text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-semibold text-slate-700">Chủ đề / Bài học</Label>
+                  <Input
+                    value={lesson.topic || ''}
+                    onChange={(e) => updateLessonField('topic', e.target.value)}
+                    placeholder="Nhập chủ đề..."
+                    className="text-xs"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-semibold text-slate-700">Ghi chú</Label>
+                  <textarea
+                    rows={3}
+                    value={lesson.notes || ''}
+                    onChange={(e) => updateLessonField('notes', e.target.value)}
+                    placeholder="Ghi chú thêm về giáo án..."
+                    className="w-full rounded-lg border border-slate-200 p-2 text-xs focus:outline-teal-500"
+                  />
+                </div>
+
+                <Button
+                  onClick={() => downloadLessonPlanFile(lesson.id!, lesson.originalFileName || `${lesson.title}.pdf`)}
+                  className="w-full gap-1.5 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white"
+                >
+                  <Download className="size-3.5" /> Tải xuống tệp PDF gốc
+                </Button>
+              </div>
+            </div>
+
+            {/* PDF Preview Frame */}
+            <div className="lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-2 shadow-xs h-[750px] flex flex-col">
+              <iframe
+                src={getLessonPlanFileUrl(lesson.id!)}
+                className="w-full h-full rounded-xl border-none"
+                title={lesson.title}
+              />
+            </div>
+          </div>
+        </div>
+      ) : editorSubTab === 'preview' ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-8 sm:p-12 shadow-sm flex flex-col gap-6 text-slate-800 font-sans">
           {/* Header */}
           <div className="text-center pb-6 border-b border-slate-200">
