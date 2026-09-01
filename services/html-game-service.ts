@@ -225,3 +225,12 @@ export function isValidHtmlGamePlayUrl(rawUrl: string): boolean {
   }
 }
 
+export async function getHtmlGamePlayUrl(id: string, customizationId?: string): Promise<string> {
+  if (customizationId) {
+    const play = await getHtmlGameCustomizationPlay(customizationId)
+    return play.playUrl
+  }
+  const play = await getHtmlGamePlay(id)
+  return play.playUrl
+}
+

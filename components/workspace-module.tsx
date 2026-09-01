@@ -73,7 +73,7 @@ import {
 import { getLessonPlans, type LessonPlan } from '@/services/lesson-service'
 import { generateImage } from '@/services/ai-service'
 import { exportService } from '@/services/export-service'
-import { PowerPointPresentationViewer } from '@/components/resources/powerpoint-presentation-viewer'
+import { ResourceViewer } from '@/components/resources/resource-viewer'
 
 type View =
   | 'Chủ nhiệm'
@@ -1734,35 +1734,28 @@ export function WorkspaceModule({ view }: { view: View }) {
         </div>
       )}
 
-      {/* Resource In-Browser Preview Modal */}
+      {/* Unified Resource Viewer */}
       {selectedResource && (
-        <ResourcePreviewModal
+        <ResourceViewer
           resource={selectedResource}
+          playlist={resources.map((r) => ({
+            id: r.id,
+            title: r.name || r.title || 'Tài nguyên',
+            type: detectResourceType(r),
+            resource: r,
+          }))}
+          currentIndex={Math.max(0, resources.findIndex((r) => r.id === selectedResource.id))}
+          onIndexChange={(idx) => setSelectedResource(resources[idx] || null)}
           onClose={() => setSelectedResource(null)}
           onDownload={() => handleDownloadResource(selectedResource)}
-          onOpenDefault={() => handleOpenDefaultApp(selectedResource)}
-          onAttach={() => {
-            setAttachTargetResource(selectedResource)
-            setSelectedResource(null)
-            setAttachModalOpen(true)
-          }}
-          onDelete={() => {
-            const target = selectedResource
-            setSelectedResource(null)
-            handleDeleteResource(target)
-          }}
-          onPresent={() => {
-            const target = selectedResource
-            setSelectedResource(null)
-            setPresentationResource(target)
-          }}
         />
       )}
 
       {presentationResource && (
-        <PowerPointPresentationViewer
+        <ResourceViewer
           resource={presentationResource}
           onClose={() => setPresentationResource(null)}
+          onDownload={() => handleDownloadResource(presentationResource)}
         />
       )}
 

@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScheduleAttendanceDialog } from '@/components/schedule-attendance-dialog'
+import { TeachingPresentationMode, type TeachingSessionContext } from '@/components/teaching-presentation-mode'
 
 // ─── Types & Constants ───────────────────────────────────────────────────────
 type CalendarTab = 'day' | 'week' | 'month'
@@ -558,6 +559,7 @@ function LessonDetailDialog({
   onOpenLessonPicker: (e: ScheduleEntry) => void
   onUnlinkLessonPlan: (e: ScheduleEntry) => void
   onOpenAttendance?: (e: ScheduleEntry) => void
+  onStartTeaching?: (session: TeachingSessionContext) => void
   onNavigate?: (view: any) => void
 }) {
   const [notesDraft, setNotesDraft] = useState('')
@@ -730,6 +732,27 @@ function LessonDetailDialog({
                   </p>
                 )}
                 <div className="mt-2.5 flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    className="text-xs h-7 gap-1 bg-teal-600 hover:bg-teal-700 text-white font-semibold shadow-2xs"
+                    onClick={() => {
+                      onStartTeaching?.({
+                        lessonPlanId: entry.lessonPlan!.id,
+                        scheduleId: entry.id,
+                        classroomId: entry.classroomId,
+                        classroomName: entry.classroom?.name,
+                        subjectName: entry.subjectName || entry.subject?.name,
+                        lessonTitle: entry.lessonPlan!.title || entry.title,
+                        date: entry.plannedDate,
+                        startTime: entry.startTime,
+                        endTime: entry.endTime,
+                      })
+                      onClose()
+                    }}
+                  >
+                    <Play className="size-3 fill-current" /> Bắt đầu tiết dạy
+                  </Button>
+
                   <Button
                     size="sm"
                     variant="outline"
@@ -1567,6 +1590,7 @@ export function ScheduleView({ onNavigate }: { onNavigate?: (view: any) => void 
   const [lessonPickerSchedule, setLessonPickerSchedule] = useState<ScheduleEntry | null>(null)
   const [attendanceScheduleId, setAttendanceScheduleId] = useState<string | null>(null)
   const [attendanceModalOpen, setAttendanceModalOpen] = useState(false)
+  const [teachingSession, setTeachingSession] = useState<TeachingSessionContext | null>(null)
 
   const handleOpenAttendance = (entry: ScheduleEntry) => {
     setAttendanceScheduleId(entry.id)
@@ -2074,6 +2098,7 @@ export function ScheduleView({ onNavigate }: { onNavigate?: (view: any) => void 
         onOpenLessonPicker={setLessonPickerSchedule}
         onUnlinkLessonPlan={handleUnlinkLessonPlan}
         onOpenAttendance={handleOpenAttendance}
+        onStartTeaching={setTeachingSession}
         onNavigate={onNavigate}
       />
 
@@ -2121,6 +2146,18 @@ export function ScheduleView({ onNavigate }: { onNavigate?: (view: any) => void 
           loadData()
         }}
       />
+
+      {/* Teaching Presentation Mode */}
+      {teachingSession && (
+        <TeachingPresentationMode
+          session={teachingSession}
+          onClose={() => setTeachingSession(null)}
+          onFinish={() => {
+            setTeachingSession(null)
+            loadData()
+          }}
+        />
+      )}
     </div>
   )
 }

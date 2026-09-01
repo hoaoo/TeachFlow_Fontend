@@ -1,4 +1,4 @@
-﻿import test from 'node:test'
+import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -82,7 +82,7 @@ test('PowerPoint resources expose direct presentation APIs and action without pu
   assert.match(serviceFile, /export async function getPresentationSlideBlob/)
   assert.match(serviceFile, /api\.getBlob\(slideUrl, undefined, signal\)/)
   assert.match(workspaceFile, /detected === 'POWERPOINT'[\s\S]*Trình chiếu/)
-  assert.match(workspaceFile, /<PowerPointPresentationViewer/)
+  assert.match(workspaceFile, /<ResourceViewer/)
   assert.match(workspaceFile, /<Eye className="size-3" \/> Xem/)
   assert.match(workspaceFile, /<Download className="size-3" \/> Tải xuống/)
 })

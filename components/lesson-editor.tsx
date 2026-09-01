@@ -34,6 +34,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { GameRenderer } from '@/components/games/game-renderer'
 import { GamePayload } from '@/components/games/game-types'
+import { TeachingPresentationMode, type TeachingSessionContext } from '@/components/teaching-presentation-mode'
 
 // ─── Starter Templates ───────────────────────────────────────────────────────
 const starterActivities: Activity[] = []
@@ -76,6 +77,7 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
   const [searchQuery, setSearchQuery] = useState('')
   const [filterClassId, setFilterClassId] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [teachingSession, setTeachingSession] = useState<TeachingSessionContext | null>(null)
 
   // Current Lesson Plan under edit
   const [lesson, setLesson] = useState<LessonPlan>({
@@ -687,6 +689,24 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
                   <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                     <Button
                       size="sm"
+                      onClick={() => {
+                        setTeachingSession({
+                          lessonPlanId: p.id!,
+                          classroomId: p.classroomId,
+                          classroomName: p.grade,
+                          subjectName: p.subject,
+                          lessonTitle: p.title,
+                          date: p.date,
+                        })
+                      }}
+                      className="text-xs h-8 gap-1 font-semibold bg-teal-600 hover:bg-teal-700 text-white shadow-2xs"
+                      title="Bắt đầu trình chiếu tiết dạy này"
+                    >
+                      <Play className="size-3.5 fill-current" /> Bắt đầu tiết dạy
+                    </Button>
+
+                    <Button
+                      size="sm"
                       variant="outline"
                       onClick={() => handleOpenEditor(p.id!)}
                       className="text-xs h-8 gap-1 font-semibold text-teal-700 border-teal-200 hover:bg-teal-50"
@@ -814,6 +834,18 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
             toast.success('AI đã đổ giáo án vào trình soạn. Hãy rà soát rồi lưu.')
           }}
         />
+
+        {/* Teaching Presentation Mode */}
+        {teachingSession && (
+          <TeachingPresentationMode
+            session={teachingSession}
+            onClose={() => setTeachingSession(null)}
+            onFinish={() => {
+              setTeachingSession(null)
+              loadLessonPlans()
+            }}
+          />
+        )}
       </div>
     )
   }
@@ -880,6 +912,28 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
               Xem trước
             </button>
           </div>
+
+          <Button
+            size="sm"
+            onClick={() => {
+              if (lesson.id) {
+                setTeachingSession({
+                  lessonPlanId: lesson.id,
+                  classroomId: lesson.classroomId,
+                  classroomName: lesson.grade,
+                  subjectName: lesson.subject,
+                  lessonTitle: lesson.title,
+                  date: lesson.date,
+                })
+              } else {
+                toast.info('Vui lòng lưu giáo án trước khi bắt đầu tiết dạy')
+              }
+            }}
+            className="bg-emerald-600 hover:bg-emerald-700 text-xs h-8 gap-1 font-bold text-white shadow-xs cursor-pointer"
+            title="Bắt đầu trình chiếu tiết dạy này"
+          >
+            <Play className="size-3.5 fill-current" /> Bắt đầu tiết dạy
+          </Button>
 
           <Button
             size="sm"
@@ -1770,6 +1824,18 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Teaching Presentation Mode */}
+      {teachingSession && (
+        <TeachingPresentationMode
+          session={teachingSession}
+          onClose={() => setTeachingSession(null)}
+          onFinish={() => {
+            setTeachingSession(null)
+            if (lesson.id) handleOpenEditor(lesson.id)
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -34,6 +34,7 @@ import { NotificationDropdown } from '@/components/notification-dropdown'
 import { GlobalSearchBar } from '@/components/global-search-bar'
 import { AuthScreen } from '@/components/auth-screen'
 import { ScheduleAttendanceDialog } from '@/components/schedule-attendance-dialog'
+import { TeachingPresentationMode, type TeachingSessionContext } from '@/components/teaching-presentation-mode'
 import {
   getDashboardData,
   getDashboardSchedule as apiGetDashboardSchedule,
@@ -533,6 +534,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   const [savingStatus, setSavingStatus] = useState(false)
   const [attendanceScheduleId, setAttendanceScheduleId] = useState<string | null>(null)
   const [attendanceModalOpen, setAttendanceModalOpen] = useState(false)
+  const [teachingSession, setTeachingSession] = useState<TeachingSessionContext | null>(null)
   const [desktop, setDesktop] = useState(false)
 
   useEffect(() => setDesktop(getPlatform().isDesktop()), [])
@@ -930,6 +932,39 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
             {statusInfo.tone === 'teal' && <span className="size-1.5 rounded-full bg-teal-500 animate-ping" />}
             {statusInfo.label}
           </span>
+
+          {/* Bắt đầu tiết dạy */}
+          {lesson.lessonPlanId ? (
+            <button
+              onClick={() => {
+                setTeachingSession({
+                  lessonPlanId: lesson.lessonPlanId!,
+                  scheduleId: lesson.id,
+                  classroomId: lesson.classroomId,
+                  classroomName: lesson.className,
+                  subjectName: lesson.subject,
+                  lessonTitle: lesson.lessonPlanTitle || lesson.title,
+                  date: lesson.plannedDate || selectedDate,
+                  startTime: lesson.startTime,
+                  endTime: lesson.endTime,
+                })
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 px-3 py-1.5 rounded-xl transition shadow-2xs cursor-pointer"
+              title="Bắt đầu trình chiếu tiết dạy"
+            >
+              <Play className="size-3.5 fill-current" /> Bắt đầu tiết dạy
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                onNavigate('Lịch dạy')
+              }}
+              className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 px-2.5 py-1.5 rounded-xl border border-amber-200 hover:bg-amber-100 transition shadow-2xs cursor-pointer"
+              title="Tiết dạy chưa có giáo án. Bấm để mở Lịch dạy và gắn giáo án"
+            >
+              <BookOpen className="size-3 text-amber-600" /> Gắn giáo án
+            </button>
+          )}
 
           <button
             onClick={() => openStatusModal(lesson, idx)}
@@ -1469,6 +1504,18 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
           setScheduleRetryKey((k) => k + 1)
         }}
       />
+
+      {/* Teaching Presentation Mode */}
+      {teachingSession && (
+        <TeachingPresentationMode
+          session={teachingSession}
+          onClose={() => setTeachingSession(null)}
+          onFinish={() => {
+            setTeachingSession(null)
+            setScheduleRetryKey((k) => k + 1)
+          }}
+        />
+      )}
     </div>
   )
 }
