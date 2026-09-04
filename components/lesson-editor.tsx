@@ -9,7 +9,7 @@ import {
   Table as TableIcon, Trash2, UploadCloud, UserCheck, WandSparkles,
   X, AlertCircle, CheckCircle2, ChevronUp, History, BookOpen,
   Calendar, MapPin, Download, ArrowUpDown, ShieldAlert, ArrowRight,
-  Upload, FileCheck, FileSpreadsheet, ExternalLink
+  Upload, FileCheck, FileSpreadsheet, ExternalLink, Play
 } from 'lucide-react'
 import {
   getLessonPlans, getLessonPlanById, createLessonPlan, updateLessonPlan,
@@ -692,7 +692,7 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
                       onClick={() => {
                         setTeachingSession({
                           lessonPlanId: p.id!,
-                          classroomId: p.classroomId,
+                          classroomId: p.classroomId || undefined,
                           classroomName: p.grade,
                           subjectName: p.subject,
                           lessonTitle: p.title,
@@ -842,7 +842,7 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
             onClose={() => setTeachingSession(null)}
             onFinish={() => {
               setTeachingSession(null)
-              loadLessonPlans()
+              loadPlans()
             }}
           />
         )}
@@ -919,7 +919,7 @@ export function LessonView({ onNavigate }: { onNavigate?: (view: any) => void })
               if (lesson.id) {
                 setTeachingSession({
                   lessonPlanId: lesson.id,
-                  classroomId: lesson.classroomId,
+                  classroomId: lesson.classroomId || undefined,
                   classroomName: lesson.grade,
                   subjectName: lesson.subject,
                   lessonTitle: lesson.title,

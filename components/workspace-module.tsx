@@ -73,7 +73,7 @@ import {
 import { getLessonPlans, type LessonPlan } from '@/services/lesson-service'
 import { generateImage } from '@/services/ai-service'
 import { exportService } from '@/services/export-service'
-import { ResourceViewer } from '@/components/resources/resource-viewer'
+import { ResourceViewer, type PlaylistItem } from '@/components/resources/resource-viewer'
 
 type View =
   | 'Chủ nhiệm'

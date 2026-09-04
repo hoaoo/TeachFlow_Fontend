@@ -16,6 +16,7 @@ import {
   FileText,
   Gamepad2,
   Hourglass,
+  Image as ImageIcon,
   Layers,
   Loader2,
   Maximize2,
@@ -216,8 +217,9 @@ function TeachingPresentationModeInner({
           }
         }
 
-        if (Array.isArray(fullPlan.teacherHtmlGames)) {
-          for (const item of fullPlan.teacherHtmlGames) {
+        const teacherGames = (fullPlan as any).teacherHtmlGames
+        if (Array.isArray(teacherGames)) {
+          for (const item of teacherGames) {
             const tg = (item as any).teacherHtmlGame || item
             if (tg && tg.id) {
               items.push({
@@ -238,9 +240,10 @@ function TeachingPresentationModeInner({
         if (targetClassId) {
           setLoadingStudents(true)
           getStudents({ classroomId: targetClassId })
-            .then((res) => {
+            .then((res: any) => {
               if (!mountedRef.current) return
-              const activeStudents = (res.students || []).filter((s) => s.status !== 'TRANSFER_OUT')
+              const rawList = res?.items || res?.students || []
+              const activeStudents = rawList.filter((s: any) => s.status !== 'TRANSFER_OUT')
               setStudents(activeStudents)
             })
             .catch(() => undefined)
@@ -460,7 +463,7 @@ function TeachingPresentationModeInner({
                 <span>
                   {idx + 1}. {act.phase || act.title}
                 </span>
-                <span className="text-[10px] opacity-75 font-mono">({act.minutes || act.durationMinutes || 5}p)</span>
+                <span className="text-[10px] opacity-75 font-mono">({act.minutes || 5}p)</span>
               </button>
             )
           })}
@@ -531,7 +534,7 @@ function TeachingPresentationModeInner({
                           {currentActivity.phase}
                         </span>
                         <span className="text-xs text-slate-400 font-mono">
-                          ⏱ {currentActivity.minutes || currentActivity.durationMinutes || 5} phút
+                          ⏱ {currentActivity.minutes || 5} phút
                         </span>
                       </div>
                       <h2 className="text-xl font-bold text-white">{currentActivity.title}</h2>
@@ -619,7 +622,7 @@ function TeachingPresentationModeInner({
                         </h4>
                       </div>
                       <div className="text-sm leading-relaxed text-slate-200 whitespace-pre-line pt-2">
-                        {currentActivity.teacher || currentActivity.teacherActivity || 'Chưa có mô tả kịch bản GV.'}
+                        {currentActivity.teacher || 'Chưa có mô tả kịch bản GV.'}
                       </div>
                     </div>
 
@@ -631,7 +634,7 @@ function TeachingPresentationModeInner({
                         </h4>
                       </div>
                       <div className="text-sm leading-relaxed text-slate-200 whitespace-pre-line pt-2">
-                        {currentActivity.students || currentActivity.studentActivity || 'Chưa có mô tả hoạt động HS.'}
+                        {currentActivity.students || 'Chưa có mô tả hoạt động HS.'}
                       </div>
                     </div>
                   </div>
@@ -671,11 +674,11 @@ function TeachingPresentationModeInner({
                     </div>
                     <div>
                       <p className="font-semibold text-teal-300">Hoạt động GV:</p>
-                      <p className="text-slate-300 whitespace-pre-line mt-1">{currentActivity.teacher || currentActivity.teacherActivity}</p>
+                      <p className="text-slate-300 whitespace-pre-line mt-1">{currentActivity.teacher || ''}</p>
                     </div>
                     <div>
                       <p className="font-semibold text-blue-300">Hoạt động HS:</p>
-                      <p className="text-slate-300 whitespace-pre-line mt-1">{currentActivity.students || currentActivity.studentActivity}</p>
+                      <p className="text-slate-300 whitespace-pre-line mt-1">{currentActivity.students || ''}</p>
                     </div>
                   </div>
                 )}
@@ -717,11 +720,11 @@ function TeachingPresentationModeInner({
                           <div className="grid grid-cols-2 gap-3 pt-1">
                             <div>
                               <p className="font-semibold text-slate-700">GV:</p>
-                              <p className="text-slate-600 whitespace-pre-line">{act.teacher || act.teacherActivity}</p>
+                              <p className="text-slate-600 whitespace-pre-line">{act.teacher || ''}</p>
                             </div>
                             <div>
                               <p className="font-semibold text-slate-700">HS:</p>
-                              <p className="text-slate-600 whitespace-pre-line">{act.students || act.studentActivity}</p>
+                              <p className="text-slate-600 whitespace-pre-line">{act.students || ''}</p>
                             </div>
                           </div>
                         </div>
@@ -866,9 +869,9 @@ function TeachingPresentationModeInner({
                     : 'bg-indigo-950/60 border-indigo-500/60 scale-105 shadow-2xl ring-4 ring-indigo-500/20'
                 }`}>
                   <div className="size-16 rounded-full bg-indigo-600/30 text-indigo-300 font-bold text-xl flex items-center justify-center mx-auto mb-2 border border-indigo-500/40">
-                    {selectedStudent.fullName.split(' ').pop()?.[0] || 'HS'}
+                    {selectedStudent.fullName?.split(' ').pop()?.[0] || 'HS'}
                   </div>
-                  <h4 className="text-xl font-extrabold text-white">{selectedStudent.fullName}</h4>
+                  <h4 className="text-xl font-extrabold text-white">{selectedStudent.fullName || 'Học sinh'}</h4>
                   <p className="text-xs text-indigo-300 font-mono mt-0.5">Mã HS: {selectedStudent.studentCode || '—'}</p>
                 </div>
               ) : (

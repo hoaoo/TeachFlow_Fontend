@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { AutoUpdater } from '@/components/updater/auto-updater'
 import { DesktopRuntime } from '@/components/desktop/desktop-runtime'
 import { NetworkStatus } from '@/components/desktop/network-status'
+import { AppErrorBoundary } from '@/components/app-error-boundary'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -36,7 +37,9 @@ export default function RootLayout({
     <html lang="vi" className="bg-slate-50">
       <body className="antialiased">
         <AuthProvider>
-          {children}
+          <AppErrorBoundary>
+            {children}
+          </AppErrorBoundary>
           <Toaster />
           <AutoUpdater />
           <DesktopRuntime />

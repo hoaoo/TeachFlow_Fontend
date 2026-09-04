@@ -45,46 +45,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchProfile = useCallback(async (): Promise<UserProfile | null> => {
-    const token = getAccessToken();
-    if (!token) {
-      // Web uses its HttpOnly cookie; Desktop reads its refresh token from Windows secure storage.
-      try {
-        const refreshToken = await getStoredRefreshToken();
-        const refreshRes = await fetchWithResilience(`${API_BASE_URL}/auth/refresh`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: refreshToken ? JSON.stringify({ refreshToken }) : undefined,
-          credentials: resolveCredentials(),
-        }, true);
-        if (refreshRes.ok) {
-          const refreshData = await refreshRes.json();
-          const newToken = refreshData.accessToken || refreshData.tokens?.accessToken;
-          if (newToken) {
-            await setAuthTokens(newToken, refreshData.refreshToken || refreshData.tokens?.refreshToken);
-            const userProfile = await api.get<UserProfile>('/auth/me');
-            setUser(userProfile);
-            setIsLoading(false);
-            return userProfile;
-          }
-        }
-      } catch {
-        // Silent refresh failed -> unauthenticated
-      }
-
-      setUser(null);
-      setIsLoading(false);
-      return null;
-    }
-
     try {
-      const data = await api.get<UserProfile>('/auth/me');
-      setUser(data);
-      return data;
-    } catch (error: any) {
-      if (error?.statusCode === 401 || error?.code === 'UNAUTHORIZED') {
+      const token = getAccessToken();
+      if (!token) {
+        // Web uses its HttpOnly cookie; Desktop reads its refresh token from Windows secure storage.
+        try {
+          const refreshToken = await getStoredRefreshToken();
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 6000);
+          try {
+            const refreshRes = await fetchWithResilience(
+              `${API_BASE_URL}/auth/refresh`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: refreshToken ? JSON.stringify({ refreshToken }) : undefined,
+                credentials: resolveCredentials(),
+                signal: controller.signal,
+              },
+              false,
+            );
+            if (refreshRes.ok) {
+              const refreshData = await refreshRes.json();
+              const newToken = refreshData.accessToken || refreshData.tokens?.accessToken;
+              if (newToken) {
+                await setAuthTokens(newToken, refreshData.refreshToken || refreshData.tokens?.refreshToken);
+                const userProfile = await api.get<UserProfile>('/auth/me');
+                setUser(userProfile);
+                return userProfile;
+              }
+            }
+          } finally {
+            clearTimeout(timeoutId);
+          }
+        } catch {
+          // Silent refresh failed or timed out -> unauthenticated
+        }
+
         setUser(null);
-        await clearAuthTokens();
+        return null;
       }
+
+      try {
+        const data = await api.get<UserProfile>('/auth/me');
+        setUser(data);
+        return data;
+      } catch (error: any) {
+        if (error?.statusCode === 401 || error?.code === 'UNAUTHORIZED') {
+          setUser(null);
+          await clearAuthTokens();
+        }
+        return null;
+      }
+    } catch (err) {
+      console.error('[TeachFlow Auth] Unexpected error during fetchProfile:', err);
+      setUser(null);
       return null;
     } finally {
       setIsLoading(false);
@@ -92,10 +107,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    initializeTokenStorage().then(fetchProfile).catch(() => {
-      setUser(null);
-      setIsLoading(false);
-    });
+    // Safety guard: guarantee that isLoading is NEVER stuck forever
+    const safetyTimer = setTimeout(() => {
+      setIsLoading((loading) => {
+        if (loading) {
+          console.warn('[TeachFlow Auth] Bootstrap safety timeout fired after 8s');
+          return false;
+        }
+        return false;
+      });
+    }, 8000);
+
+    initializeTokenStorage()
+      .then(fetchProfile)
+      .catch((err) => {
+        console.error('[TeachFlow Auth] initializeTokenStorage failed:', err);
+        setUser(null);
+        setIsLoading(false);
+      });
 
     // Listen for successful login/auth-state-changed (re-fetch profile)
     const handleAuthChange = () => {
@@ -112,6 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener('teachflow:auth-cleared', handleAuthCleared);
     window.addEventListener('online', handleAuthChange);
     return () => {
+      clearTimeout(safetyTimer);
       window.removeEventListener('teachflow:auth-state-changed', handleAuthChange);
       window.removeEventListener('teachflow:auth-cleared', handleAuthCleared);
       window.removeEventListener('online', handleAuthChange);

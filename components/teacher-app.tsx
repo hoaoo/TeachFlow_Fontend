@@ -7,7 +7,7 @@ import {
   Plus, Search, Settings, Sparkles, Users, X, ArrowUpRight, CircleHelp, School, Send,
   SlidersHorizontal, Flame, UserRound, ChevronRight, ChevronLeft, Calendar, BookMarked, LogIn, LogOut, KeyRound,
   Loader2, Copy, Bookmark, BookmarkPlus, HelpCircle, Gamepad2, FileQuestion, MessageSquarePlus, Shield,
-  Edit2, Trash2, Paperclip, Activity, History, RefreshCw
+  Edit2, Trash2, Paperclip, Activity, History, RefreshCw, Play
 } from 'lucide-react'
 import { navItems } from '@/lib/mock-data'
 import { LessonView } from '@/components/lesson-editor'
@@ -2297,6 +2297,16 @@ export function TeacherApp() {
   const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined)
   const [menuOpen, setMenuOpen] = useState(false)
   const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [initTakingLong, setInitTakingLong] = useState(false)
+
+  useEffect(() => {
+    if (!isLoading) {
+      setInitTakingLong(false)
+      return
+    }
+    const timer = setTimeout(() => setInitTakingLong(true), 4000)
+    return () => clearTimeout(timer)
+  }, [isLoading])
 
   const handleNavigate = (v: View, classId?: string) => {
     setSelectedClassId(classId)
@@ -2341,7 +2351,7 @@ export function TeacherApp() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 gap-3">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 gap-3 p-4 text-center">
         <div className="grid size-12 place-items-center rounded-2xl bg-teal-600 text-white shadow-md">
           <School className="size-6" />
         </div>
@@ -2349,6 +2359,23 @@ export function TeacherApp() {
           <Loader2 className="size-4 animate-spin text-teal-600" />
           <span className="text-sm font-medium">Đang khởi tạo TeachFlow...</span>
         </div>
+        {initTakingLong && (
+          <div className="mt-2 flex flex-col items-center gap-2 animate-in fade-in duration-300">
+            <p className="text-xs text-slate-400 max-w-xs">
+              Máy chủ có thể đang thức giấc hoặc kết nối chậm. Vui lòng đợi trong giây lát...
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (typeof window !== 'undefined') window.location.reload()
+              }}
+              className="text-xs h-7 gap-1.5 text-slate-600 cursor-pointer"
+            >
+              <RefreshCw className="size-3" /> Tải lại trang
+            </Button>
+          </div>
+        )}
       </div>
     )
   }

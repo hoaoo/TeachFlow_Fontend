@@ -7,6 +7,7 @@ import {
   notifyStudentDataChanged,
 } from './student-list-contract.mjs';
 
+export type { StudentRecord };
 export { notifyStudentDataChanged };
 
 export type StudentSummaryStats = {

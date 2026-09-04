@@ -546,6 +546,7 @@ function LessonDetailDialog({
   onOpenLessonPicker,
   onUnlinkLessonPlan,
   onOpenAttendance,
+  onStartTeaching,
   onNavigate,
 }: {
   entry: ScheduleEntry | null
@@ -739,13 +740,13 @@ function LessonDetailDialog({
                       onStartTeaching?.({
                         lessonPlanId: entry.lessonPlan!.id,
                         scheduleId: entry.id,
-                        classroomId: entry.classroomId,
+                        classroomId: entry.classroomId || undefined,
                         classroomName: entry.classroom?.name,
                         subjectName: entry.subjectName || entry.subject?.name,
                         lessonTitle: entry.lessonPlan!.title || entry.title,
-                        date: entry.plannedDate,
-                        startTime: entry.startTime,
-                        endTime: entry.endTime,
+                        date: entry.plannedDate || undefined,
+                        startTime: entry.startTime || undefined,
+                        endTime: entry.endTime || undefined,
                       })
                       onClose()
                     }}
