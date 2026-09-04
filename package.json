@@ -1,6 +1,6 @@
 {
   "name": "my-project",
-  "version": "2.1.11",
+  "version": "2.1.12",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -12,6 +12,7 @@
     "tauri:dev": "tauri dev",
     "pretauri:build": "node scripts/check-version.mjs",
     "tauri:build": "tauri build",
+    "typecheck": "tsc --noEmit",
     "release:check": "node scripts/check-version.mjs",
     "release:desktop": "npm run test && npm run build:tauri && npm run tauri:build"
   },

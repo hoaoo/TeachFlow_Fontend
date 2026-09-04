@@ -120,29 +120,29 @@ function TeachingPresentationModeInner({
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
-    if (isTimerRunning && timeLeft > 0) {
-      timerIntervalRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(timerIntervalRef.current!)
-            setIsTimerRunning(false)
-            toast.info('🔔 Hết thời gian đếm ngược!', { duration: 5000 })
-            try {
-              const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3')
-              audio.play().catch(() => undefined)
-            } catch {}
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-    } else {
+    if (!isTimerRunning) {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
+      return
     }
+    timerIntervalRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
+          setIsTimerRunning(false)
+          toast.info('🔔 Hết thời gian đếm ngược!', { duration: 5000 })
+          try {
+            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3')
+            audio.play().catch(() => undefined)
+          } catch {}
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
     return () => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
     }
-  }, [isTimerRunning, timeLeft])
+  }, [isTimerRunning])
 
   const formatTimer = (seconds: number) => {
     const m = Math.floor(seconds / 60)

@@ -4262,7 +4262,7 @@ dependencies = [
 
 [[package]]
 name = "teachflow"
-version = "2.1.8"
+version = "2.1.12"
 dependencies = [
  "keyring",
  "log",

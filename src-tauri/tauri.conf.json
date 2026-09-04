@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "TeachFlow",
-  "version": "2.1.9",
+  "version": "2.1.12",
   "identifier": "vn.teachflow.app",
   "build": {
     "frontendDist": "../out",

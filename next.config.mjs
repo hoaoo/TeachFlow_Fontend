@@ -4,7 +4,7 @@ const isTauriBuild = process.env.TAURI_BUILD === 'true' || process.env.TAURI_ENV
 const nextConfig = {
   output: isTauriBuild ? 'export' : 'standalone',
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   images: {
     unoptimized: true,
