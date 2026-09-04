@@ -84,6 +84,7 @@ import {
   TrendingUp, Award, Phone, Mail, User, School, ArrowUpRight, House
 } from 'lucide-react'
 import { ScheduleAttendanceDialog } from '@/components/schedule-attendance-dialog'
+import { CreateAttendanceDialog } from '@/components/create-attendance-dialog'
 import { generateStudentComment } from '@/services/ai-service'
 import { useAuth } from '@/context/auth-context'
 import { canManageClassroomRoster } from '@/services/roster-authorization.mjs'
@@ -2598,6 +2599,26 @@ function TabAttendance({ classItem }: { classItem: ClassRecord }) {
   const [loading, setLoading] = useState(true)
   const [range, setRange] = useState('month')
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null)
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+
+  const formatSessionPeriod = (period?: string | null) => {
+    if (!period) return 'Cả ngày'
+    const map: Record<string, string> = {
+      MORNING: 'Buổi sáng',
+      AFTERNOON: 'Buổi chiều',
+      EVENING: 'Buổi tối',
+      PERIOD_1: 'Tiết 1',
+      PERIOD_2: 'Tiết 2',
+      PERIOD_3: 'Tiết 3',
+      PERIOD_4: 'Tiết 4',
+      PERIOD_5: 'Tiết 5',
+      LECTURE: 'Lý thuyết',
+      LAB: 'Thực hành',
+      FULL_DAY: 'Cả ngày',
+    }
+    return map[period] || period
+  }
 
   const loadAttendance = useCallback(async (r: string) => {
     setLoading(true)
@@ -2681,18 +2702,29 @@ function TabAttendance({ classItem }: { classItem: ClassRecord }) {
             </CardDescription>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
-            {['today', 'week', 'month', 'all'].map((r) => (
-              <button
-                key={r}
-                onClick={() => setRange(r)}
-                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                  range === r ? 'bg-white text-teal-800 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {r === 'today' ? 'Hôm nay' : r === 'week' ? 'Tuần này' : r === 'month' ? 'Tháng này' : 'Tất cả'}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+              {['today', 'week', 'month', 'all'].map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRange(r)}
+                  className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                    range === r ? 'bg-white text-teal-800 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {r === 'today' ? 'Hôm nay' : r === 'week' ? 'Tuần này' : r === 'month' ? 'Tháng này' : 'Tất cả'}
+                </button>
+              ))}
+            </div>
+
+            <Button
+              size="sm"
+              onClick={() => setCreateDialogOpen(true)}
+              className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs h-8 px-3 gap-1.5 shadow-xs cursor-pointer"
+            >
+              <Plus className="size-3.5" />
+              Điểm danh mới
+            </Button>
           </div>
         </CardHeader>
 
@@ -2712,7 +2744,8 @@ function TabAttendance({ classItem }: { classItem: ClassRecord }) {
               <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
                 <tr>
                   <th className="py-3 px-4">Ngày</th>
-                  <th className="py-3 px-3">Môn học</th>
+                  <th className="py-3 px-3">Buổi / Tiết</th>
+                  <th className="py-3 px-3">Nội dung / Môn</th>
                   <th className="py-3 px-3">Giáo viên</th>
                   <th className="py-3 px-3">Có mặt</th>
                   <th className="py-3 px-3">Vắng</th>
@@ -2723,25 +2756,39 @@ function TabAttendance({ classItem }: { classItem: ClassRecord }) {
               <tbody className="divide-y divide-slate-100">
                 {data?.sessions.map((sess) => (
                   <tr key={sess.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-3 px-4 font-semibold text-slate-900">{sess.date}</td>
-                    <td className="py-3 px-3 font-semibold text-teal-900">{sess.subjectName}</td>
-                    <td className="py-3 px-3 text-slate-600">{sess.teacherName}</td>
-                    <td className="py-3 px-3 text-emerald-700 font-bold">{sess.stats.present} HS</td>
-                    <td className="py-3 px-3 text-rose-700 font-semibold">
+                    <td className="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap">{sess.date}</td>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                        {formatSessionPeriod(sess.sessionPeriod)}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 font-medium text-slate-900">
+                      <div className="font-semibold text-teal-900">{sess.subjectName}</div>
+                      {sess.title && <div className="text-[11px] text-slate-500 line-clamp-1">{sess.title}</div>}
+                    </td>
+                    <td className="py-3 px-3 text-slate-600 whitespace-nowrap">{sess.teacherName}</td>
+                    <td className="py-3 px-3 text-emerald-700 font-bold whitespace-nowrap">{sess.stats.present} HS</td>
+                    <td className="py-3 px-3 text-rose-700 font-semibold whitespace-nowrap">
                       {sess.stats.excused + sess.stats.unexcused} HS ({sess.stats.excused} phép)
                     </td>
-                    <td className="py-3 px-3 text-amber-700 font-semibold">{sess.stats.late} HS</td>
-                    <td className="py-3 px-4 text-right">
-                      {sess.scheduleId && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setSelectedScheduleId(sess.scheduleId || null)}
-                          className="text-xs h-7.5 px-2.5 text-teal-700 font-semibold cursor-pointer"
-                        >
-                          Xem chi tiết
-                        </Button>
-                      )}
+                    <td className="py-3 px-3 text-amber-700 font-semibold whitespace-nowrap">{sess.stats.late} HS</td>
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          if (sess.scheduleId) {
+                            setSelectedScheduleId(sess.scheduleId)
+                            setSelectedSessionId(null)
+                          } else {
+                            setSelectedSessionId(sess.id)
+                            setSelectedScheduleId(null)
+                          }
+                        }}
+                        className="text-xs h-7.5 px-2.5 text-teal-700 font-semibold cursor-pointer"
+                      >
+                        Xem chi tiết
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -2753,8 +2800,22 @@ function TabAttendance({ classItem }: { classItem: ClassRecord }) {
 
       <ScheduleAttendanceDialog
         scheduleId={selectedScheduleId}
-        open={!!selectedScheduleId}
-        onOpenChange={(val) => !val && setSelectedScheduleId(null)}
+        sessionId={selectedSessionId}
+        open={!!selectedScheduleId || !!selectedSessionId}
+        onOpenChange={(val) => {
+          if (!val) {
+            setSelectedScheduleId(null)
+            setSelectedSessionId(null)
+          }
+        }}
+        onSaved={() => loadAttendance(range)}
+      />
+
+      <CreateAttendanceDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        classroomId={classItem.id}
+        classroomName={classItem.name}
         onSaved={() => loadAttendance(range)}
       />
     </div>

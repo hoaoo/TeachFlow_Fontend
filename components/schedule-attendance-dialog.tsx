@@ -12,12 +12,15 @@ import { Input } from '@/components/ui/input'
 import {
   getScheduleAttendance,
   saveScheduleAttendance,
+  getSessionAttendance,
+  updateSessionAttendance,
   type ScheduleAttendanceResponse,
   type ScheduleStudentAttendance,
 } from '@/services/attendance-service'
 
 interface ScheduleAttendanceDialogProps {
-  scheduleId: string | null
+  scheduleId?: string | null
+  sessionId?: string | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onSaved?: () => void
@@ -27,6 +30,7 @@ type AttendanceStatus = 'PRESENT' | 'EXCUSED_ABSENCE' | 'UNEXCUSED_ABSENCE' | 'L
 
 export function ScheduleAttendanceDialog({
   scheduleId,
+  sessionId,
   open,
   onOpenChange,
   onSaved,
@@ -39,17 +43,43 @@ export function ScheduleAttendanceDialog({
   const [sessionNote, setSessionNote] = useState('')
   const [isDirty, setIsDirty] = useState(false)
 
-  const loadData = useCallback(async (id: string) => {
+  const loadData = useCallback(async () => {
+    if (!scheduleId && !sessionId) return
     try {
       setLoading(true)
       setError(null)
-      const res = await getScheduleAttendance(id)
-      setData(res)
-      setStudents(res.students || [])
-      setSessionNote(res.note || '')
+      if (sessionId) {
+        const res = await getSessionAttendance(sessionId)
+        setData({
+          schedule: {
+            id: res.session?.scheduleId || res.session?.id || sessionId,
+            title: res.session?.title || 'Buổi điểm danh',
+            plannedDate: res.session?.attendanceDate || '',
+            startTime: res.session?.sessionPeriod === 'AFTERNOON' ? '13:30' : '07:30',
+            endTime: res.session?.sessionPeriod === 'AFTERNOON' ? '16:30' : '11:00',
+            classroomId: res.session?.classroomId || '',
+            className: res.session?.className || 'Lớp học',
+            subjectId: '',
+            subjectName: res.session?.subjectName || res.session?.title || 'Điểm danh',
+            room: '',
+          },
+          isRecorded: true,
+          sessionId: res.sessionId || sessionId,
+          note: res.note || '',
+          summary: res.summary,
+          students: res.students || [],
+        })
+        setStudents(res.students || [])
+        setSessionNote(res.note || '')
+      } else if (scheduleId) {
+        const res = await getScheduleAttendance(scheduleId)
+        setData(res)
+        setStudents(res.students || [])
+        setSessionNote(res.note || '')
+      }
       setIsDirty(false)
     } catch (err: any) {
-      const msg = err?.message || 'Không thể tải thông tin điểm danh cho tiết học này'
+      const msg = err?.message || 'Không thể tải thông tin điểm danh'
       setError(msg)
       toast.error(msg)
       setData(null)
@@ -57,11 +87,11 @@ export function ScheduleAttendanceDialog({
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [scheduleId, sessionId])
 
   useEffect(() => {
-    if (open && scheduleId) {
-      loadData(scheduleId)
+    if (open && (scheduleId || sessionId)) {
+      loadData()
     } else {
       setData(null)
       setStudents([])
@@ -69,7 +99,7 @@ export function ScheduleAttendanceDialog({
       setError(null)
       setIsDirty(false)
     }
-  }, [open, scheduleId, loadData])
+  }, [open, scheduleId, sessionId, loadData])
 
   // Mark all students present
   const handleMarkAllPresent = () => {
@@ -137,22 +167,34 @@ export function ScheduleAttendanceDialog({
 
   // Save attendance
   const handleSave = async () => {
-    if (!scheduleId || saving) return
+    if ((!scheduleId && !sessionId) || saving) return
 
     try {
       setSaving(true)
-      const payload = {
-        note: sessionNote.trim() || undefined,
-        attendances: students.map((s) => ({
-          studentId: s.studentId,
-          status: s.status,
-          lateMinutes: s.status === 'LATE' ? Math.max(0, s.lateMinutes || 0) : 0,
-          note: s.note?.trim() || undefined,
-        })),
+      const attendances = students.map((s) => ({
+        studentId: s.studentId,
+        status: s.status,
+        lateMinutes: s.status === 'LATE' ? Math.max(0, s.lateMinutes || 0) : 0,
+        note: s.note?.trim() || undefined,
+      }))
+
+      let resMsg = 'Lưu điểm danh thành công!'
+      if (sessionId) {
+        const res = await updateSessionAttendance(sessionId, {
+          title: data?.schedule?.title || undefined,
+          note: sessionNote.trim() || undefined,
+          attendances,
+        })
+        resMsg = res.message || resMsg
+      } else if (scheduleId) {
+        const res = await saveScheduleAttendance(scheduleId, {
+          note: sessionNote.trim() || undefined,
+          attendances,
+        })
+        resMsg = res.message || resMsg
       }
 
-      const res = await saveScheduleAttendance(scheduleId, payload)
-      toast.success(res.message || 'Lưu điểm danh thành công!')
+      toast.success(resMsg)
       setIsDirty(false)
       onSaved?.()
       onOpenChange(false)
@@ -248,7 +290,7 @@ export function ScheduleAttendanceDialog({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => scheduleId && loadData(scheduleId)}
+                onClick={() => loadData()}
                 className="text-xs gap-1.5"
               >
                 <RefreshCw className="size-3" /> Thử lại

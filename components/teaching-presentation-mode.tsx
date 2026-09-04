@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   BookOpen,
   Calendar,
+  CalendarCheck2,
   CheckCircle,
   CheckCircle2,
   ChevronLeft,
@@ -37,6 +38,8 @@ import { ResourceViewer, type PlaylistItem } from '@/components/resources/resour
 import { ResourceErrorBoundary } from '@/components/resources/resource-error-boundary'
 import { detectResourceType } from '@/services/resource-service'
 import { toast } from 'sonner'
+import { ScheduleAttendanceDialog } from '@/components/schedule-attendance-dialog'
+import { CreateAttendanceDialog } from '@/components/create-attendance-dialog'
 
 export interface TeachingSessionContext {
   lessonPlanId: string
@@ -154,6 +157,9 @@ function TeachingPresentationModeInner({
   const [randomPickerOpen, setRandomPickerOpen] = useState(false)
   const [selectedStudent, setSelectedStudent] = useState<StudentRecord | null>(null)
   const [isSpinning, setIsSpinning] = useState(false)
+
+  // 4. Quick Attendance
+  const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false)
 
   const pickRandomStudent = () => {
     if (students.length === 0) {
@@ -414,6 +420,19 @@ function TeachingPresentationModeInner({
             <Dice5 className="size-3.5 text-indigo-400" />
             <span className="hidden sm:inline">Gọi ngẫu nhiên</span>
           </Button>
+
+          {(session.scheduleId || session.classroomId) && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setAttendanceDialogOpen(true)}
+              className="text-xs h-8 gap-1.5 font-semibold border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 cursor-pointer"
+              title="Điểm danh tiết học"
+            >
+              <CalendarCheck2 className="size-3.5 text-teal-400" />
+              <span className="hidden sm:inline">Điểm danh</span>
+            </Button>
+          )}
 
           <Button
             size="sm"
@@ -894,6 +913,30 @@ function TeachingPresentationModeInner({
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL 3: ATTENDANCE DIALOG (SCHEDULE-BASED OR CLASSROOM-BASED) */}
+      {session.scheduleId && (
+        <ScheduleAttendanceDialog
+          scheduleId={session.scheduleId}
+          open={attendanceDialogOpen}
+          onOpenChange={setAttendanceDialogOpen}
+          onSaved={() => {
+            toast.success('Đã lưu dữ liệu điểm danh!')
+          }}
+        />
+      )}
+
+      {!session.scheduleId && session.classroomId && (
+        <CreateAttendanceDialog
+          classroomId={session.classroomId}
+          classroomName={session.classroomName}
+          open={attendanceDialogOpen}
+          onOpenChange={setAttendanceDialogOpen}
+          onSaved={() => {
+            toast.success('Đã lưu dữ liệu điểm danh!')
+          }}
+        />
       )}
     </div>
   )
