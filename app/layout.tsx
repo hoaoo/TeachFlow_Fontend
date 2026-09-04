@@ -1,6 +1,7 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { AuthProvider } from '@/context/auth-context'
+import { EducationProvider } from '@/context/education-context'
 import { Toaster } from '@/components/ui/sonner'
 import { AutoUpdater } from '@/components/updater/auto-updater'
 import { DesktopRuntime } from '@/components/desktop/desktop-runtime'
@@ -9,8 +10,8 @@ import { AppErrorBoundary } from '@/components/app-error-boundary'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'TeachFlow — Trợ lý giáo viên',
-  description: 'Không gian làm việc thông minh dành cho giáo viên tiểu học.',
+  title: 'TeachFlow — Nền tảng giảng dạy & quản lý học tập',
+  description: 'Không gian làm việc thông minh đa cấp học dành cho giáo viên và giảng viên — TeachFlow.',
   generator: 'TeachFlow',
 
   icons: {
@@ -37,13 +38,15 @@ export default function RootLayout({
     <html lang="vi" className="bg-slate-50">
       <body className="antialiased">
         <AuthProvider>
-          <AppErrorBoundary>
-            {children}
-          </AppErrorBoundary>
-          <Toaster />
-          <AutoUpdater />
-          <DesktopRuntime />
-          <NetworkStatus />
+          <EducationProvider>
+            <AppErrorBoundary>
+              {children}
+            </AppErrorBoundary>
+            <Toaster />
+            <AutoUpdater />
+            <DesktopRuntime />
+            <NetworkStatus />
+          </EducationProvider>
         </AuthProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { getClassStudents } from '@/services/classroom-service'
 import { createAttendanceSession } from '@/services/attendance-service'
+import { useEducation } from '@/context/education-context'
 
 interface CreateAttendanceDialogProps {
   classroomId: string
@@ -40,13 +41,61 @@ export function CreateAttendanceDialog({
   onOpenChange,
   onSaved,
 }: CreateAttendanceDialogProps) {
+  const { profile, capabilities, labels } = useEducation()
+
+  const periodOptions = useMemo(() => {
+    if (profile === 'UNIVERSITY' || profile === 'COLLEGE') {
+      return [
+        { value: 'LECTURE', label: 'Lý thuyết (Lecture)' },
+        { value: 'LAB', label: 'Thực hành (Lab)' },
+        { value: 'PRACTICE', label: 'Thảo luận / Bài tập' },
+        { value: 'ONLINE', label: 'Trực tuyến (Online)' },
+        { value: 'CUSTOM', label: 'Khác (tùy chỉnh)...' },
+      ]
+    }
+    if (profile === 'SECONDARY' || profile === 'HIGH_SCHOOL') {
+      return [
+        { value: 'PERIOD_1', label: 'Tiết 1' },
+        { value: 'PERIOD_2', label: 'Tiết 2' },
+        { value: 'PERIOD_3', label: 'Tiết 3' },
+        { value: 'PERIOD_4', label: 'Tiết 4' },
+        { value: 'PERIOD_5', label: 'Tiết 5' },
+        { value: 'MORNING', label: 'Buổi sáng' },
+        { value: 'AFTERNOON', label: 'Buổi chiều' },
+        { value: 'CUSTOM', label: 'Khác (tùy chỉnh)...' },
+      ]
+    }
+    if (profile === 'CUSTOM') {
+      return [
+        { value: 'SESSION_1', label: 'Buổi 1' },
+        { value: 'SESSION_2', label: 'Buổi 2' },
+        { value: 'WORKSHOP', label: 'Chuyên đề / Workshop' },
+        { value: 'ONLINE', label: 'Trực tuyến' },
+        { value: 'CUSTOM', label: 'Khác (tùy chỉnh)...' },
+      ]
+    }
+    return [
+      { value: 'MORNING', label: 'Buổi sáng' },
+      { value: 'AFTERNOON', label: 'Buổi chiều' },
+      { value: 'PERIOD', label: 'Theo tiết' },
+      { value: 'CUSTOM', label: 'Khác (tùy chỉnh)...' },
+    ]
+  }, [profile])
+
+  const defaultPeriod = useMemo(() => {
+    if (profile === 'UNIVERSITY' || profile === 'COLLEGE') return 'LECTURE'
+    if (profile === 'SECONDARY' || profile === 'HIGH_SCHOOL') return 'PERIOD_1'
+    if (profile === 'CUSTOM') return 'SESSION_1'
+    return 'MORNING'
+  }, [profile])
+
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Form State
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0])
-  const [sessionPeriod, setSessionPeriod] = useState('MORNING')
+  const [sessionPeriod, setSessionPeriod] = useState(defaultPeriod)
   const [customPeriod, setCustomPeriod] = useState('')
   const [title, setTitle] = useState('')
   const [sessionNote, setSessionNote] = useState('')
@@ -108,7 +157,7 @@ export function CreateAttendanceDialog({
   useEffect(() => {
     if (open) {
       setDate(new Date().toISOString().split('T')[0])
-      setSessionPeriod('MORNING')
+      setSessionPeriod(defaultPeriod)
       setCustomPeriod('')
       setTitle('')
       setSessionNote('')
@@ -119,7 +168,7 @@ export function CreateAttendanceDialog({
       setIsDirty(false)
       setError(null)
     }
-  }, [open, loadStudents])
+  }, [open, defaultPeriod, loadStudents])
 
   // Mark all students present
   const handleMarkAllPresent = () => {
@@ -131,7 +180,7 @@ export function CreateAttendanceDialog({
       }))
     )
     setIsDirty(true)
-    toast.success('Đã đặt tất cả học sinh có mặt')
+    toast.success(`Đã đặt tất cả ${labels.learners.toLowerCase()} có mặt`)
   }
 
   // Update status of single student
@@ -254,7 +303,7 @@ export function CreateAttendanceDialog({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Tạo buổi điểm danh linh hoạt theo buổi hoặc tiết học, tự động nạp danh sách học sinh.
+                Tạo buổi điểm danh linh hoạt theo {capabilities.hasPeriods ? 'buổi hoặc tiết học' : 'buổi học hoặc ca'}, tự động nạp danh sách {labels.learners.toLowerCase()}.
               </p>
             </div>
 
@@ -273,7 +322,7 @@ export function CreateAttendanceDialog({
                 {summary.late} đi muộn
               </span>
               <span className="bg-slate-200/80 text-slate-700 px-2.5 py-1 rounded-lg">
-                Tổng: {summary.total} HS
+                Tổng: {summary.total} {labels.learnerAbbr}
               </span>
             </div>
           </div>
@@ -297,7 +346,7 @@ export function CreateAttendanceDialog({
 
             <div>
               <label className="text-[11px] font-bold text-slate-600 mb-1 block">
-                Buổi / Loại buổi
+                {capabilities.hasPeriods ? 'Buổi / Tiết học' : 'Buổi / Ca học'}
               </label>
               <select
                 value={sessionPeriod}
@@ -307,16 +356,11 @@ export function CreateAttendanceDialog({
                 }}
                 className="w-full text-xs h-8.5 rounded-md border border-slate-300 bg-white px-2.5 py-1 font-medium text-slate-800 focus:outline-teal-500"
               >
-                <option value="MORNING">Buổi sáng</option>
-                <option value="AFTERNOON">Buổi chiều</option>
-                <option value="PERIOD_1">Tiết 1</option>
-                <option value="PERIOD_2">Tiết 2</option>
-                <option value="PERIOD_3">Tiết 3</option>
-                <option value="PERIOD_4">Tiết 4</option>
-                <option value="PERIOD_5">Tiết 5</option>
-                <option value="LECTURE">Lý thuyết / Lecture</option>
-                <option value="LAB">Thực hành / Lab</option>
-                <option value="CUSTOM">Khác (tùy chỉnh)...</option>
+                {periodOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -392,7 +436,7 @@ export function CreateAttendanceDialog({
             </div>
 
             <span className="text-[11px] text-slate-500">
-              Hiển thị {filteredStudents.length}/{students.length} học sinh
+              Hiển thị {filteredStudents.length}/{students.length} {labels.learners.toLowerCase()}
             </span>
           </div>
         </div>
@@ -402,7 +446,7 @@ export function CreateAttendanceDialog({
           {loading ? (
             <div className="py-16 text-center text-slate-400">
               <Loader2 className="size-8 animate-spin mx-auto text-teal-600 mb-2" />
-              <p className="text-sm font-medium">Đang tải danh sách học sinh...</p>
+              <p className="text-sm font-medium">Đang tải danh sách {labels.learners.toLowerCase()}...</p>
             </div>
           ) : error ? (
             <div className="py-12 text-center bg-white rounded-xl border border-rose-200 p-6 space-y-3">
@@ -421,8 +465,8 @@ export function CreateAttendanceDialog({
           ) : students.length === 0 ? (
             <div className="py-16 text-center text-slate-400 bg-white rounded-xl border border-dashed border-slate-200 p-8">
               <Users className="size-8 mx-auto text-slate-300 mb-2" />
-              <p className="text-sm font-semibold text-slate-700">Lớp chưa có học sinh để điểm danh</p>
-              <p className="text-xs text-slate-400 mt-1">Vui lòng thêm học sinh vào danh sách lớp trước.</p>
+              <p className="text-sm font-semibold text-slate-700">{labels.section} chưa có {labels.learner.toLowerCase()} để điểm danh</p>
+              <p className="text-xs text-slate-400 mt-1">Vui lòng thêm {labels.learner.toLowerCase()} vào danh sách {labels.section.toLowerCase()} trước.</p>
             </div>
           ) : (
             <div className="space-y-3">

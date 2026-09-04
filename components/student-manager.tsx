@@ -41,6 +41,7 @@ import { generateStudentComment } from '@/services/ai-service'
 import { saveBlob } from '@/services/file-save-service'
 import { canManageClassroomRoster } from '@/services/roster-authorization.mjs'
 import { useAuth } from '@/context/auth-context'
+import { useEducation } from '@/context/education-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -72,6 +73,7 @@ const statusVariant = (status: StudentRecord['status']) =>
 
 export function StudentManager({ initialStudentId }: { initialStudentId?: string }) {
   const { user } = useAuth()
+  const { labels, capabilities, profile } = useEducation()
   const authenticatedTeacherId = user?.teacher?.id
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(initialStudentId || null)
   const [students, setStudents] = useState<StudentRecord[]>([])
@@ -785,13 +787,13 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-teal-700">
-                <Users className="size-4" /> Quản lý học sinh TeachFlow
+                <Users className="size-4" /> Quản lý {labels.learners.toLowerCase()} TeachFlow
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-1">
-                Danh sách học sinh
+                Danh sách {labels.learners.toLowerCase()}
               </h1>
               <p className="text-xs sm:text-sm text-slate-500 mt-1">
-                Quản lý hồ sơ, lớp chủ nhiệm & lớp bộ môn, theo dõi chuyên cần và đánh giá học lực toàn diện.
+                Quản lý hồ sơ, {capabilities.hasHomeroom ? 'lớp chủ nhiệm & lớp bộ môn' : labels.section.toLowerCase()}, theo dõi chuyên cần và đánh giá năng lực toàn diện.
               </p>
             </div>
 
@@ -819,7 +821,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                 hidden={homeroomClasses.length === 0}
                 className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs gap-1.5 shadow-sm h-9 px-4 cursor-pointer"
               >
-                <Plus className="size-4" /> Thêm học sinh
+                <Plus className="size-4" /> Thêm {labels.learner.toLowerCase()}
               </Button>
             </div>
           </div>
@@ -829,9 +831,9 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
             <Card className="border-slate-200 shadow-2xs">
               <CardContent className="flex items-center justify-between p-4">
                 <div>
-                  <p className="text-xs font-medium text-slate-500">Tổng học sinh</p>
+                  <p className="text-xs font-medium text-slate-500">Tổng {labels.learners.toLowerCase()}</p>
                   <p className="text-2xl font-bold text-slate-900 mt-0.5">{summary.totalStudents}</p>
-                  <p className="text-[11px] text-teal-700 font-medium mt-0.5">Lớp chủ nhiệm & Bộ môn</p>
+                  <p className="text-[11px] text-teal-700 font-medium mt-0.5">{capabilities.hasHomeroom ? 'Lớp chủ nhiệm & Bộ môn' : labels.section}</p>
                 </div>
                 <div className="size-10 rounded-xl bg-teal-50 text-teal-700 grid place-items-center">
                   <Users className="size-5" />
@@ -876,7 +878,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                   </p>
                   <p className="text-[11px] text-blue-700 font-medium mt-0.5">
                     {summary.avgAttendanceRate !== null && summary.avgAttendanceRate !== undefined
-                      ? 'Tổng thể các lớp'
+                      ? `Tổng thể các ${labels.section.toLowerCase()}`
                       : 'Chưa có dữ liệu'}
                   </p>
                 </div>
@@ -890,13 +892,13 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
           {/* Search and Filters Bar */}
           <Card className="border-slate-200 shadow-2xs">
             <CardContent className="p-3.5 sm:p-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
+              <div className={`grid grid-cols-1 sm:grid-cols-2 ${capabilities.hasGradeLevel ? 'lg:grid-cols-7' : 'lg:grid-cols-6'} gap-3`}>
                 {/* Search */}
                 <div className="relative sm:col-span-2 lg:col-span-2">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
                   <Input
                     type="text"
-                    placeholder="Tìm tên, mã học sinh, phụ huynh..."
+                    placeholder={`Tìm tên, mã ${labels.learner.toLowerCase()}, ${capabilities.hasParentContact ? 'phụ huynh' : 'liên hệ'}...`}
                     value={search}
                     onChange={(e) => handleSearchChange(e.target.value)}
                     className="pl-9 text-xs h-9 bg-slate-50 border-slate-200"
@@ -906,36 +908,38 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                 {/* Classroom Filter */}
                 <div>
                   <select
-                    aria-label="Lọc theo lớp học"
+                    aria-label={`Lọc theo ${labels.section.toLowerCase()}`}
                     value={selectedClassId}
                     onChange={(e) => handleClassChange(e.target.value)}
                     className="w-full h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 focus:outline-teal-500"
                   >
-                    <option value="ALL">Tất cả lớp</option>
+                    <option value="ALL">Tất cả {labels.section.toLowerCase()}</option>
                     {classes.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.name} ({c.grade})
+                        {c.name}{capabilities.hasGradeLevel && c.grade ? ` (${c.grade})` : ''}
                       </option>
                     ))}
                   </select>
                 </div>
 
                 {/* Grade Filter */}
-                <div>
-                  <select
-                    aria-label="Lọc theo khối lớp"
-                    value={selectedGradeId}
-                    onChange={(e) => handleGradeChange(e.target.value)}
-                    className="w-full h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 focus:outline-teal-500"
-                  >
-                    <option value="ALL">Tất cả khối</option>
-                    {grades.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {capabilities.hasGradeLevel && (
+                  <div>
+                    <select
+                      aria-label="Lọc theo khối lớp"
+                      value={selectedGradeId}
+                      onChange={(e) => handleGradeChange(e.target.value)}
+                      className="w-full h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 focus:outline-teal-500"
+                    >
+                      <option value="ALL">Tất cả khối</option>
+                      {grades.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {/* Status Filter */}
                 <div>
@@ -1447,16 +1451,16 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent size="md">
           <DialogHeader>
-            <DialogTitle>Thêm học sinh mới</DialogTitle>
+            <DialogTitle>Thêm {labels.learner.toLowerCase()} mới</DialogTitle>
             <DialogDescription>
-              Tạo hồ sơ học sinh và tự động phân bổ vào lớp học trong năm học hiện tại.
+              Tạo hồ sơ {labels.learner.toLowerCase()} và tự động phân bổ vào {labels.section.toLowerCase()} trong năm học hiện tại.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-3.5 py-2 text-xs">
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
-                <Label className="text-xs font-semibold">Họ và tên học sinh *</Label>
+                <Label className="text-xs font-semibold">Họ và tên {labels.learner.toLowerCase()} *</Label>
                 <Input
                   placeholder="Nguyễn Văn An"
                   value={formName}
@@ -1466,9 +1470,9 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
               </div>
 
               <div>
-                <Label className="text-xs font-semibold">Mã học sinh</Label>
+                <Label className="text-xs font-semibold">Mã {labels.learner.toLowerCase()}</Label>
                 <Input
-                  placeholder="HS001 (Tự động)"
+                  placeholder="Mã số (Tự động)"
                   value={formCode}
                   onChange={(e) => setFormCode(e.target.value)}
                   className="mt-1 text-xs h-9 font-mono"
@@ -1502,7 +1506,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs font-semibold">Lớp học ghi danh *</Label>
+                <Label className="text-xs font-semibold">{labels.section} ghi danh *</Label>
                 <select
                   value={formClassId}
                   onChange={(e) => setFormClassId(e.target.value)}
@@ -1510,7 +1514,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                 >
                   {homeroomClasses.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name} ({c.grade})
+                      {c.name} {capabilities.hasGradeLevel && c.grade ? `(${c.grade})` : ''}
                     </option>
                   ))}
                 </select>
@@ -1532,9 +1536,11 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs font-semibold">Họ tên phụ huynh</Label>
+                <Label className="text-xs font-semibold">
+                  {capabilities.hasParentContact ? 'Họ tên phụ huynh' : 'Người liên hệ khẩn cấp'}
+                </Label>
                 <Input
-                  placeholder="Nguyễn Thị Hoa"
+                  placeholder={capabilities.hasParentContact ? "Nguyễn Thị Hoa" : "Người thân / Người bảo hộ"}
                   value={formParentName}
                   onChange={(e) => setFormParentName(e.target.value)}
                   className="mt-1 text-xs h-9"
@@ -1542,7 +1548,9 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
               </div>
 
               <div>
-                <Label className="text-xs font-semibold">Số điện thoại phụ huynh</Label>
+                <Label className="text-xs font-semibold">
+                  {capabilities.hasParentContact ? 'Số điện thoại phụ huynh' : 'Số điện thoại liên hệ khẩn cấp'}
+                </Label>
                 <Input
                   placeholder="0901 234 567"
                   value={formParentPhone}
@@ -1573,7 +1581,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
               disabled={creating || !formName.trim()}
               className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs gap-1.5 cursor-pointer"
             >
-              {creating ? <Loader2 className="size-3.5 animate-spin" /> : <UserPlus className="size-3.5" />} Tạo học sinh
+              {creating ? <Loader2 className="size-3.5 animate-spin" /> : <UserPlus className="size-3.5" />} Tạo {labels.learner.toLowerCase()}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1583,8 +1591,8 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
       <Dialog open={!!editTarget} onOpenChange={(val) => !val && setEditTarget(null)}>
         <DialogContent size="md">
           <DialogHeader>
-            <DialogTitle>Chỉnh sửa hồ sơ học sinh</DialogTitle>
-            <DialogDescription>Cập nhật thông tin cá nhân và liên lạc của học sinh.</DialogDescription>
+            <DialogTitle>Chỉnh sửa hồ sơ {labels.learner.toLowerCase()}</DialogTitle>
+            <DialogDescription>Cập nhật thông tin cá nhân và liên lạc của {labels.learner.toLowerCase()}.</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-3.5 py-2 text-xs">
@@ -1599,7 +1607,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
               </div>
 
               <div>
-                <Label className="text-xs font-semibold">Mã học sinh</Label>
+                <Label className="text-xs font-semibold">Mã {labels.learner.toLowerCase()}</Label>
                 <Input
                   value={editCode}
                   onChange={(e) => setEditCode(e.target.value)}
@@ -1633,7 +1641,9 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs font-semibold">Học lực / Trạng thái</Label>
+                <Label className="text-xs font-semibold">
+                  {capabilities.hasGpaScale ? 'Học lực / Đánh giá' : 'Trạng thái / Đánh giá'}
+                </Label>
                 <select
                   value={editStatus}
                   onChange={(e) => setEditStatus(e.target.value)}
@@ -1646,7 +1656,9 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
               </div>
 
               <div>
-                <Label className="text-xs font-semibold">Số điện thoại phụ huynh</Label>
+                <Label className="text-xs font-semibold">
+                  {capabilities.hasParentContact ? 'Số điện thoại phụ huynh' : 'Số điện thoại liên hệ khẩn cấp'}
+                </Label>
                 <Input
                   value={editParentPhone}
                   onChange={(e) => setEditParentPhone(e.target.value)}
@@ -1656,7 +1668,9 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
             </div>
 
             <div>
-              <Label className="text-xs font-semibold">Họ tên phụ huynh</Label>
+              <Label className="text-xs font-semibold">
+                {capabilities.hasParentContact ? 'Họ tên phụ huynh' : 'Người liên hệ khẩn cấp'}
+              </Label>
               <Input
                 value={editParentName}
                 onChange={(e) => setEditParentName(e.target.value)}
@@ -1694,20 +1708,20 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
       <Dialog open={!!transferTarget} onOpenChange={(val) => !val && setTransferTarget(null)}>
         <DialogContent size="sm">
           <DialogHeader>
-            <DialogTitle>Chuyển lớp học sinh</DialogTitle>
+            <DialogTitle>Chuyển {labels.section.toLowerCase()} {labels.learner.toLowerCase()}</DialogTitle>
             <DialogDescription>
-              Chuyển học sinh <strong>{transferTarget?.name}</strong> sang lớp mới trong cùng năm học.
+              Chuyển {labels.learner.toLowerCase()} <strong>{transferTarget?.name}</strong> sang {labels.section.toLowerCase()} mới trong cùng năm học.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-3.5 py-2 text-xs">
             <div>
-              <Label className="text-xs font-semibold">Lớp hiện tại</Label>
+              <Label className="text-xs font-semibold">{labels.section} hiện tại</Label>
               <Input value={(transferTarget as any)?.className || transferTarget?.grade || ''} disabled className="mt-1 bg-slate-50 text-xs h-9" />
             </div>
 
             <div>
-              <Label className="text-xs font-semibold">Lớp chuyển đến *</Label>
+              <Label className="text-xs font-semibold">{labels.section} chuyển đến *</Label>
               <select
                 value={transferTargetClassId}
                 onChange={(e) => setTransferTargetClassId(e.target.value)}
@@ -1717,16 +1731,16 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                   .filter((c) => c.id !== transferTarget?.classId)
                   .map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name} ({c.grade})
+                      {c.name} {capabilities.hasGradeLevel && c.grade ? `(${c.grade})` : ''}
                     </option>
                   ))}
               </select>
             </div>
 
             <div>
-              <Label className="text-xs font-semibold">Lý do chuyển lớp (tùy chọn)</Label>
+              <Label className="text-xs font-semibold">Lý do chuyển (tùy chọn)</Label>
               <Input
-                placeholder="Theo nguyện vọng phụ huynh, điều chỉnh sĩ số..."
+                placeholder="Theo nguyện vọng cá nhân, điều chỉnh sĩ số..."
                 value={transferReason}
                 onChange={(e) => setTransferReason(e.target.value)}
                 className="mt-1 text-xs h-9"
@@ -1744,7 +1758,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
               disabled={transferring || !transferTargetClassId}
               className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs gap-1.5 cursor-pointer"
             >
-              {transferring ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowRightLeft className="size-3.5" />} Xác nhận chuyển lớp
+              {transferring ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowRightLeft className="size-3.5" />} Xác nhận chuyển
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1755,10 +1769,10 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
         <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle className="text-rose-600 flex items-center gap-2">
-              <AlertCircle className="size-5" /> Rút học sinh khỏi lớp
+              <AlertCircle className="size-5" /> Rút {labels.learner.toLowerCase()} khỏi {labels.section.toLowerCase()}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Bạn có chắc chắn muốn rút học sinh <strong>{deleteTarget?.name}</strong> khỏi lớp? Dữ liệu lịch sử học tập vẫn được bảo lưu an toàn.
+              Bạn có chắc chắn muốn rút {labels.learner.toLowerCase()} <strong>{deleteTarget?.name}</strong> khỏi {labels.section.toLowerCase()}? Dữ liệu lịch sử học tập vẫn được bảo lưu an toàn.
             </DialogDescription>
           </DialogHeader>
 
@@ -1780,10 +1794,10 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
             <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
               <FileSpreadsheet className="size-5 text-emerald-600" />
               <FileText className="size-5 text-indigo-600" />
-              Import danh sách học sinh từ file Word / Excel
+              Import danh sách {labels.learners.toLowerCase()} từ file Word / Excel
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Hỗ trợ tệp Microsoft Word (.docx, .doc), Excel (.xlsx, .xls, .csv) hoặc dán trực tiếp danh sách học sinh.
+              Hỗ trợ tệp Microsoft Word (.docx, .doc), Excel (.xlsx, .xls, .csv) hoặc dán trực tiếp danh sách {labels.learners.toLowerCase()}.
             </DialogDescription>
           </DialogHeader>
 
@@ -1792,19 +1806,19 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
             <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="space-y-0.5">
                 <Label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <GraduationCap className="size-4 text-teal-600" /> Chọn lớp học tiếp nhận *
+                  <GraduationCap className="size-4 text-teal-600" /> Chọn {labels.section.toLowerCase()} tiếp nhận *
                 </Label>
-                <p className="text-[11px] text-slate-500">Học sinh sẽ được ghi danh vào lớp và năm học tương ứng</p>
+                <p className="text-[11px] text-slate-500">{labels.learners} sẽ được ghi danh vào {labels.section.toLowerCase()} và năm học tương ứng</p>
               </div>
               <select
                 value={importTargetClassId}
                 onChange={(e) => setImportTargetClassId(e.target.value)}
                 className="h-9 min-w-[220px] rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 focus:outline-teal-500"
               >
-                <option value="">-- Chọn lớp học --</option>
+                <option value="">-- Chọn {labels.section.toLowerCase()} --</option>
                 {homeroomClasses.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} ({c.grade})
+                    {c.name} {capabilities.hasGradeLevel && c.grade ? `(${c.grade})` : ''}
                   </option>
                 ))}
               </select>
@@ -1822,7 +1836,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                   </div>
                   <p className="text-sm font-bold text-slate-800">Tải lên tệp Word (.docx) hoặc Excel (.xlsx, .xls, .csv)</p>
                   <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                    Hệ thống tự động đọc bảng trong Word/Excel hoặc trích xuất AI có cấu trúc các trường họ tên, ngày sinh, giới tính, phụ huynh.
+                    Hệ thống tự động đọc bảng trong Word/Excel hoặc trích xuất AI có cấu trúc các trường họ tên, ngày sinh, giới tính, liên hệ.
                   </p>
                   <input
                     type="file"
@@ -1873,7 +1887,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                 <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                   <div className="flex items-center gap-2 flex-wrap text-xs">
                     <span className="font-bold text-slate-800">
-                      Tổng: <span className="text-teal-700">{importRows.length}</span> học sinh
+                      Tổng: <span className="text-teal-700">{importRows.length}</span> {labels.learner.toLowerCase()}
                     </span>
                     <span className="text-slate-300">|</span>
                     <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] font-semibold">
@@ -1933,10 +1947,10 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                           </th>
                           <th className="p-2 w-10 text-center text-slate-400">STT</th>
                           <th className="p-2 min-w-[150px]">Họ và tên *</th>
-                          <th className="p-2 w-28">Mã học sinh</th>
+                          <th className="p-2 w-28">Mã {labels.learner.toLowerCase()}</th>
                           <th className="p-2 w-24">Giới tính</th>
                           <th className="p-2 w-28">Ngày sinh</th>
-                          <th className="p-2 min-w-[130px]">Phụ huynh</th>
+                          <th className="p-2 min-w-[130px]">{capabilities.hasParentContact ? 'Phụ huynh' : 'Liên hệ'}</th>
                           <th className="p-2 w-28">Số điện thoại</th>
                           <th className="p-2 min-w-[110px]">Trạng thái</th>
                           <th className="p-2 w-10 text-center"></th>
@@ -2001,7 +2015,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                               <Input
                                 value={r.parentName || ''}
                                 onChange={(e) => handleUpdateImportCell(r.id, 'parentName', e.target.value)}
-                                placeholder="Tên phụ huynh"
+                                placeholder={capabilities.hasParentContact ? "Tên phụ huynh" : "Tên liên hệ"}
                                 className="h-7 text-xs px-2 bg-transparent"
                               />
                             </td>
@@ -2062,7 +2076,7 @@ export function StudentManager({ initialStudentId }: { initialStudentId?: string
                 {importing ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
                 {importing
                   ? 'Đang import vào hệ thống...'
-                  : `Xác nhận Import (${importRows.filter((r) => r.selected).length} học sinh)`}
+                  : `Xác nhận Import (${importRows.filter((r) => r.selected).length} ${labels.learner.toLowerCase()})`}
               </Button>
             )}
           </DialogFooter>
@@ -2097,6 +2111,7 @@ function StudentDetailView({
   onOpenDelete: () => void
   onOpenQuickAssess: () => void
 }) {
+  const { labels, capabilities } = useEducation()
   const [activeTab, setActiveTab] = useState('overview')
 
   return (
@@ -2106,7 +2121,7 @@ function StudentDetailView({
         onClick={onBack}
         className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-teal-700 mb-2 transition cursor-pointer"
       >
-        <ArrowLeft className="size-3.5" /> Quay lại danh sách học sinh
+        <ArrowLeft className="size-3.5" /> Quay lại danh sách {labels.learners.toLowerCase()}
       </button>
 
       {/* Student Identity Card */}
@@ -2129,7 +2144,7 @@ function StudentDetailView({
                 )}
               </div>
               <p className="text-xs sm:text-sm text-slate-500 mt-1">
-                Lớp: <strong className="text-slate-800">{(student as any).className || student.grade}</strong> · Mã HS:{' '}
+                {labels.section}: <strong className="text-slate-800">{(student as any).className || student.grade}</strong> · Mã {labels.learner}:{' '}
                 <span className="font-mono font-bold text-teal-800">{student.studentCode || 'Chưa cấp'}</span>
               </p>
             </div>
@@ -2143,10 +2158,10 @@ function StudentDetailView({
               <Edit2 className="size-3.5" /> Sửa hồ sơ
             </Button>
             <Button hidden={!canManageRoster} variant="outline" size="sm" onClick={onOpenTransfer} className="text-xs h-9 gap-1.5 cursor-pointer">
-              <ArrowRightLeft className="size-3.5" /> Chuyển lớp
+              <ArrowRightLeft className="size-3.5" /> Chuyển {labels.section.toLowerCase()}
             </Button>
             <Button hidden={!canManageRoster} variant="outline" size="sm" onClick={onOpenDelete} className="text-xs h-9 gap-1.5 text-rose-600 hover:bg-rose-50 cursor-pointer">
-              <Trash2 className="size-3.5" /> Rút lớp
+              <Trash2 className="size-3.5" /> Rút {labels.section.toLowerCase()}
             </Button>
           </div>
         </CardContent>
@@ -2156,7 +2171,7 @@ function StudentDetailView({
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid grid-cols-3 sm:grid-cols-6 h-auto p-1 bg-slate-100 rounded-xl">
           <TabsTrigger value="overview" className="text-xs py-2 font-medium">Tổng quan</TabsTrigger>
-          <TabsTrigger value="attendance" className="text-xs py-2 font-medium">Chuyên cần</TabsTrigger>
+          <TabsTrigger value="attendance" className="text-xs py-2 font-medium">{labels.session ? 'Chuyên cần' : 'Điểm danh'}</TabsTrigger>
           <TabsTrigger value="assessments" className="text-xs py-2 font-medium">Đánh giá</TabsTrigger>
           <TabsTrigger value="comments" className="text-xs py-2 font-medium">Nhận xét</TabsTrigger>
           <TabsTrigger value="behaviors" className="text-xs py-2 font-medium">Nề nếp</TabsTrigger>
@@ -2202,6 +2217,7 @@ function StudentDetailView({
 // ═══════════════════════════════════════════════════════════════════════════
 
 function StudentTabOverview({ student }: { student: StudentRecord }) {
+  const { labels, capabilities } = useEducation()
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
@@ -2240,11 +2256,11 @@ function StudentTabOverview({ student }: { student: StudentRecord }) {
               <span className="font-semibold text-slate-900">{student.dob}</span>
             </div>
             <div className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-slate-500">Lớp hiện tại:</span>
+              <span className="text-slate-500">{labels.section} hiện tại:</span>
               <span className="font-semibold text-slate-900">{(student as any).className || student.grade}</span>
             </div>
             <div className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-slate-500">Phụ huynh / Giám hộ:</span>
+              <span className="text-slate-500">{capabilities.hasParentContact ? 'Phụ huynh / Giám hộ:' : 'Người liên hệ khẩn cấp:'}</span>
               <span className="font-semibold text-slate-900">{student.guardian || student.parentName || 'Chưa cập nhật'}</span>
             </div>
             <div className="flex justify-between py-1">
@@ -2269,13 +2285,13 @@ function StudentTabOverview({ student }: { student: StudentRecord }) {
               </span>
             </div>
             <div className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-slate-500">Điểm trung bình đánh giá:</span>
+              <span className="text-slate-500">{capabilities.hasGpaScale ? 'Điểm trung bình (GPA):' : 'Điểm trung bình đánh giá:'}</span>
               <span className="font-bold text-blue-700">
                 {data?.stats?.avgScore !== null && data?.stats?.avgScore !== undefined ? `${data.stats.avgScore} đ` : '—'}
               </span>
             </div>
             <div className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-slate-500">Trạng thái học lực:</span>
+              <span className="text-slate-500">{capabilities.hasGpaScale ? 'Xếp loại học lực:' : 'Trạng thái học lực:'}</span>
               <Badge variant={statusVariant(student.status)} className="text-[10px]">{student.status}</Badge>
             </div>
             <div className="flex justify-between py-1">

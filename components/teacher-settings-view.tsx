@@ -22,6 +22,7 @@ import {
   type EducationProfile,
 } from '@/lib/capabilities'
 import { useAuth } from '@/context/auth-context'
+import { useEducation } from '@/context/education-context'
 import { api } from '@/services/api-client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -35,6 +36,7 @@ import { toast } from 'sonner'
 
 export function TeacherSettingsView() {
   const { user, refreshProfile } = useAuth()
+  const { profile: currentContextProfile, setProfile } = useEducation()
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [saving, setSaving] = useState(false)
@@ -42,7 +44,7 @@ export function TeacherSettingsView() {
   const [rolloverModalOpen, setRolloverModalOpen] = useState(false)
   const [currentSchoolYear, setCurrentSchoolYear] = useState<{ id: string; name: string } | null>(null)
   const [schoolYears, setSchoolYears] = useState<Array<{ id: string; name: string }>>([])
-  const [educationProfile, setEduProfile] = useState<EducationProfile>(getCurrentEducationProfile())
+  const [educationProfile, setEduProfile] = useState<EducationProfile>(currentContextProfile)
 
   useEffect(() => {
     if (user?.teacher) {
@@ -74,6 +76,7 @@ export function TeacherSettingsView() {
         fullName: fullName.trim(),
         phone: phone.trim() || undefined,
       })
+      setProfile(educationProfile)
       setEducationProfile(educationProfile)
       await refreshProfile()
       if (typeof window !== 'undefined') {
@@ -204,6 +207,72 @@ export function TeacherSettingsView() {
                   )
                 })}
               </div>
+
+              {/* Detailed capability summary of currently selected profile */}
+              {(() => {
+                const selectedConf = EDUCATION_PROFILES[educationProfile]
+                const enabledFeatures: string[] = []
+                const disabledFeatures: string[] = []
+
+                if (selectedConf.hasCreditSystem) enabledFeatures.push('Hệ thống tín chỉ')
+                if (selectedConf.hasSyllabus) enabledFeatures.push('Đề cương học phần (Syllabus)')
+                if (selectedConf.hasLearningOutcomes) enabledFeatures.push('Chuẩn đầu ra (Outcomes)')
+                if (selectedConf.hasGpaScale) enabledFeatures.push('Thang điểm GPA & Điểm chữ')
+                if (selectedConf.hasRubricGrading) enabledFeatures.push('Đánh giá Rubric / Tiêu chí')
+                if (selectedConf.hasAssignments) enabledFeatures.push('Bài tập & Nộp bài')
+                if (selectedConf.hasQuestionBank) enabledFeatures.push('Ngân hàng câu hỏi')
+                if (selectedConf.hasPeriods) enabledFeatures.push('Tiết học 1..5 cố định')
+                if (selectedConf.hasHomeroom) enabledFeatures.push('Sổ chủ nhiệm')
+                if (selectedConf.hasSeatingPlan) enabledFeatures.push('Sơ đồ chỗ ngồi')
+                if (selectedConf.hasParentContact) enabledFeatures.push('Sổ liên lạc phụ huynh')
+
+                if (!selectedConf.hasHomeroom) disabledFeatures.push('Chủ nhiệm')
+                if (!selectedConf.hasSeatingPlan) disabledFeatures.push('Sơ đồ chỗ ngồi')
+                if (!selectedConf.hasParentContact) disabledFeatures.push('Liên lạc phụ huynh')
+                if (!selectedConf.hasPeriods) disabledFeatures.push('Tiết học cố định (chuyển sang giờ linh hoạt)')
+                if (!selectedConf.hasGradeLevel) disabledFeatures.push('Bắt buộc chọn Khối')
+
+                return (
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">
+                        Cấu hình tính năng cho: <span className="text-teal-700">{selectedConf.levelLabel}</span>
+                      </span>
+                      <Badge variant="outline" className="text-[11px] font-mono">
+                        {educationProfile}
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="font-semibold text-emerald-800 block mb-1">✓ Tính năng kích hoạt:</span>
+                        <ul className="space-y-0.5 text-slate-600">
+                          {enabledFeatures.map((f) => (
+                            <li key={f} className="flex items-center gap-1.5">
+                              <span className="size-1.5 rounded-full bg-emerald-500 shrink-0" />
+                              {f}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {disabledFeatures.length > 0 && (
+                        <div>
+                          <span className="font-semibold text-slate-500 block mb-1">✕ Không áp dụng / Ẩn mặc định:</span>
+                          <ul className="space-y-0.5 text-slate-500">
+                            {disabledFeatures.map((f) => (
+                              <li key={f} className="flex items-center gap-1.5">
+                                <span className="size-1.5 rounded-full bg-slate-300 shrink-0" />
+                                {f}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
           </CardContent>
         </Card>

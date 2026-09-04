@@ -1,4 +1,4 @@
-// Streamlined 7 Core Teacher Workflows + Secondary
+// Standardized 7 Core Teacher Workflows
 export const navItems = [
   { label: 'Hôm nay', icon: 'LayoutDashboard', id: 'today' },
   { label: 'Lớp & Học phần', icon: 'Users', id: 'sections' },
@@ -6,10 +6,10 @@ export const navItems = [
   { label: 'Bài tập & Kiểm tra', icon: 'ClipboardList', id: 'assignments' },
   { label: 'Đánh giá', icon: 'ClipboardCheck', id: 'assessments' },
   { label: 'Tài nguyên', icon: 'Files', id: 'resources' },
-  { label: 'Trò chơi HTML', icon: 'Gamepad2', id: 'html-games' },
   { label: 'Trợ lý AI', icon: 'Sparkles', id: 'ai' },
-  { label: 'Cài đặt', icon: 'Settings', id: 'settings' },
 ]
+
+export const settingsNavItem = { label: 'Cài đặt', icon: 'Settings', id: 'settings' }
 
 export const legacyNavItems = [
   { label: 'Tổng quan', icon: 'LayoutDashboard' },

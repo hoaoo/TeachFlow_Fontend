@@ -33,6 +33,7 @@ import { QuickCommentsView } from '@/components/quick-comments-view'
 import { TeachingContentHub } from '@/components/teaching-content-hub'
 import { AssignmentsQuizzesView } from '@/components/assignments-quizzes-view'
 import { getCapabilities, getCurrentEducationProfile } from '@/lib/capabilities'
+import { useEducation } from '@/context/education-context'
 import { NotificationDropdown } from '@/components/notification-dropdown'
 import { GlobalSearchBar } from '@/components/global-search-bar'
 import { AuthScreen } from '@/components/auth-screen'
@@ -123,9 +124,10 @@ function Sidebar({
   onClose: () => void
 }) {
   const { user, logout } = useAuth()
+  const { labels, capabilities, profile } = useEducation()
   const isAdmin = user?.role === 'ADMIN'
-  const displayName = user?.teacher?.fullName || (isAdmin ? 'Quản trị viên' : 'Giáo viên')
-  const initials = displayName.split(' ').map((p) => p[0]).slice(-2).join('').toUpperCase() || (isAdmin ? 'AD' : 'GV')
+  const displayName = user?.teacher?.fullName || (isAdmin ? 'Quản trị viên' : labels.teacher)
+  const initials = displayName.split(' ').map((p) => p[0]).slice(-2).join('').toUpperCase() || (isAdmin ? 'AD' : labels.teacherAbbr)
 
   const [sidebarClasses, setSidebarClasses] = useState<Array<{ id: string; name: string; grade: string; studentCount: number }>>([])
   const [loadingClasses, setLoadingClasses] = useState(true)
@@ -158,7 +160,7 @@ function Sidebar({
             cls.map((c) => ({
               id: c.id,
               name: c.name,
-              grade: c.grade || 'Khối',
+              grade: c.grade || '',
               studentCount: c.studentCount ?? c.students?.length ?? 0,
             }))
           )
@@ -197,7 +199,7 @@ function Sidebar({
           </div>
           <div>
             <div className="font-semibold tracking-tight text-slate-900">TeachFlow</div>
-            <div className="text-xs text-slate-400">{isAdmin ? 'Quản trị hệ thống' : 'Trợ lý giáo viên'}</div>
+            <div className="text-xs text-slate-400">{isAdmin ? 'Quản trị hệ thống' : `Trợ lý ${labels.teacher.toLowerCase()}`}</div>
           </div>
           <button className="ml-auto text-slate-400 lg:hidden" onClick={onClose}><X /></button>
         </div>
@@ -270,36 +272,45 @@ function Sidebar({
               })}
             </nav>
 
-            <div className="my-5 border-t border-slate-100" />
-            <p className="px-3 pb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Lớp của tôi</p>
+            <div className="my-4 border-t border-slate-100" />
+            <button
+              onClick={() => { onSelect('Cài đặt'); onClose() }}
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${active === 'Cài đặt' ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+            >
+              <Settings className="size-[18px]" />
+              Cài đặt
+            </button>
+
+            <div className="my-4 border-t border-slate-100" />
+            <p className="px-3 pb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">{labels.section} của tôi</p>
             {loadingClasses ? (
               <div className="flex items-center gap-2 px-3 py-2 text-xs text-slate-400">
                 <Loader2 className="size-3.5 animate-spin text-teal-600" />
-                <span>Đang tải danh sách lớp...</span>
+                <span>Đang tải danh sách {labels.section.toLowerCase()}...</span>
               </div>
             ) : sidebarClasses.length === 0 ? (
               <div className="px-3 py-2 text-xs text-slate-400">
-                <p className="mb-2">Bạn chưa có lớp nào.</p>
+                <p className="mb-2">Bạn chưa có {labels.section.toLowerCase()} nào.</p>
                 <button
                   onClick={() => {
-                    onSelect('Lớp học')
+                    onSelect('Lớp & Học phần')
                     onClose()
                   }}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-teal-50 px-2.5 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-100 transition"
                 >
-                  <Plus className="size-3.5" /> Tạo lớp đầu tiên
+                  <Plus className="size-3.5" /> Tạo {labels.section.toLowerCase()} đầu tiên
                 </button>
               </div>
             ) : (
               sidebarClasses.map((cls, idx) => {
                 const bgColors = ['bg-blue-50 text-blue-700', 'bg-orange-50 text-orange-700', 'bg-teal-50 text-teal-700', 'bg-purple-50 text-purple-700']
                 const colorClass = bgColors[idx % bgColors.length]
-                const shortCode = cls.name.replace(/^lớp\s+/i, '')
+                const shortCode = cls.name.replace(new RegExp(`^(${labels.section}|lớp)\\s+`, 'i'), '')
                 return (
                   <button
                     key={cls.id}
                     onClick={() => {
-                      onSelect('Lớp học', cls.id)
+                      onSelect('Lớp & Học phần', cls.id)
                       onClose()
                     }}
                     className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50 transition cursor-pointer"
@@ -309,7 +320,7 @@ function Sidebar({
                     </span>
                     <span className="min-w-0 flex-1">
                       <b className="block truncate font-medium text-slate-800">{cls.name}</b>
-                      <small className="text-xs text-slate-400">{cls.studentCount} học sinh</small>
+                      <small className="text-xs text-slate-400">{cls.studentCount} {labels.learner.toLowerCase()}</small>
                     </span>
                     <ChevronRight className="ml-auto size-4 text-slate-300" />
                   </button>
@@ -504,6 +515,7 @@ function computeScheduleStatus(
 
 function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
   const { user } = useAuth()
+  const { labels, capabilities } = useEducation()
   const [data, setData] = useState<DashboardData | null>(null)
   const [tasksList, setTasksList] = useState<DashboardTask[]>([])
   const [loading, setLoading] = useState(true)
@@ -870,7 +882,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
             <p className="text-xs font-bold text-slate-800 tracking-tight">
               {lesson.startTime || '07:00'} - {lesson.endTime || '07:45'}
             </p>
-            <p className="mt-0.5 text-[10px] font-medium text-slate-400">Tiết {i + 1}</p>
+            <p className="mt-0.5 text-[10px] font-medium text-slate-400">{labels.session} {i + 1}</p>
           </div>
 
           <div
@@ -887,13 +899,13 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-semibold text-sm text-slate-900 truncate">{lesson.title || 'Tiết dạy'}</h3>
+              <h3 className="font-semibold text-sm text-slate-900 truncate">{lesson.title || labels.session}</h3>
               <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
                 {lesson.subject || 'Chung'}
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500 truncate">
-              {lesson.className || 'Lớp'}{lesson.gradeName ? ` (${lesson.gradeName})` : ''} · {lesson.room || 'Phòng học'}
+              {lesson.className || labels.section}{lesson.gradeName ? ` (${lesson.gradeName})` : ''} · {lesson.room || 'Phòng học'}
             </p>
           </div>
         </div>
@@ -960,9 +972,9 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
                 })
               }}
               className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 px-3 py-1.5 rounded-xl transition shadow-2xs cursor-pointer"
-              title="Bắt đầu trình chiếu tiết dạy"
+              title={`Bắt đầu trình chiếu ${labels.session.toLowerCase()}`}
             >
-              <Play className="size-3.5 fill-current" /> Bắt đầu tiết dạy
+              <Play className="size-3.5 fill-current" /> Bắt đầu {labels.session.toLowerCase()}
             </button>
           ) : (
             <button
@@ -970,9 +982,10 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
                 onNavigate('Lịch dạy')
               }}
               className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 px-2.5 py-1.5 rounded-xl border border-amber-200 hover:bg-amber-100 transition shadow-2xs cursor-pointer"
-              title="Tiết dạy chưa có giáo án. Bấm để mở Lịch dạy và gắn giáo án"
+              title={`${labels.session} chưa có ${labels.lessonPlan.toLowerCase()}. Bấm để mở Lịch và gắn ${labels.lessonPlan.toLowerCase()}`}
+              aria-label="Gắn giáo án"
             >
-              <BookOpen className="size-3 text-amber-600" /> Gắn giáo án
+              <BookOpen className="size-3 text-amber-600" /> Gắn {labels.lessonPlan.toLowerCase()} {/* Gắn giáo án */}
             </button>
           )}
 
@@ -992,14 +1005,14 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
     <div className="flex flex-col gap-8">
       <PageTitle
         eyebrow={data?.greeting?.date || "Hôm nay"}
-        title={data?.greeting?.title || (user ? `Chào mừng ${user.teacher?.fullName || user.email}` : "Chào mừng thầy/cô")}
+        title={data?.greeting?.title || (user ? `Chào mừng ${user.teacher?.fullName || user.email}` : `Chào mừng ${labels.teacher.toLowerCase()}`)}
         description={data?.greeting?.description || "Tổng quan công việc và dữ liệu học tập hôm nay."}
         action={
           <button
             onClick={() => onNavigate('Giáo án')}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-teal-200 hover:bg-teal-700"
           >
-            <Plus className="size-4" /> Tạo giáo án mới
+            <Plus className="size-4" /> Tạo {labels.lessonPlan.toLowerCase()} mới
           </button>
         }
       />
@@ -1011,7 +1024,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
               <Users className="size-4" /> Điểm danh
             </Button>
             <Button variant="outline" size="sm" onClick={() => onNavigate('Giáo án')}>
-              <BookOpen className="size-4" /> Tạo kế hoạch bài dạy
+              <BookOpen className="size-4" /> Tạo {labels.lessonPlan.toLowerCase()}
             </Button>
             <Button variant="outline" size="sm" onClick={() => onNavigate('Phiếu học tập')}>
               <FileQuestion className="size-4" /> Tạo phiếu bài tập
@@ -1034,7 +1047,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
           </div>
           <h3 className="text-base font-bold text-slate-900">Vui lòng đăng nhập</h3>
           <p className="mt-1 text-xs text-slate-600 max-w-md mx-auto">
-            Đăng nhập tài khoản giáo viên để xem đầy đủ kế hoạch lịch dạy, việc cần làm và phân tích lớp học.
+            Đăng nhập tài khoản {labels.teacher.toLowerCase()} để xem đầy đủ kế hoạch {capabilities.hasPeriods ? 'lịch dạy' : 'lịch học'}, việc cần làm và phân tích {labels.section.toLowerCase()}.
           </p>
           <div className="mt-4 flex items-center justify-center gap-3">
             <button
@@ -1105,7 +1118,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
           <div className="flex flex-col gap-3 border-b border-slate-100 p-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <h2 className="font-semibold text-slate-900 text-base">Kế hoạch & Lịch dạy</h2>
+                <h2 className="font-semibold text-slate-900 text-base">Kế hoạch & {capabilities.hasPeriods ? 'Lịch dạy' : 'Lịch học'}</h2>
                 {/* Live Digital Clock */}
                 <div className="flex items-center gap-1.5 rounded-lg bg-teal-50 px-2.5 py-1 text-xs font-mono font-semibold text-teal-700 border border-teal-200 shadow-sm">
                   <Clock className="size-3.5 animate-pulse text-teal-600" />
@@ -1206,7 +1219,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
             {loadingSchedule ? (
               <div className="flex items-center justify-center py-12 gap-2 text-slate-400">
                 <Loader2 className="size-5 animate-spin text-teal-600" />
-                <span className="text-xs font-medium">Đang tải lịch dạy...</span>
+                <span className="text-xs font-medium">Đang tải {capabilities.hasPeriods ? 'lịch dạy' : 'lịch học'}...</span>
               </div>
             ) : scheduleError ? (
               <div className="p-8 text-center">
@@ -1224,7 +1237,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
                 scheduleLessons.map((lesson, i) => renderLessonItem(lesson, i))
               ) : (
                 <div className="p-8 text-center text-sm text-slate-400">
-                  Không có lịch dạy nào vào {formatVietnameseDate(selectedDateObj)}. Nhấn "Xem lịch" để lên lịch giảng dạy.
+                  Không có {labels.session.toLowerCase()} nào vào {formatVietnameseDate(selectedDateObj)}. Nhấn "Xem lịch" để lên lịch.
                 </div>
               )
             ) : (
@@ -1236,7 +1249,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
                         {formatVietnameseDayShort(dateStr)}
                       </span>
                       <span className="text-[11px] font-medium text-slate-500">
-                        {dayLessons.length} tiết dạy
+                        {dayLessons.length} {labels.session.toLowerCase()}
                       </span>
                     </div>
                     <div>
@@ -1246,7 +1259,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
                 ))
               ) : (
                 <div className="p-8 text-center text-sm text-slate-400">
-                  Không có lịch dạy nào trong tuần {formatVietnameseWeek(mondayObj, sundayObj)}. Nhấn "Xem lịch" để lên lịch giảng dạy.
+                  Không có {labels.session.toLowerCase()} nào trong tuần {formatVietnameseWeek(mondayObj, sundayObj)}. Nhấn "Xem lịch" để lên lịch.
                 </div>
               )
             )}
@@ -1343,7 +1356,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
               <Input
                 id="new-task-title"
                 className="mt-1"
-                placeholder="VD: Soạn giáo án Toán, Nhắc nhở HS chuẩn bị bài..."
+                placeholder={`VD: Soạn ${labels.lessonPlan.toLowerCase()}, Nhắc nhở ${labels.learnerAbbr} chuẩn bị bài...`}
                 value={newTaskTitle}
                 onChange={(e) => setNewTaskTitle(e.target.value)}
                 autoFocus
@@ -1375,14 +1388,14 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
       <Dialog open={statusModalOpen} onOpenChange={setStatusModalOpen}>
         <DialogContent className="sm:max-w-[440px]">
           <DialogHeader>
-            <DialogTitle>Cập nhật trạng thái tiết dạy</DialogTitle>
+            <DialogTitle>Cập nhật trạng thái {labels.session.toLowerCase()}</DialogTitle>
             <DialogDescription>
               {selectedLesson?.title} ({selectedLesson?.subject} · {selectedLesson?.className})
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3.5 py-2">
             <div>
-              <Label htmlFor="sch-status-select" className="text-xs font-semibold">Trạng thái tiết dạy *</Label>
+              <Label htmlFor="sch-status-select" className="text-xs font-semibold">Trạng thái {labels.session.toLowerCase()} *</Label>
               <select
                 id="sch-status-select"
                 className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
@@ -1434,9 +1447,9 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="font-semibold text-slate-900">{data?.classProgress?.className || "Tiến độ học tập"}</h2>
-              <p className="mt-1 text-xs text-slate-400">Theo dõi phân loại học lực học sinh</p>
+              <p className="mt-1 text-xs text-slate-400">Theo dõi phân loại năng lực {labels.learner.toLowerCase()}</p>
             </div>
-            <button onClick={() => onNavigate('Lớp học')} className="text-sm font-medium text-teal-600">
+            <button onClick={() => onNavigate('Lớp & Học phần')} className="text-sm font-medium text-teal-600">
               Chi tiết <ChevronRight className="inline size-4" />
             </button>
           </div>
@@ -1474,8 +1487,8 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-100">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-semibold text-slate-900">Học sinh cần lưu ý / Tiêu biểu</h2>
-              <p className="mt-1 text-xs text-slate-400">Danh sách học sinh lớp phụ trách</p>
+              <h2 className="font-semibold text-slate-900">{labels.learner} cần lưu ý / Tiêu biểu</h2>
+              <p className="mt-1 text-xs text-slate-400">Danh sách {labels.learner.toLowerCase()} {labels.section.toLowerCase()} phụ trách</p>
             </div>
             <Flame className="size-5 text-orange-500" />
           </div>
@@ -1488,7 +1501,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
                   </span>
                   <span className="flex-1 min-w-0">
                     <b className="block text-sm font-medium text-slate-800 truncate">{s.name}</b>
-                    <span className="text-xs text-slate-400">{s.className ? `Lớp ${s.className} · ` : ''}{s.status}</span>
+                    <span className="text-xs text-slate-400">{s.className ? `${labels.section} ${s.className} · ` : ''}{s.status}</span>
                   </span>
                   <div className="w-24">
                     <div className="h-1.5 rounded-full bg-slate-100">
@@ -1499,7 +1512,7 @@ function Dashboard({ onNavigate }: { onNavigate: (view: View) => void }) {
                 </div>
               ))
             ) : (
-              <div className="p-8 text-center text-sm text-slate-400">Chưa có học sinh trong danh sách phụ trách.</div>
+              <div className="p-8 text-center text-sm text-slate-400">Chưa có {labels.learner.toLowerCase()} trong danh sách phụ trách.</div>
             )}
           </div>
         </div>
