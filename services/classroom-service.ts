@@ -96,6 +96,9 @@ export type ClassAttendanceData = {
     id: string;
     scheduleId?: string;
     date: string;
+    sessionPeriod?: string;
+    title?: string;
+    note?: string;
     subjectName: string;
     teacherName: string;
     stats: {

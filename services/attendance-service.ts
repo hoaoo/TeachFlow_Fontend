@@ -176,3 +176,43 @@ export async function saveClassAttendance(data: any) {
 export async function getAttendanceHistory() {
   return api.get('/attendance/history');
 }
+
+export async function getSessionAttendance(sessionId: string): Promise<any> {
+  return api.get(`/attendance/sessions/${sessionId}`);
+}
+
+export async function updateSessionAttendance(
+  sessionId: string,
+  data: {
+    title?: string;
+    note?: string;
+    attendances: Array<{
+      studentId: string;
+      status?: string;
+      lateMinutes?: number;
+      note?: string;
+    }>;
+  },
+): Promise<{ success: boolean; message: string; sessionId: string; summary: any }> {
+  return api.put(`/attendance/sessions/${sessionId}`, data);
+}
+
+export async function deleteSessionAttendance(sessionId: string): Promise<{ success: boolean; message: string }> {
+  return api.delete(`/attendance/sessions/${sessionId}`);
+}
+
+export async function createAttendanceSession(data: {
+  classId: string;
+  date: string;
+  sessionPeriod?: string;
+  title?: string;
+  note?: string;
+  attendances: Array<{
+    studentId: string;
+    status?: string;
+    lateMinutes?: number;
+    note?: string;
+  }>;
+}): Promise<{ success: boolean; message: string; sessionId: string; summary?: any }> {
+  return api.put('/attendance', data);
+}
