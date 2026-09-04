@@ -29,11 +29,13 @@ import {
 import { Button } from '@/components/ui/button'
 import {
   detectResourceType,
+  downloadResourceFile,
   getPresentationSlideBlob,
   getResourceFileArrayBuffer,
   getResourceFileBlob,
   getResourcePresentation,
   getResourceSignedUrl,
+  retryResourcePreview,
   type CanonicalResourceType,
   type PresentationMetadata,
   type TeachingResource,
@@ -150,6 +152,8 @@ function ResourceViewerInner({
   // Viewer state
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [retrying, setRetrying] = useState(false)
+  const [reloadTrigger, setReloadTrigger] = useState(0)
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
   const [docxHtml, setDocxHtml] = useState<string | null>(null)
   const [xlsxSheets, setXlsxSheets] = useState<Array<{ name: string; rows: any[][] }>>([])
@@ -352,7 +356,7 @@ function ResourceViewerInner({
         } else if (msg.includes('404') || msg.includes('không tìm thấy')) {
           setError('Không tìm thấy tệp tài nguyên.')
         } else if (detectedType === 'POWERPOINT') {
-          setError('Không thể hiển thị tệp PowerPoint này.')
+          setError(msg || 'Không thể tạo bản trình chiếu PowerPoint.')
         } else if (detectedType === 'VIDEO') {
           setError('Video không sử dụng định dạng được hỗ trợ.')
         } else {
@@ -369,7 +373,7 @@ function ResourceViewerInner({
       controller.abort()
       cleanupBlobs()
     }
-  }, [activeResourceId, activeGameId, activeCustomGameId, activeItem.url, detectedType, activeWorksheet, cleanupBlobs])
+  }, [activeResourceId, activeGameId, activeCustomGameId, activeItem.url, detectedType, activeWorksheet, cleanupBlobs, reloadTrigger])
 
   // Slide loader for PPTX
   const ensurePptSlide = useCallback(
@@ -482,10 +486,33 @@ function ResourceViewerInner({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [detectedType, pptMetadata, pptCurrentSlide, goToPptSlide, playlist, currentIndex, onIndexChange, onClose])
 
+  // Retry handler
+  const handleRetry = async () => {
+    if (!activeResourceId) {
+      setReloadTrigger((v) => v + 1)
+      return
+    }
+    try {
+      setRetrying(true)
+      if (detectedType === 'POWERPOINT') {
+        await retryResourcePreview(activeResourceId)
+      }
+    } catch {
+      // Ignore retry request error, will re-load
+    } finally {
+      setRetrying(false)
+      setReloadTrigger((v) => v + 1)
+    }
+  }
+
   // Download handler
   const handleDownload = () => {
     if (onDownload) {
       onDownload()
+      return
+    }
+    if (activeResourceId) {
+      void downloadResourceFile(activeResourceId, activeItem.resource?.originalFileName || displayName)
       return
     }
     if (mediaUrl) {
@@ -721,11 +748,21 @@ function ResourceViewerInner({
                 Vui lòng thử tải lại hoặc tải xuống tệp tin về máy tính để mở trực tiếp.
               </p>
             </div>
-            <div className="flex items-center gap-3 mt-2">
+            <div className="flex flex-wrap items-center justify-center gap-3 mt-2">
               <Button
                 size="sm"
-                onClick={handleDownload}
+                onClick={() => void handleRetry()}
+                disabled={retrying}
                 className="gap-1.5 text-xs bg-teal-600 hover:bg-teal-700 text-white font-semibold"
+              >
+                {retrying ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCw className="size-3.5" />}
+                Thử xử lý lại
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleDownload}
+                className="gap-1.5 text-xs border-slate-700 hover:bg-slate-800 text-slate-200"
               >
                 <Download className="size-3.5" /> Tải xuống tệp tin
               </Button>

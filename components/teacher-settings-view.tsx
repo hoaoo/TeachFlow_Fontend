@@ -13,7 +13,14 @@ import {
   Download,
   School,
   ArrowRight,
+  GraduationCap,
 } from 'lucide-react'
+import {
+  getCurrentEducationProfile,
+  setEducationProfile,
+  EDUCATION_PROFILES,
+  type EducationProfile,
+} from '@/lib/capabilities'
 import { useAuth } from '@/context/auth-context'
 import { api } from '@/services/api-client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -35,6 +42,7 @@ export function TeacherSettingsView() {
   const [rolloverModalOpen, setRolloverModalOpen] = useState(false)
   const [currentSchoolYear, setCurrentSchoolYear] = useState<{ id: string; name: string } | null>(null)
   const [schoolYears, setSchoolYears] = useState<Array<{ id: string; name: string }>>([])
+  const [educationProfile, setEduProfile] = useState<EducationProfile>(getCurrentEducationProfile())
 
   useEffect(() => {
     if (user?.teacher) {
@@ -66,11 +74,12 @@ export function TeacherSettingsView() {
         fullName: fullName.trim(),
         phone: phone.trim() || undefined,
       })
+      setEducationProfile(educationProfile)
       await refreshProfile()
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('teachflow:auth-state-changed'))
       }
-      toast.success('Đã lưu thông tin hồ sơ giáo viên thành công')
+      toast.success('Đã lưu thông tin hồ sơ và cấu hình giảng dạy thành công')
     } catch (err: any) {
       toast.error(err?.message || 'Không thể lưu cài đặt lúc này. Vui lòng thử lại.')
     } finally {
@@ -150,6 +159,51 @@ export function TeacherSettingsView() {
               <p className="text-xs text-slate-400">
                 Email dùng để đăng nhập và nhận thông báo hệ thống (không thể chỉnh sửa trực tiếp).
               </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Education Level & Profile Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <GraduationCap className="size-5 text-teal-600" />
+              Môi trường đào tạo & Cấp học (Education Profile)
+            </CardTitle>
+            <CardDescription>
+              Tùy biến thuật ngữ, quy trình bài giảng và công cụ phù hợp với mô hình giảng dạy của bạn.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label className="text-xs font-semibold">Chọn cấp học / Mô hình đào tạo</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
+                {(Object.keys(EDUCATION_PROFILES) as EducationProfile[]).map((profKey) => {
+                  const conf = EDUCATION_PROFILES[profKey]
+                  const isSelected = educationProfile === profKey
+                  return (
+                    <div
+                      key={profKey}
+                      onClick={() => setEduProfile(profKey)}
+                      className={`cursor-pointer rounded-xl border p-3.5 transition flex flex-col justify-between ${
+                        isSelected
+                          ? 'border-teal-500 bg-teal-50/50 shadow-xs ring-1 ring-teal-500'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-sm text-slate-800">{conf.levelLabel}</span>
+                        {isSelected && <CheckCircle2 className="size-4 text-teal-600 shrink-0" />}
+                      </div>
+                      <div className="mt-2 text-xs text-slate-500 space-y-0.5">
+                        <p>• Người học: <b>{conf.learnerLabel}</b></p>
+                        <p>• Lớp/học phần: <b>{conf.sectionLabel}</b></p>
+                        <p>• Bài dạy: <b>{conf.lessonPlanLabel}</b></p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           </CardContent>
         </Card>

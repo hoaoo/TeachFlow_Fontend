@@ -223,6 +223,12 @@ export async function deleteResource(id: string): Promise<void> {
   return api.delete(`/resources/${id}`);
 }
 
+export async function retryResourcePreview(
+  id: string,
+): Promise<{ success: boolean; message: string }> {
+  return api.post<{ success: boolean; message: string }>(`/resources/${id}/retry-preview`);
+}
+
 export async function downloadResourceFile(id: string, fallbackName?: string): Promise<void> {
   const token = getAccessToken();
   const url = `${API_BASE_URL}/resources/${id}/download`;

@@ -1,10 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Loader2, Maximize2, Minimize2, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, Loader2, Maximize2, Minimize2, RotateCw, X } from 'lucide-react'
 import {
+  downloadResourceFile,
   getPresentationSlideBlob,
   getResourcePresentation,
+  retryResourcePreview,
   type PresentationMetadata,
   type TeachingResource,
 } from '@/services/resource-service'
@@ -25,6 +27,8 @@ export function PowerPointPresentationViewer({
   const [currentSlide, setCurrentSlide] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [retrying, setRetrying] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   const [isFullscreen, setIsFullscreen] = useState(false)
 
   const ensureSlide = useCallback(
@@ -59,7 +63,7 @@ export function PowerPointPresentationViewer({
 
     getResourcePresentation(resource.id, controller.signal)
       .then(async (presentation) => {
-        if (!presentation.slideCount) throw new Error('Bản trình chiếu không có slide')
+        if (!presentation.slideCount) throw new Error('Không tìm thấy slide trong bài giảng PowerPoint.')
         if (!mountedRef.current || controller.signal.aborted) return
         setMetadata(presentation)
         await ensureSlide(1, presentation, controller.signal)
@@ -69,7 +73,7 @@ export function PowerPointPresentationViewer({
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted || !mountedRef.current) return
-        setError(reason instanceof Error ? reason.message : 'Không thể chuẩn bị bản trình chiếu')
+        setError(reason instanceof Error ? reason.message : 'Không thể chuẩn bị bản trình chiếu PowerPoint.')
         setLoading(false)
       })
 
@@ -80,7 +84,7 @@ export function PowerPointPresentationViewer({
       objectUrlsRef.current.clear()
       pendingLoadsRef.current.clear()
     }
-  }, [ensureSlide, resource.id])
+  }, [ensureSlide, resource.id, reloadKey])
 
   useEffect(() => {
     if (!metadata) return
@@ -146,6 +150,22 @@ export function PowerPointPresentationViewer({
     onClose()
   }
 
+  const handleRetry = async () => {
+    try {
+      setRetrying(true)
+      await retryResourcePreview(resource.id)
+    } catch {
+      // Ignored, will re-fetch
+    } finally {
+      setRetrying(false)
+      setReloadKey((k) => k + 1)
+    }
+  }
+
+  const handleDownload = () => {
+    void downloadResourceFile(resource.id, title)
+  }
+
   const currentUrl = slideUrls[currentSlide]
   const title = metadata?.title || resource.title || resource.name
 
@@ -192,9 +212,30 @@ export function PowerPointPresentationViewer({
             <p className="text-sm font-semibold">Đang chuẩn bị bản trình chiếu...</p>
           </div>
         ) : error ? (
-          <div className="max-w-md rounded-xl border border-rose-400/30 bg-rose-950/40 p-5 text-center">
-            <p className="font-semibold text-rose-100">Không thể mở bản trình chiếu</p>
-            <p className="mt-1 text-sm text-rose-200/80">{error}</p>
+          <div className="flex max-w-md flex-col items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-950/60 p-6 text-center shadow-2xl">
+            <p className="text-base font-bold text-rose-100">Không thể tạo bản trình chiếu PowerPoint</p>
+            <p className="text-xs text-rose-200/80">{error}</p>
+            <p className="text-xs text-slate-400">
+              Bạn có thể thử xử lý lại hoặc tải xuống tệp PowerPoint để mở trực tiếp trên máy tính.
+            </p>
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => void handleRetry()}
+                disabled={retrying}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-teal-600 px-4 text-xs font-semibold text-white transition hover:bg-teal-700 disabled:opacity-50"
+              >
+                {retrying ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCw className="size-3.5" />}
+                Thử xử lý lại
+              </button>
+              <button
+                type="button"
+                onClick={handleDownload}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-4 text-xs font-semibold text-white transition hover:bg-white/20"
+              >
+                <Download className="size-3.5" /> Tải xuống tệp tin
+              </button>
+            </div>
           </div>
         ) : currentUrl ? (
           <img

@@ -7,7 +7,7 @@ import {
   Plus, Search, Settings, Sparkles, Users, X, ArrowUpRight, CircleHelp, School, Send,
   SlidersHorizontal, Flame, UserRound, ChevronRight, ChevronLeft, Calendar, BookMarked, LogIn, LogOut, KeyRound,
   Loader2, Copy, Bookmark, BookmarkPlus, HelpCircle, Gamepad2, FileQuestion, MessageSquarePlus, Shield,
-  Edit2, Trash2, Paperclip, Activity, History, RefreshCw, Play
+  Edit2, Trash2, Paperclip, Activity, History, RefreshCw, Play, ClipboardList
 } from 'lucide-react'
 import { navItems } from '@/lib/mock-data'
 import { LessonView } from '@/components/lesson-editor'
@@ -30,6 +30,9 @@ import { WorksheetManager } from '@/components/worksheet-manager'
 import { SeatingPlanView } from '@/components/seating-plan-view'
 import { TemplatesView } from '@/components/templates-view'
 import { QuickCommentsView } from '@/components/quick-comments-view'
+import { TeachingContentHub } from '@/components/teaching-content-hub'
+import { AssignmentsQuizzesView } from '@/components/assignments-quizzes-view'
+import { getCapabilities, getCurrentEducationProfile } from '@/lib/capabilities'
 import { NotificationDropdown } from '@/components/notification-dropdown'
 import { GlobalSearchBar } from '@/components/global-search-bar'
 import { AuthScreen } from '@/components/auth-screen'
@@ -78,14 +81,16 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { getPlatform } from '@/platform'
 
-const iconMap = { LayoutDashboard, CalendarDays, BookOpen, Library, Users, GraduationCap, Files, ClipboardCheck, School, CheckCircle2, Settings, Sparkles, FileText, Bookmark, MessageSquarePlus, Grid2X2, Gamepad2 }
+const iconMap = { LayoutDashboard, CalendarDays, BookOpen, Library, Users, GraduationCap, Files, ClipboardCheck, School, CheckCircle2, Settings, Sparkles, FileText, Bookmark, MessageSquarePlus, Grid2X2, Gamepad2, ClipboardList }
 
 type View =
+  | 'Hôm nay'
   | 'Tổng quan'
   | 'Lịch dạy'
   | 'Giáo án'
   | 'Thư viện hoạt động'
   | 'Lớp học'
+  | 'Lớp & Học phần'
   | 'Học sinh'
   | 'Phiếu học tập'
   | 'Đánh giá'
@@ -99,6 +104,8 @@ type View =
   | 'Sơ đồ chỗ ngồi'
   | 'Mẫu của tôi'
   | 'Nhận xét nhanh'
+  | 'Nội dung giảng dạy'
+  | 'Bài tập & Kiểm tra'
   | 'Quản trị giáo viên'
   | 'Tổng quan hệ thống'
   | 'Quản lý giáo viên'
@@ -245,7 +252,10 @@ function Sidebar({
             <nav className="flex flex-col gap-1">
               {navItems.map((item) => {
                 const Icon = iconMap[item.icon as keyof typeof iconMap]
-                const selected = active === item.label
+                const selected =
+                  active === item.label ||
+                  (item.label === 'Hôm nay' && active === 'Tổng quan') ||
+                  (item.label === 'Lớp & Học phần' && active === 'Lớp học')
                 return (
                   <button
                     key={item.label}
@@ -1588,9 +1598,11 @@ function GenericView({
   }
 
   // Teacher Workspace Views
+  if (view === 'Nội dung giảng dạy') return <TeachingContentHub onNavigate={onNavigate} />
+  if (view === 'Bài tập & Kiểm tra') return <AssignmentsQuizzesView />
+  if (view === 'Lớp & Học phần' || view === 'Lớp học') return <ClassroomManager initialSection="classes" initialClassId={selectedClassId} />
   if (view === 'Trợ lý AI') return <AIView onNavigate={onNavigate} />
   if (view === 'Giáo án') return <LessonView onNavigate={onNavigate} />
-  if (view === 'Lớp học') return <ClassroomManager initialSection="classes" initialClassId={selectedClassId} />
   if (view === 'Học sinh') return <StudentManager />
   if (view === 'Thư viện hoạt động') return <LibraryView onNavigate={onNavigate} />
   if (view === 'Chủ nhiệm') return <HomeroomView onNavigate={onNavigate} />
@@ -2293,7 +2305,7 @@ function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
 export function TeacherApp() {
   const { user, isLoading, isAuthenticated } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
-  const [active, setActive] = useState<View>(isAdmin ? 'Tổng quan hệ thống' : 'Tổng quan')
+  const [active, setActive] = useState<View>(isAdmin ? 'Tổng quan hệ thống' : 'Hôm nay')
   const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined)
   const [menuOpen, setMenuOpen] = useState(false)
   const [authModalOpen, setAuthModalOpen] = useState(false)
@@ -2318,7 +2330,7 @@ export function TeacherApp() {
     if (user?.role === 'ADMIN') {
       setActive('Tổng quan hệ thống')
     } else {
-      setActive('Tổng quan')
+      setActive('Hôm nay')
     }
   }, [user?.role])
 
@@ -2393,7 +2405,7 @@ export function TeacherApp() {
           <div className="mx-auto w-full max-w-[1600px]">
             {isAdmin ? (
               <GenericView view={active} selectedClassId={selectedClassId} onNavigate={handleNavigate} />
-            ) : active === 'Tổng quan' ? (
+            ) : active === 'Tổng quan' || active === 'Hôm nay' ? (
               <Dashboard onNavigate={handleNavigate} />
             ) : (
               <GenericView view={active} selectedClassId={selectedClassId} onNavigate={handleNavigate} />
